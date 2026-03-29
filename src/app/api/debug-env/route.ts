@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const convexUrl = process.env.CONVEX_URL;
-  const nextPublicConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const vercelUrl = process.env.VERCEL_URL;
   return NextResponse.json({
-    CONVEX_URL: convexUrl ? `${convexUrl.substring(0, 20)}... (len: ${convexUrl.length})` : "NOT SET",
-    NEXT_PUBLIC_CONVEX_URL: nextPublicConvexUrl ? `${nextPublicConvexUrl.substring(0, 20)}... (len: ${nextPublicConvexUrl.length})` : "NOT SET",
+    NEXT_PUBLIC_APP_URL: appUrl ? `${appUrl} (len: ${appUrl.length})` : "NOT SET",
+    VERCEL_URL: vercelUrl ? `${vercelUrl} (len: ${vercelUrl.length})` : "NOT SET",
   });
 }
