@@ -14,6 +14,11 @@ export default defineSchema({
     describeYourself: v.optional(v.string()),
     lookingFor: v.optional(v.string()),
     backgroundCheck: v.optional(v.string()),
+    paymentStatus: v.optional(
+      v.union(v.literal("pending"), v.literal("paid"), v.literal("failed"))
+    ),
+    stripeSessionId: v.optional(v.string()),
+    amountPaid: v.optional(v.number()),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
@@ -22,7 +27,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_gender", ["gender"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_stripeSessionId", ["stripeSessionId"]),
 
   settings: defineTable({
     key: v.string(),

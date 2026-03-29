@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,6 @@ interface RegistrationFormData {
 
 export function RegistrationForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const createRegistration = useMutation(api.registrations.create);
   const stats = useQuery(api.registrations.getStats) as { maleCount: number; femaleCount: number; maleLimit: number; femaleLimit: number } | undefined;
 
   const form = useForm({
@@ -53,25 +52,35 @@ export function RegistrationForm() {
     onSubmit: async ({ value }) => {
       setIsSubmitting(true);
       try {
-        await createRegistration({
-          name: value.name,
-          age: value.age,
-          gender: value.gender as "male" | "female",
-          maritalStatus: value.maritalStatus,
-          education: value.education,
-          job: value.job,
-          email: value.email,
-          phone: value.phone,
-          describeYourself: value.describeYourself || undefined,
-          lookingFor: value.lookingFor || undefined,
-          backgroundCheck: value.backgroundCheck || undefined,
+        const response = await fetch("/api/create-checkout-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: value.name,
+            age: value.age,
+            gender: value.gender,
+            maritalStatus: value.maritalStatus,
+            education: value.education,
+            job: value.job,
+            email: value.email,
+            phone: value.phone,
+            describeYourself: value.describeYourself || undefined,
+            lookingFor: value.lookingFor || undefined,
+            backgroundCheck: value.backgroundCheck || undefined,
+          }),
         });
 
-        // Redirect to success page
-        window.location.href = "/success";
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to create checkout session");
+        }
+
+        // Redirect to Stripe Checkout
+        window.location.href = data.url;
       } catch (error) {
         console.error("Registration error:", error);
-        alert("Failed to complete registration. Please try again.");
+        alert("Failed to proceed to payment. Please try again.");
         setIsSubmitting(false);
       }
     },
@@ -463,12 +472,13 @@ export function RegistrationForm() {
             className="w-full h-11 text-base"
             disabled={isSubmitting || (isMaleFull && isFemaleFull)}
           >
-            {isSubmitting ? "Submitting..." : "Submit Registration"}
+            {isSubmitting ? "Redirecting to payment..." : "Proceed to Payment ($10)"}
           </Button>
         </div>
 
         <p className="text-xs text-slate-500 text-center">
-          By registering, you agree to our Terms of Service and Privacy Policy.
+          You will be redirected to Stripe to complete your $10 registration payment.
+          Have a promo code? You can enter it at checkout.
         </p>
       </form>
     </Card>

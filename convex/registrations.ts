@@ -14,6 +14,10 @@ export const create = mutation({
     describeYourself: v.optional(v.string()),
     lookingFor: v.optional(v.string()),
     backgroundCheck: v.optional(v.string()),
+    stripeSessionId: v.optional(v.string()),
+    paymentStatus: v.optional(
+      v.union(v.literal("pending"), v.literal("paid"), v.literal("failed"))
+    ),
   },
   handler: async (ctx, args) => {
     const registrationId = await ctx.db.insert("registrations", {
@@ -28,6 +32,8 @@ export const create = mutation({
       describeYourself: args.describeYourself,
       lookingFor: args.lookingFor,
       backgroundCheck: args.backgroundCheck,
+      stripeSessionId: args.stripeSessionId,
+      paymentStatus: args.paymentStatus ?? "pending",
       status: "pending",
       createdAt: Date.now(),
     });
@@ -96,6 +102,49 @@ export const getById = query({
   },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.id);
+  },
+});
+
+export const updatePaymentStatus = mutation({
+  args: {
+    stripeSessionId: v.string(),
+    paymentStatus: v.union(v.literal("paid"), v.literal("failed")),
+    amountPaid: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const registration = await ctx.db
+      .query("registrations")
+      .withIndex("by_stripeSessionId", (q) =>
+        q.eq("stripeSessionId", args.stripeSessionId)
+      )
+      .first();
+
+    if (!registration) {
+      throw new Error(
+        `Registration not found for session: ${args.stripeSessionId}`
+      );
+    }
+
+    await ctx.db.patch(registration._id, {
+      paymentStatus: args.paymentStatus,
+      amountPaid: args.amountPaid,
+    });
+
+    return registration._id;
+  },
+});
+
+export const getByStripeSession = query({
+  args: {
+    stripeSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("registrations")
+      .withIndex("by_stripeSessionId", (q) =>
+        q.eq("stripeSessionId", args.stripeSessionId)
+      )
+      .first();
   },
 });
 
