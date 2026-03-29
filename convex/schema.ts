@@ -11,17 +11,18 @@ export default defineSchema({
     job: v.string(),
     email: v.string(),
     phone: v.string(),
-    stripeSessionId: v.optional(v.string()),
-    paymentStatus: v.union(
+    describeYourself: v.optional(v.string()),
+    lookingFor: v.optional(v.string()),
+    backgroundCheck: v.optional(v.string()),
+    status: v.union(
       v.literal("pending"),
-      v.literal("paid"),
-      v.literal("failed")
+      v.literal("approved"),
+      v.literal("rejected")
     ),
     createdAt: v.number(),
   })
     .index("by_gender", ["gender"])
-    .index("by_paymentStatus", ["paymentStatus"])
-    .index("by_stripeSessionId", ["stripeSessionId"]),
+    .index("by_status", ["status"]),
 
   settings: defineTable({
     key: v.string(),

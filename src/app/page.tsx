@@ -35,7 +35,7 @@ export default function Home() {
           <div className="pt-8">
             <Link href="/register">
               <Button size="lg" className="text-lg px-8 py-6">
-                Start Your Journey Today
+                Sign Up
               </Button>
             </Link>
           </div>

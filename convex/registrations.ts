@@ -11,6 +11,9 @@ export const create = mutation({
     job: v.string(),
     email: v.string(),
     phone: v.string(),
+    describeYourself: v.optional(v.string()),
+    lookingFor: v.optional(v.string()),
+    backgroundCheck: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const registrationId = await ctx.db.insert("registrations", {
@@ -22,40 +25,14 @@ export const create = mutation({
       job: args.job,
       email: args.email,
       phone: args.phone,
-      paymentStatus: "pending",
+      describeYourself: args.describeYourself,
+      lookingFor: args.lookingFor,
+      backgroundCheck: args.backgroundCheck,
+      status: "pending",
       createdAt: Date.now(),
     });
 
     return registrationId;
-  },
-});
-
-export const updatePaymentStatus = mutation({
-  args: {
-    stripeSessionId: v.string(),
-    paymentStatus: v.union(
-      v.literal("pending"),
-      v.literal("paid"),
-      v.literal("failed")
-    ),
-  },
-  handler: async (ctx, args) => {
-    const registration = await ctx.db
-      .query("registrations")
-      .withIndex("by_stripeSessionId", (q) =>
-        q.eq("stripeSessionId", args.stripeSessionId)
-      )
-      .first();
-
-    if (!registration) {
-      throw new Error("Registration not found");
-    }
-
-    await ctx.db.patch(registration._id, {
-      paymentStatus: args.paymentStatus,
-    });
-
-    return registration._id;
   },
 });
 
@@ -66,48 +43,16 @@ export const getAll = query({
   },
 });
 
-export const getPaidRegistrations = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db
-      .query("registrations")
-      .withIndex("by_paymentStatus", (q) => q.eq("paymentStatus", "paid"))
-      .collect();
-  },
-});
-
-export const getCountByGender = query({
-  args: {},
-  handler: async (ctx) => {
-    const paidRegistrations = await ctx.db
-      .query("registrations")
-      .withIndex("by_paymentStatus", (q) => q.eq("paymentStatus", "paid"))
-      .collect();
-
-    const maleCount = paidRegistrations.filter(
-      (r) => r.gender === "male"
-    ).length;
-    const femaleCount = paidRegistrations.filter(
-      (r) => r.gender === "female"
-    ).length;
-
-    return {
-      male: maleCount,
-      female: femaleCount,
-    };
-  },
-});
-
 export const getStats = query({
   args: {},
   handler: async (ctx) => {
-    const paidRegistrations = await ctx.db
+    const approvedRegistrations = await ctx.db
       .query("registrations")
-      .withIndex("by_paymentStatus", (q) => q.eq("paymentStatus", "paid"))
+      .withIndex("by_status", (q) => q.eq("status", "approved"))
       .collect();
 
-    const maleCount = paidRegistrations.filter((r) => r.gender === "male").length;
-    const femaleCount = paidRegistrations.filter((r) => r.gender === "female").length;
+    const maleCount = approvedRegistrations.filter((r) => r.gender === "male").length;
+    const femaleCount = approvedRegistrations.filter((r) => r.gender === "female").length;
 
     // Get slot limits from settings
     const maleSetting = await ctx.db
@@ -128,15 +73,20 @@ export const getStats = query({
   },
 });
 
-export const updateStripeSessionId = mutation({
+export const updateStatus = mutation({
   args: {
-    registrationId: v.id("registrations"),
-    stripeSessionId: v.string(),
+    id: v.id("registrations"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected")
+    ),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.registrationId, {
-      stripeSessionId: args.stripeSessionId,
+    await ctx.db.patch(args.id, {
+      status: args.status,
     });
+    return args.id;
   },
 });
 

@@ -26,6 +26,9 @@ interface RegistrationFormData {
   job: string;
   email: string;
   phone: string;
+  describeYourself: string;
+  lookingFor: string;
+  backgroundCheck: string;
 }
 
 export function RegistrationForm() {
@@ -43,11 +46,14 @@ export function RegistrationForm() {
       job: "",
       email: "",
       phone: "",
+      describeYourself: "",
+      lookingFor: "",
+      backgroundCheck: "",
     } as RegistrationFormData,
     onSubmit: async ({ value }) => {
       setIsSubmitting(true);
       try {
-        const registrationId = await createRegistration({
+        await createRegistration({
           name: value.name,
           age: value.age,
           gender: value.gender as "male" | "female",
@@ -56,19 +62,13 @@ export function RegistrationForm() {
           job: value.job,
           email: value.email,
           phone: value.phone,
+          describeYourself: value.describeYourself || undefined,
+          lookingFor: value.lookingFor || undefined,
+          backgroundCheck: value.backgroundCheck || undefined,
         });
 
-        // Redirect to Stripe checkout
-        const response = await fetch("/api/create-checkout-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ registrationId, name: value.name, email: value.email }),
-        });
-
-        const data = await response.json();
-        if (data.url) {
-          window.location.href = data.url;
-        }
+        // Redirect to success page
+        window.location.href = "/success";
       } catch (error) {
         console.error("Registration error:", error);
         alert("Failed to complete registration. Please try again.");
@@ -217,7 +217,9 @@ export function RegistrationForm() {
                 <SelectContent>
                   <SelectItem value="single">Single</SelectItem>
                   <SelectItem value="divorced">Divorced</SelectItem>
+                  <SelectItem value="divorced_with_children">Divorced with Children</SelectItem>
                   <SelectItem value="widowed">Widowed</SelectItem>
+                  <SelectItem value="widowed_with_children">Widowed with Children</SelectItem>
                 </SelectContent>
               </Select>
               {field.state.meta.errors?.length > 0 && (
@@ -351,6 +353,96 @@ export function RegistrationForm() {
           )}
         </form.Field>
 
+        {/* Describe Yourself Field */}
+        <form.Field
+          name="describeYourself"
+        >
+          {(field) => (
+            <div className="space-y-2">
+              <Label htmlFor={field.name}>
+                Describe yourself with any details you find important for the 1Plus1 team
+              </Label>
+              <textarea
+                id={field.name}
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="Tell us about yourself..."
+                className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                rows={4}
+              />
+            </div>
+          )}
+        </form.Field>
+
+        {/* Looking For Field */}
+        <form.Field
+          name="lookingFor"
+        >
+          {(field) => (
+            <div className="space-y-2">
+              <Label htmlFor={field.name}>
+                Describe anything we should know about what you are looking for in a spouse
+              </Label>
+              <textarea
+                id={field.name}
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="What are you looking for in a spouse..."
+                className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                rows={4}
+              />
+            </div>
+          )}
+        </form.Field>
+
+        {/* Background Check Field */}
+        <form.Field
+          name="backgroundCheck"
+          validators={{
+            onChange: ({ value }) =>
+              !value ? "Please select an option" : undefined,
+          }}
+        >
+          {(field) => (
+            <div className="space-y-3">
+              <Label>
+                Are you willing to provide a background check upon request or submit a $10 fee for the 1Plus1 team to complete your background check? *
+              </Label>
+              <RadioGroup
+                value={field.state.value}
+                onValueChange={(val) => field.handleChange(val)}
+                onBlur={field.handleBlur}
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="yes_provide" id="bg_provide" />
+                  <Label htmlFor="bg_provide" className="font-normal cursor-pointer">
+                    Yes, I will provide my own background check
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="yes_fee" id="bg_fee" />
+                  <Label htmlFor="bg_fee" className="font-normal cursor-pointer">
+                    Yes, I will submit the $10 fee for the 1Plus1 team to complete it
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="no" id="bg_no" />
+                  <Label htmlFor="bg_no" className="font-normal cursor-pointer">
+                    No
+                  </Label>
+                </div>
+              </RadioGroup>
+              {field.state.meta.errors?.length > 0 && (
+                <p className="text-red-500 text-sm">
+                  {field.state.meta.errors.join(", ")}
+                </p>
+              )}
+            </div>
+          )}
+        </form.Field>
+
         {/* Slot Status Warning */}
         {(isMaleFull || isFemaleFull) && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -371,7 +463,7 @@ export function RegistrationForm() {
             className="w-full h-11 text-base"
             disabled={isSubmitting || (isMaleFull && isFemaleFull)}
           >
-            {isSubmitting ? "Processing..." : "Continue to Payment"}
+            {isSubmitting ? "Submitting..." : "Submit Registration"}
           </Button>
         </div>
 
