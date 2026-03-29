@@ -19,11 +19,12 @@ function formatDate(timestamp: number): string {
 }
 
 export default function AdminDashboard() {
-  type FilterStatus = "all" | "paid" | "pending";
+  type FilterStatus = "all" | "approved" | "pending" | "rejected";
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [maleSlots, setMaleSlots] = useState<number | string>("");
   const [femaleSlots, setFemaleSlots] = useState<number | string>("");
   const [savingSlots, setSavingSlots] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
   // Queries
   const allRegistrations = useQuery(api.registrations.getAll) || [];
@@ -32,6 +33,7 @@ export default function AdminDashboard() {
   // Mutations
   const deleteRegistration = useMutation(api.registrations.deleteRegistration);
   const updateSlotLimits = useMutation(api.settings.updateSlotLimits);
+  const updateStatus = useMutation(api.registrations.updateStatus);
   // Logout is handled client-side by clearing the cookie
 
   // Initialize slot inputs on load
@@ -43,15 +45,17 @@ export default function AdminDashboard() {
   // Filter registrations
   const filteredRegistrations = allRegistrations.filter((reg) => {
     if (filterStatus === "all") return true;
-    if (filterStatus === "paid") return reg.paymentStatus === "paid";
-    if (filterStatus === "pending") return reg.paymentStatus === "pending";
+    if (filterStatus === "approved") return reg.status === "approved";
+    if (filterStatus === "pending") return reg.status === "pending";
+    if (filterStatus === "rejected") return reg.status === "rejected";
     return true;
   });
 
   // Statistics
   const totalCount = allRegistrations.length;
-  const paidCount = allRegistrations.filter((r) => r.paymentStatus === "paid").length;
-  const pendingCount = allRegistrations.filter((r) => r.paymentStatus === "pending").length;
+  const approvedCount = allRegistrations.filter((r) => r.status === "approved").length;
+  const pendingCount = allRegistrations.filter((r) => r.status === "pending").length;
+  const rejectedCount = allRegistrations.filter((r) => r.status === "rejected").length;
   const maleCount = allRegistrations.filter((r) => r.gender === "male").length;
   const femaleCount = allRegistrations.filter((r) => r.gender === "female").length;
 
@@ -64,6 +68,19 @@ export default function AdminDashboard() {
         console.error("Error deleting registration:", error);
         alert("Failed to delete registration");
       }
+    }
+  };
+
+  const handleStatusUpdate = async (registrationId: string, newStatus: "approved" | "rejected") => {
+    setUpdatingStatus(registrationId);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await updateStatus({ id: registrationId as any, status: newStatus });
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update status");
+    } finally {
+      setUpdatingStatus(null);
     }
   };
 
@@ -122,10 +139,10 @@ export default function AdminDashboard() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-green-600">Paid</CardTitle>
+              <CardTitle className="text-sm font-medium text-green-600">Approved</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-600">{paidCount}</div>
+              <div className="text-3xl font-bold text-green-600">{approvedCount}</div>
             </CardContent>
           </Card>
 
@@ -135,6 +152,15 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-yellow-600">{pendingCount}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-red-600">Rejected</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-red-600">{rejectedCount}</div>
             </CardContent>
           </Card>
 
@@ -212,11 +238,14 @@ export default function AdminDashboard() {
                 <TabsTrigger value="all">
                   All <span className="ml-2 text-xs">{allRegistrations.length}</span>
                 </TabsTrigger>
-                <TabsTrigger value="paid">
-                  Paid <span className="ml-2 text-xs">{paidCount}</span>
+                <TabsTrigger value="approved">
+                  Approved <span className="ml-2 text-xs">{approvedCount}</span>
                 </TabsTrigger>
                 <TabsTrigger value="pending">
                   Pending <span className="ml-2 text-xs">{pendingCount}</span>
+                </TabsTrigger>
+                <TabsTrigger value="rejected">
+                  Rejected <span className="ml-2 text-xs">{rejectedCount}</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -254,17 +283,21 @@ export default function AdminDashboard() {
                             <td className="py-3 px-4">
                               <Badge
                                 variant={
-                                  registration.paymentStatus === "paid"
+                                  registration.status === "approved"
                                     ? "default"
+                                    : registration.status === "rejected"
+                                    ? "destructive"
                                     : "outline"
                                 }
                                 className={
-                                  registration.paymentStatus === "paid"
+                                  registration.status === "approved"
                                     ? "bg-green-100 text-green-800"
+                                    : registration.status === "rejected"
+                                    ? "bg-red-100 text-red-800"
                                     : "bg-yellow-100 text-yellow-800"
                                 }
                               >
-                                {registration.paymentStatus}
+                                {registration.status}
                               </Badge>
                             </td>
                             <td className="py-3 px-4 text-xs">
@@ -283,7 +316,29 @@ export default function AdminDashboard() {
                                 ? formatDate(registration._creationTime)
                                 : "-"}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-3 px-4 space-x-2">
+                              {registration.status === "pending" && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleStatusUpdate(registration._id, "approved")}
+                                    disabled={updatingStatus === registration._id}
+                                    className="text-green-600 hover:bg-green-50"
+                                  >
+                                    {updatingStatus === registration._id ? "..." : "Approve"}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleStatusUpdate(registration._id, "rejected")}
+                                    disabled={updatingStatus === registration._id}
+                                    className="text-red-600 hover:bg-red-50"
+                                  >
+                                    {updatingStatus === registration._id ? "..." : "Reject"}
+                                  </Button>
+                                </>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="sm"

@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 1 Plus 1 Matching & Taaruf
 
-## Getting Started
+A premium Islamic matchmaking registration platform. Collects registrations with $10 Stripe payments, supports configurable male/female slot limits (default 40 each), and includes a full admin dashboard.
 
-First, run the development server:
+## Tech Stack
+
+- **Next.js 15** (App Router)
+- **Convex** (real-time database)
+- **TanStack React Form v1** (form handling with validation)
+- **Stripe** ($10 payment checkout)
+- **shadcn/ui** + Tailwind CSS (UI components)
+
+## Setup
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Set up Convex
+
+```bash
+npx convex dev
+```
+
+This will prompt you to create a Convex project and set `NEXT_PUBLIC_CONVEX_URL` in your `.env.local`.
+
+### 3. Configure environment variables
+
+Copy `.env.example` to `.env.local` and fill in:
+
+```
+NEXT_PUBLIC_CONVEX_URL=       # Set automatically by `npx convex dev`
+STRIPE_SECRET_KEY=            # From Stripe Dashboard > API Keys
+STRIPE_WEBHOOK_SECRET=        # From Stripe Dashboard > Webhooks
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=  # From Stripe Dashboard
+ADMIN_PASSWORD=               # Password for /admin dashboard
+```
+
+### 4. Run development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 5. Set up Stripe webhook (for local dev)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+stripe listen --forward-to localhost:3000/api/webhook
+```
 
-## Learn More
+## Pages
 
-To learn more about Next.js, take a look at the following resources:
+| Route | Description |
+|-------|-------------|
+| `/` | Landing page with slot counters |
+| `/register` | Registration form |
+| `/success` | Payment success page |
+| `/cancelled` | Payment cancelled page |
+| `/admin` | Admin dashboard (password protected) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Create GitHub Repo & Deploy
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Create private repo and push
+gh repo create moeghashim/taaruf-app --private --source=. --push
 
-## Deploy on Vercel
+# Deploy to Vercel
+npx vercel
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Then add your environment variables in the Vercel dashboard and set the Convex deployment URL.

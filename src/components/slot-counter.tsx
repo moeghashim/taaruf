@@ -5,19 +5,10 @@ import { api } from "../../convex/_generated/api";
 import { Card } from "@/components/ui/card";
 
 export function SlotCounter() {
-  const stats = useQuery(api.registrations.getStats) as { maleCount: number; femaleCount: number; maleLimit: number; femaleLimit: number } | undefined;
+  const stats = useQuery(api.registrations.getStats);
 
   if (!stats) {
-    return (
-      <div className="flex justify-center gap-8">
-        <div className="animate-pulse">
-          <div className="h-24 w-32 bg-slate-200 rounded-lg"></div>
-        </div>
-        <div className="animate-pulse">
-          <div className="h-24 w-32 bg-slate-200 rounded-lg"></div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const malePercentage = (stats.maleCount / stats.maleLimit) * 100;

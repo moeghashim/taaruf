@@ -8,31 +8,44 @@
  * @module
  */
 
+import type * as registrations from "../registrations.js";
+import type * as settings from "../settings.js";
+
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
 } from "convex/server";
-import type * as registrations from "../registrations.js";
-import type * as settings from "../settings.js";
+
+declare const fullApi: ApiFromModules<{
+  registrations: typeof registrations;
+  settings: typeof settings;
+}>;
 
 /**
- * A utility for referencing Convex functions in your app's API.
+ * A utility for referencing Convex functions in your app's public API.
  *
  * Usage:
  * ```js
  * const myFunctionReference = api.myModule.myFunction;
  * ```
  */
-declare const fullApi: ApiFromModules<{
-  registrations: typeof registrations;
-  settings: typeof settings;
-}>;
 export declare const api: FilterApi<
   typeof fullApi,
   FunctionReference<any, "public">
 >;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
 export declare const internal: FilterApi<
   typeof fullApi,
   FunctionReference<any, "internal">
 >;
+
+export declare const components: {};
