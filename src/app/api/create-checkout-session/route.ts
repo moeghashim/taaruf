@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const origin = request.headers.get("origin") || request.nextUrl.origin;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || origin || "http://localhost:3000";
 
     // Create Stripe Checkout session
     const stripe = getStripe();
