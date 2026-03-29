@@ -1,8 +1,5 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { SlotCounter } from "@/components/slot-counter";
-
-export const dynamic = "force-dynamic";
 
 export default function Home() {
   return (
@@ -25,11 +22,6 @@ export default function Home() {
             Discover meaningful connections with our premium Islamic matchmaking
             service. Find your perfect match with integrity, respect, and shared values.
           </p>
-
-          {/* Slot Counter */}
-          <div className="my-12">
-            <SlotCounter />
-          </div>
 
           {/* CTA Button */}
           <div className="pt-8">
