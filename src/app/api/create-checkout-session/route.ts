@@ -57,7 +57,15 @@ export async function POST(request: NextRequest) {
     });
 
     // Save registration to Convex with pending payment status
-    const convexClient = getConvexClient();
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+    if (!convexUrl) {
+      return NextResponse.json(
+        { error: "NEXT_PUBLIC_CONVEX_URL not configured", details: "missing" },
+        { status: 500 }
+      );
+    }
+    const { ConvexHttpClient } = await import("convex/browser");
+    const convexClient = new ConvexHttpClient(convexUrl);
     await convexClient.mutation(api.registrations.create, {
       name,
       age: Number(age),
