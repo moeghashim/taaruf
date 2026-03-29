@@ -66,7 +66,6 @@ export function RegistrationForm() {
             phone: value.phone,
             describeYourself: value.describeYourself || undefined,
             lookingFor: value.lookingFor || undefined,
-            backgroundCheck: value.backgroundCheck || undefined,
           }),
         });
 
@@ -402,52 +401,6 @@ export function RegistrationForm() {
                 className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 rows={4}
               />
-            </div>
-          )}
-        </form.Field>
-
-        {/* Background Check Field */}
-        <form.Field
-          name="backgroundCheck"
-          validators={{
-            onChange: ({ value }) =>
-              !value ? "Please select an option" : undefined,
-          }}
-        >
-          {(field) => (
-            <div className="space-y-3">
-              <Label>
-                Are you willing to provide a background check upon request or submit a $10 fee for the 1Plus1 team to complete your background check? *
-              </Label>
-              <RadioGroup
-                value={field.state.value}
-                onValueChange={(val) => field.handleChange(val)}
-                onBlur={field.handleBlur}
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="yes_provide" id="bg_provide" />
-                  <Label htmlFor="bg_provide" className="font-normal cursor-pointer">
-                    Yes, I will provide my own background check
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="yes_fee" id="bg_fee" />
-                  <Label htmlFor="bg_fee" className="font-normal cursor-pointer">
-                    Yes, I will submit the $10 fee for the 1Plus1 team to complete it
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="no" id="bg_no" />
-                  <Label htmlFor="bg_no" className="font-normal cursor-pointer">
-                    No
-                  </Label>
-                </div>
-              </RadioGroup>
-              {field.state.meta.errors?.length > 0 && (
-                <p className="text-red-500 text-sm">
-                  {field.state.meta.errors.join(", ")}
-                </p>
-              )}
             </div>
           )}
         </form.Field>

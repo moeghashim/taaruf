@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { getConvexClient } from "@/lib/convex";
 import { api } from "../../../../convex/_generated/api";
 
 export async function POST(request: NextRequest) {
@@ -18,7 +17,6 @@ export async function POST(request: NextRequest) {
       phone,
       describeYourself,
       lookingFor,
-      backgroundCheck,
     } = body;
 
     // Validate required fields
@@ -29,7 +27,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appUrl = "https://taaruf.vercel.app";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || "http://localhost:3000";
 
     // Create Stripe Checkout session
     const stripe = getStripe();
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!convexUrl) {
       return NextResponse.json(
-        { error: "NEXT_PUBLIC_CONVEX_URL not configured", details: "missing" },
+        { error: "Convex URL not configured" },
         { status: 500 }
       );
     }
@@ -76,7 +76,6 @@ export async function POST(request: NextRequest) {
       phone,
       describeYourself: describeYourself || undefined,
       lookingFor: lookingFor || undefined,
-      backgroundCheck: backgroundCheck || undefined,
       stripeSessionId: session.id,
       paymentStatus: "pending",
     });
@@ -84,7 +83,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Checkout session error:", errorMessage, error);
+    console.error("Checkout session error:", errorMessage);
     return NextResponse.json(
       { error: "Failed to create checkout session", details: errorMessage },
       { status: 500 }
