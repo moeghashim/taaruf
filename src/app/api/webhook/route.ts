@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { getConvexClient } from "@/lib/convex";
 import { api } from "../../../../convex/_generated/api";
 import Stripe from "stripe";
 
@@ -30,10 +29,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
+    if (!convexUrl) {
+      console.error("Convex URL not configured");
+      return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    }
+    const { ConvexHttpClient } = await import("convex/browser");
+    const convexClient = new ConvexHttpClient(convexUrl);
+
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const convexClient = getConvexClient();
         await convexClient.mutation(api.registrations.updatePaymentStatus, {
           stripeSessionId: session.id,
           paymentStatus: "paid",
@@ -43,7 +49,6 @@ export async function POST(request: NextRequest) {
       }
       case "checkout.session.expired": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const convexClient = getConvexClient();
         await convexClient.mutation(api.registrations.updatePaymentStatus, {
           stripeSessionId: session.id,
           paymentStatus: "failed",
@@ -51,7 +56,6 @@ export async function POST(request: NextRequest) {
         break;
       }
       default:
-        // Unhandled event type
         break;
     }
 

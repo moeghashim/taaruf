@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Save registration to Convex with pending payment status
-    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+    const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!convexUrl) {
       return NextResponse.json(
         { error: "Convex URL not configured" },
