@@ -22,6 +22,9 @@ export default function RegisterPage() {
           <p>
             Our 1Plus1 Pre-Marriage Workshop is designed to create intentional, dignified, faith-centered spaces where meaningful connections can grow. Through a blend of educational discussions and guided opportunities to interact, participants will explore values, character, and compatibility in a natural and purposeful way.
           </p>
+          <p>
+            The $10 registration fee covers the cost of a background check conducted by the 1Plus1 team to ensure the safety and integrity of all participants.
+          </p>
           <p className="text-xs text-slate-500">
             By registering for this event, you consent to be added to our internal matching program{" "}
             <a href="https://1plus1match.com" className="underline text-slate-600 hover:text-slate-900" target="_blank" rel="noopener noreferrer">

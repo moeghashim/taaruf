@@ -28,7 +28,7 @@ interface RegistrationFormData {
   phone: string;
   describeYourself: string;
   lookingFor: string;
-  backgroundCheck: string;
+  backgroundCheckConsent: boolean;
 }
 
 export function RegistrationForm() {
@@ -47,7 +47,7 @@ export function RegistrationForm() {
       phone: "",
       describeYourself: "",
       lookingFor: "",
-      backgroundCheck: "",
+      backgroundCheckConsent: false,
     } as RegistrationFormData,
     onSubmit: async ({ value }) => {
       setIsSubmitting(true);
@@ -401,6 +401,38 @@ export function RegistrationForm() {
                 className="flex min-h-[100px] w-full rounded-md border border-input bg-input px-3 py-2 text-base text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 rows={4}
               />
+            </div>
+          )}
+        </form.Field>
+
+        {/* Background Check Consent */}
+        <form.Field
+          name="backgroundCheckConsent"
+          validators={{
+            onChange: ({ value }) =>
+              !value ? "You must consent to a background check to register" : undefined,
+          }}
+        >
+          {(field) => (
+            <div className="space-y-2">
+              <div className="flex items-start space-x-3">
+                <input
+                  id="backgroundCheckConsent"
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <Label htmlFor="backgroundCheckConsent" className="font-normal cursor-pointer text-sm leading-relaxed">
+                  I consent to a background check being conducted by the 1Plus1 team as part of the registration process. *
+                </Label>
+              </div>
+              {field.state.meta.errors?.length > 0 && (
+                <p className="text-red-500 text-sm">
+                  {field.state.meta.errors.join(", ")}
+                </p>
+              )}
             </div>
           )}
         </form.Field>
