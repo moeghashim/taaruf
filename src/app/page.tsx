@@ -17,6 +17,13 @@ export default function Home() {
             </p>
           </div>
 
+          {/* Upcoming Event */}
+          <div className="bg-white rounded-lg p-6 shadow-sm max-w-md mx-auto">
+            <p className="text-sm font-medium text-emerald-600 uppercase tracking-wide mb-1">Upcoming Event</p>
+            <h3 className="text-xl font-bold text-slate-900">Pre-Marriage Workshop</h3>
+            <p className="text-lg text-slate-700 font-semibold">April 12, 3:00 &ndash; 5:30 PM</p>
+          </div>
+
           {/* CTA Button */}
           <div className="pt-4">
             <Link href="/register">
