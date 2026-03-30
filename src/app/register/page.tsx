@@ -11,7 +11,7 @@ export default function RegisterPage() {
             1Plus1 Pre-Marriage Workshop
           </h1>
           <p className="text-lg font-semibold text-slate-700 mb-2">
-            April 11, 2:30 &ndash; 5:00 PM
+            April 12, 3:00 &ndash; 5:30 PM
           </p>
         </div>
 
