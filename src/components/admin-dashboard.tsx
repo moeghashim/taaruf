@@ -280,6 +280,9 @@ export default function AdminDashboard() {
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Job</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Phone</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">About</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Looking For</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Payment</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Action</th>
                         </tr>
@@ -327,6 +330,26 @@ export default function AdminDashboard() {
                             </td>
                             <td className="py-3 px-4 text-xs">{registration.email}</td>
                             <td className="py-3 px-4 text-xs">{registration.phone}</td>
+                            <td className="py-3 px-4 text-xs max-w-[200px] truncate" title={registration.describeYourself || ""}>
+                              {registration.describeYourself || "-"}
+                            </td>
+                            <td className="py-3 px-4 text-xs max-w-[200px] truncate" title={registration.lookingFor || ""}>
+                              {registration.lookingFor || "-"}
+                            </td>
+                            <td className="py-3 px-4 text-xs">
+                              <Badge
+                                variant="outline"
+                                className={
+                                  registration.paymentStatus === "paid"
+                                    ? "bg-green-100 text-green-800"
+                                    : registration.paymentStatus === "failed"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                }
+                              >
+                                {registration.paymentStatus || "-"}
+                              </Badge>
+                            </td>
                             <td className="py-3 px-4 text-xs">
                               {registration._creationTime
                                 ? formatDate(registration._creationTime)
