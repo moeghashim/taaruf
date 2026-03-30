@@ -89,7 +89,8 @@ function SuccessContent() {
 
         <p className="text-slate-600 mb-6">
           Your payment has been received. All current slots are full, so you have been placed
-          on our waitlist. We will notify you if a spot becomes available.
+          on our waitlist. We will notify you if a spot becomes available. If you are not
+          accepted, you will receive a full refund.
         </p>
 
         <div className="space-y-3 text-left mb-8">
