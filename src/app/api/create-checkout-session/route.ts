@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       cancel_url: `${appUrl}/register?canceled=true`,
     });
 
-    // Save registration to Convex with pending payment status
+    // Check slot capacity to determine if waitlisted
     const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!convexUrl) {
       return NextResponse.json(
@@ -65,6 +65,13 @@ export async function POST(request: NextRequest) {
     }
     const { ConvexHttpClient } = await import("convex/browser");
     const convexClient = new ConvexHttpClient(convexUrl);
+
+    const stats = await convexClient.query(api.registrations.getStats);
+    const isFull = gender === "male"
+      ? stats.maleCount >= stats.maleLimit
+      : stats.femaleCount >= stats.femaleLimit;
+
+    // Save registration to Convex
     await convexClient.mutation(api.registrations.create, {
       name,
       age: Number(age),
@@ -78,6 +85,7 @@ export async function POST(request: NextRequest) {
       lookingFor: lookingFor || undefined,
       stripeSessionId: session.id,
       paymentStatus: "pending",
+      status: isFull ? "waitlisted" : "pending",
     });
 
     return NextResponse.json({ url: session.url });

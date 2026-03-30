@@ -181,20 +181,18 @@ export function RegistrationForm() {
                   <RadioGroupItem
                     value="male"
                     id="male"
-                    disabled={isMaleFull}
                   />
                   <Label htmlFor="male" className="font-normal cursor-pointer">
-                    Male {isMaleFull && <span className="text-red-500 text-sm ml-2">(Slots Full)</span>}
+                    Male {isMaleFull && <span className="text-amber-600 text-sm ml-2">(Waitlist)</span>}
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem
                     value="female"
                     id="female"
-                    disabled={isFemaleFull}
                   />
                   <Label htmlFor="female" className="font-normal cursor-pointer">
-                    Female {isFemaleFull && <span className="text-red-500 text-sm ml-2">(Slots Full)</span>}
+                    Female {isFemaleFull && <span className="text-amber-600 text-sm ml-2">(Waitlist)</span>}
                   </Label>
                 </div>
               </RadioGroup>
@@ -437,15 +435,15 @@ export function RegistrationForm() {
           )}
         </form.Field>
 
-        {/* Slot Status Warning */}
+        {/* Waitlist Info */}
         {(isMaleFull || isFemaleFull) && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-700 text-sm">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-amber-800 text-sm">
               {isMaleFull && isFemaleFull
-                ? "Both male and female slots are currently full. Please check back later."
+                ? "All slots are currently full. You can still register and will be placed on our waitlist."
                 : isMaleFull
-                ? "Male slots are currently full. Only female registrations are accepted at this time."
-                : "Female slots are currently full. Only male registrations are accepted at this time."}
+                ? "Male slots are currently full. Male registrants will be placed on the waitlist."
+                : "Female slots are currently full. Female registrants will be placed on the waitlist."}
             </p>
           </div>
         )}
@@ -455,7 +453,7 @@ export function RegistrationForm() {
           <Button
             type="submit"
             className="w-full h-11 text-base"
-            disabled={isSubmitting || (isMaleFull && isFemaleFull)}
+            disabled={isSubmitting}
           >
             {isSubmitting ? "Redirecting to payment..." : "Proceed to Payment ($10)"}
           </Button>

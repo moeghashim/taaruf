@@ -18,6 +18,12 @@ export const create = mutation({
     paymentStatus: v.optional(
       v.union(v.literal("pending"), v.literal("paid"), v.literal("failed"))
     ),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("waitlisted")
+      )
+    ),
   },
   handler: async (ctx, args) => {
     const registrationId = await ctx.db.insert("registrations", {
@@ -34,7 +40,7 @@ export const create = mutation({
       backgroundCheck: args.backgroundCheck,
       stripeSessionId: args.stripeSessionId,
       paymentStatus: args.paymentStatus ?? "pending",
-      status: "pending",
+      status: args.status ?? "pending",
       createdAt: Date.now(),
     });
 
@@ -85,7 +91,8 @@ export const updateStatus = mutation({
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
-      v.literal("rejected")
+      v.literal("rejected"),
+      v.literal("waitlisted")
     ),
   },
   handler: async (ctx, args) => {

@@ -71,7 +71,53 @@ function SuccessContent() {
     );
   }
 
-  // Payment confirmed
+  // Waitlisted
+  if (registration.status === "waitlisted") {
+    return (
+      <Card className="w-full max-w-md p-8 shadow-lg text-center">
+        <div className="mb-6 flex justify-center">
+          <CheckCircle className="h-16 w-16 text-amber-500" />
+        </div>
+
+        <h1 className="text-3xl font-bold text-slate-900 mb-3">
+          You&apos;re on the Waitlist!
+        </h1>
+
+        <p className="text-lg text-slate-600 mb-2">
+          Thank you for registering with 1 Plus 1
+        </p>
+
+        <p className="text-slate-600 mb-6">
+          Your payment has been received. All current slots are full, so you have been placed
+          on our waitlist. We will notify you if a spot becomes available.
+        </p>
+
+        <div className="space-y-3 text-left mb-8">
+          <h3 className="font-semibold text-slate-900">What happens next:</h3>
+          <ul className="space-y-2 text-sm text-slate-600">
+            <li className="flex gap-3">
+              <span className="text-amber-500 font-bold">&#10003;</span>
+              <span>Your spot on the waitlist is secured</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="text-amber-500 font-bold">&#10003;</span>
+              <span>You will be contacted if a slot opens up</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="text-amber-500 font-bold">&#10003;</span>
+              <span>Your payment will be applied to your registration</span>
+            </li>
+          </ul>
+        </div>
+
+        <Link href="/">
+          <Button className="w-full">Return to Home</Button>
+        </Link>
+      </Card>
+    );
+  }
+
+  // Payment confirmed — registered
   return (
     <Card className="w-full max-w-md p-8 shadow-lg text-center">
       <div className="mb-6 flex justify-center">

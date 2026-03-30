@@ -19,7 +19,7 @@ function formatDate(timestamp: number): string {
 }
 
 export default function AdminDashboard() {
-  type FilterStatus = "all" | "approved" | "pending" | "rejected";
+  type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [maleSlots, setMaleSlots] = useState<number | string>("");
   const [femaleSlots, setFemaleSlots] = useState<number | string>("");
@@ -48,6 +48,7 @@ export default function AdminDashboard() {
     if (filterStatus === "approved") return reg.status === "approved";
     if (filterStatus === "pending") return reg.status === "pending";
     if (filterStatus === "rejected") return reg.status === "rejected";
+    if (filterStatus === "waitlisted") return reg.status === "waitlisted";
     return true;
   });
 
@@ -56,6 +57,7 @@ export default function AdminDashboard() {
   const approvedCount = allRegistrations.filter((r) => r.status === "approved").length;
   const pendingCount = allRegistrations.filter((r) => r.status === "pending").length;
   const rejectedCount = allRegistrations.filter((r) => r.status === "rejected").length;
+  const waitlistedCount = allRegistrations.filter((r) => r.status === "waitlisted").length;
   const maleCount = allRegistrations.filter((r) => r.gender === "male").length;
   const femaleCount = allRegistrations.filter((r) => r.gender === "female").length;
 
@@ -127,7 +129,7 @@ export default function AdminDashboard() {
         <Separator />
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">Total Registrations</CardTitle>
@@ -161,6 +163,15 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-red-600">{rejectedCount}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-amber-600">Waitlisted</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-amber-600">{waitlistedCount}</div>
             </CardContent>
           </Card>
 
@@ -247,6 +258,9 @@ export default function AdminDashboard() {
                 <TabsTrigger value="rejected">
                   Rejected <span className="ml-2 text-xs">{rejectedCount}</span>
                 </TabsTrigger>
+                <TabsTrigger value="waitlisted">
+                  Waitlisted <span className="ml-2 text-xs">{waitlistedCount}</span>
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value={filterStatus} className="space-y-4 mt-4">
@@ -294,6 +308,8 @@ export default function AdminDashboard() {
                                     ? "bg-green-100 text-green-800"
                                     : registration.status === "rejected"
                                     ? "bg-red-100 text-red-800"
+                                    : registration.status === "waitlisted"
+                                    ? "bg-amber-100 text-amber-800"
                                     : "bg-yellow-100 text-yellow-800"
                                 }
                               >
@@ -317,7 +333,7 @@ export default function AdminDashboard() {
                                 : "-"}
                             </td>
                             <td className="py-3 px-4 space-x-2">
-                              {registration.status === "pending" && (
+                              {(registration.status === "pending" || registration.status === "waitlisted") && (
                                 <>
                                   <Button
                                     variant="ghost"
