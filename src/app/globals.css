@@ -17,9 +17,10 @@
   --color-accent-foreground: #166534;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
+  --color-border: #cbd5e1;
+  --color-input: #ffffff;
   --color-ring: #10b981;
+  --color-muted-foreground: #475569;
   --radius-sm: 0.25rem;
   --radius-md: calc(var(--radius-lg) - 2px);
   --radius-lg: 0.5rem;
