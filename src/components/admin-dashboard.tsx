@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api } from "../../convex/_generated/api";
 // Simple date formatter
@@ -330,11 +331,39 @@ export default function AdminDashboard() {
                             </td>
                             <td className="py-3 px-4 text-xs">{registration.email}</td>
                             <td className="py-3 px-4 text-xs">{registration.phone}</td>
-                            <td className="py-3 px-4 text-xs max-w-[200px] truncate" title={registration.describeYourself || ""}>
-                              {registration.describeYourself || "-"}
+                            <td className="py-3 px-4 text-xs max-w-[200px]">
+                              {registration.describeYourself ? (
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <button className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer">
+                                      {registration.describeYourself}
+                                    </button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-lg">
+                                    <DialogHeader>
+                                      <DialogTitle>About - {registration.name}</DialogTitle>
+                                    </DialogHeader>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{registration.describeYourself}</p>
+                                  </DialogContent>
+                                </Dialog>
+                              ) : "-"}
                             </td>
-                            <td className="py-3 px-4 text-xs max-w-[200px] truncate" title={registration.lookingFor || ""}>
-                              {registration.lookingFor || "-"}
+                            <td className="py-3 px-4 text-xs max-w-[200px]">
+                              {registration.lookingFor ? (
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <button className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer">
+                                      {registration.lookingFor}
+                                    </button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-lg">
+                                    <DialogHeader>
+                                      <DialogTitle>Looking For - {registration.name}</DialogTitle>
+                                    </DialogHeader>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{registration.lookingFor}</p>
+                                  </DialogContent>
+                                </Dialog>
+                              ) : "-"}
                             </td>
                             <td className="py-3 px-4 text-xs">
                               <Badge
