@@ -26,6 +26,7 @@ export default function AdminDashboard() {
   const [femaleSlots, setFemaleSlots] = useState<number | string>("");
   const [savingSlots, setSavingSlots] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Queries
   const allRegistrations = useQuery(api.registrations.getAll) || [];
@@ -45,11 +46,17 @@ export default function AdminDashboard() {
 
   // Filter registrations
   const filteredRegistrations = allRegistrations.filter((reg) => {
-    if (filterStatus === "all") return true;
-    if (filterStatus === "approved") return reg.status === "approved";
-    if (filterStatus === "pending") return reg.status === "pending";
-    if (filterStatus === "rejected") return reg.status === "rejected";
-    if (filterStatus === "waitlisted") return reg.status === "waitlisted";
+    // Status filter
+    if (filterStatus !== "all" && reg.status !== filterStatus) return false;
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return (
+        reg.name.toLowerCase().includes(q) ||
+        reg.email.toLowerCase().includes(q) ||
+        (reg.phone && reg.phone.includes(q))
+      );
+    }
     return true;
   });
 
@@ -245,6 +252,13 @@ export default function AdminDashboard() {
             <CardDescription>View and manage all registrations</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <Input
+              type="text"
+              placeholder="Search by name, email, or phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="max-w-sm"
+            />
             <Tabs defaultValue="all" onValueChange={(value) => setFilterStatus(value as FilterStatus)}>
               <TabsList>
                 <TabsTrigger value="all">
