@@ -110,6 +110,40 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleExportCSV = () => {
+    const headers = [
+      "Name", "Age", "Gender", "Status", "Marital Status", "Education",
+      "Job", "Email", "Phone", "Describe Yourself", "Looking For",
+      "Payment Status", "Date"
+    ];
+    const rows = filteredRegistrations.map((r) => [
+      r.name,
+      r.age,
+      r.gender,
+      r.status,
+      r.maritalStatus,
+      r.education,
+      r.job,
+      r.email,
+      r.phone,
+      (r.describeYourself || "").replace(/"/g, '""'),
+      (r.lookingFor || "").replace(/"/g, '""'),
+      r.paymentStatus || "",
+      r._creationTime ? new Date(r._creationTime).toLocaleDateString() : "",
+    ]);
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) => row.map((val) => `"${val}"`).join(",")),
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `registrations-${filterStatus}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleLogout = async () => {
     // Clear the cookie by making a request, or redirect
     document.cookie = "admin_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
@@ -252,13 +286,18 @@ export default function AdminDashboard() {
             <CardDescription>View and manage all registrations</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Input
-              type="text"
-              placeholder="Search by name, email, or phone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="max-w-sm"
-            />
+            <div className="flex items-center gap-4">
+              <Input
+                type="text"
+                placeholder="Search by name, email, or phone..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="max-w-sm"
+              />
+              <Button variant="outline" onClick={handleExportCSV}>
+                Export CSV
+              </Button>
+            </div>
             <Tabs defaultValue="all" onValueChange={(value) => setFilterStatus(value as FilterStatus)}>
               <TabsList>
                 <TabsTrigger value="all">
