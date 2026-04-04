@@ -440,10 +440,10 @@ export function RegistrationForm() {
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <p className="text-amber-800 text-sm">
               {isMaleFull && isFemaleFull
-                ? "All slots are currently full. You can still register and will be placed on our waitlist."
+                ? "Registration is full for both genders. New registrations will be placed on a waitlist."
                 : isMaleFull
-                ? "Male slots are currently full. Male registrants will be placed on the waitlist."
-                : "Female slots are currently full. Female registrants will be placed on the waitlist."}
+                ? "Male registration is full. New male registrations will be placed on a waitlist."
+                : "Female registration is full. New female registrations will be placed on a waitlist."}
             </p>
           </div>
         )}

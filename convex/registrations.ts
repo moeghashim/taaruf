@@ -58,13 +58,12 @@ export const getAll = query({
 export const getStats = query({
   args: {},
   handler: async (ctx) => {
-    const approvedRegistrations = await ctx.db
-      .query("registrations")
-      .withIndex("by_status", (q) => q.eq("status", "approved"))
-      .collect();
+    // Count all non-rejected registrations per gender (determines slot capacity)
+    const allRegistrations = await ctx.db.query("registrations").collect();
+    const nonRejected = allRegistrations.filter((r) => r.status !== "rejected");
 
-    const maleCount = approvedRegistrations.filter((r) => r.gender === "male").length;
-    const femaleCount = approvedRegistrations.filter((r) => r.gender === "female").length;
+    const maleCount = nonRejected.filter((r) => r.gender === "male").length;
+    const femaleCount = nonRejected.filter((r) => r.gender === "female").length;
 
     // Get slot limits from settings
     const maleSetting = await ctx.db

@@ -47,7 +47,11 @@ export default function AdminDashboard() {
   // Filter registrations
   const filteredRegistrations = allRegistrations.filter((reg) => {
     // Status filter
-    if (filterStatus !== "all" && reg.status !== filterStatus) return false;
+    if (filterStatus === "waitlisted") {
+      if (!isOnWaitlist(reg._id)) return false;
+    } else if (filterStatus !== "all" && reg.status !== filterStatus) {
+      return false;
+    }
     // Search filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -60,12 +64,30 @@ export default function AdminDashboard() {
     return true;
   });
 
+  // Compute which registrations are on the waitlist (by creation order, per gender)
+  const maleLimit = slotLimits?.maleSlots || 40;
+  const femaleLimit = slotLimits?.femaleSlots || 40;
+
+  // Sort non-rejected by creation time, assign waitlist status by position
+  const nonRejectedMales = allRegistrations
+    .filter((r) => r.gender === "male" && r.status !== "rejected")
+    .sort((a, b) => a._creationTime - b._creationTime);
+  const nonRejectedFemales = allRegistrations
+    .filter((r) => r.gender === "female" && r.status !== "rejected")
+    .sort((a, b) => a._creationTime - b._creationTime);
+
+  const waitlistIds = new Set<string>();
+  nonRejectedMales.slice(maleLimit).forEach((r) => waitlistIds.add(r._id));
+  nonRejectedFemales.slice(femaleLimit).forEach((r) => waitlistIds.add(r._id));
+
+  const isOnWaitlist = (id: string) => waitlistIds.has(id);
+
   // Statistics
   const totalCount = allRegistrations.length;
   const approvedCount = allRegistrations.filter((r) => r.status === "approved").length;
   const pendingCount = allRegistrations.filter((r) => r.status === "pending").length;
   const rejectedCount = allRegistrations.filter((r) => r.status === "rejected").length;
-  const waitlistedCount = allRegistrations.filter((r) => r.status === "waitlisted").length;
+  const waitlistedCount = waitlistIds.size;
   const maleCount = allRegistrations.filter((r) => r.gender === "male").length;
   const femaleCount = allRegistrations.filter((r) => r.gender === "female").length;
 
@@ -352,26 +374,31 @@ export default function AdminDashboard() {
                               </Badge>
                             </td>
                             <td className="py-3 px-4">
-                              <Badge
-                                variant={
-                                  registration.status === "approved"
-                                    ? "default"
-                                    : registration.status === "rejected"
-                                    ? "destructive"
-                                    : "outline"
-                                }
-                                className={
-                                  registration.status === "approved"
-                                    ? "bg-green-100 text-green-800"
-                                    : registration.status === "rejected"
-                                    ? "bg-red-100 text-red-800"
-                                    : registration.status === "waitlisted"
-                                    ? "bg-amber-100 text-amber-800"
-                                    : "bg-yellow-100 text-yellow-800"
-                                }
-                              >
-                                {registration.status}
-                              </Badge>
+                              <div className="flex gap-1 flex-wrap">
+                                <Badge
+                                  variant={
+                                    registration.status === "approved"
+                                      ? "default"
+                                      : registration.status === "rejected"
+                                      ? "destructive"
+                                      : "outline"
+                                  }
+                                  className={
+                                    registration.status === "approved"
+                                      ? "bg-green-100 text-green-800"
+                                      : registration.status === "rejected"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                                  }
+                                >
+                                  {registration.status}
+                                </Badge>
+                                {isOnWaitlist(registration._id) && (
+                                  <Badge variant="outline" className="bg-amber-100 text-amber-800">
+                                    Waitlist
+                                  </Badge>
+                                )}
+                              </div>
                             </td>
                             <td className="py-3 px-4 text-xs">
                               {registration.maritalStatus || "-"}
