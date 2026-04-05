@@ -19,6 +19,7 @@ export default defineSchema({
     ),
     stripeSessionId: v.optional(v.string()),
     amountPaid: v.optional(v.number()),
+    confirmationEmailSent: v.optional(v.boolean()),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),

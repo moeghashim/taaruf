@@ -58,6 +58,29 @@ export async function POST(request: NextRequest) {
         console.error("Failed to update payment status:", err instanceof Error ? err.message : err);
         return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
       }
+
+      // Send confirmation email (non-blocking — failure doesn't break webhook)
+      try {
+        const registration = await convexClient.query(
+          api.registrations.getByStripeSession,
+          { stripeSessionId: session.id }
+        );
+        if (registration && registration.email) {
+          const { sendConfirmationEmail } = await import("@/lib/email");
+          const result = await sendConfirmationEmail({
+            name: registration.name,
+            email: registration.email,
+          });
+          if (result.success) {
+            await convexClient.mutation(api.registrations.markEmailSent, {
+              stripeSessionId: session.id,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to send confirmation email:", err instanceof Error ? err.message : err);
+        // Don't return error — payment was already confirmed
+      }
     } else if (event.type === "checkout.session.expired") {
       try {
         await convexClient.mutation(api.registrations.updatePaymentStatus, {

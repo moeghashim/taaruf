@@ -27,6 +27,8 @@ export default function AdminDashboard() {
   const [savingSlots, setSavingSlots] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [fixingPayments, setFixingPayments] = useState(false);
+  const [fixResult, setFixResult] = useState<string | null>(null);
 
   // Queries
   const allRegistrations = useQuery(api.registrations.getAll) || [];
@@ -166,6 +168,29 @@ export default function AdminDashboard() {
     URL.revokeObjectURL(url);
   };
 
+  const handleFixPayments = async () => {
+    setFixingPayments(true);
+    setFixResult(null);
+    try {
+      const response = await fetch("/api/admin/fix-payments", {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setFixResult(
+          `Checked ${data.sessionsChecked} sessions. Fixed ${data.fixed} payment(s). Sent ${data.emailsSent} email(s).`
+        );
+      } else {
+        setFixResult(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      setFixResult("Failed to fix payments. Please try again.");
+      console.error("Fix payments error:", error);
+    } finally {
+      setFixingPayments(false);
+    }
+  };
+
   const handleLogout = async () => {
     // Clear the cookie by making a request, or redirect
     document.cookie = "admin_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
@@ -298,6 +323,28 @@ export default function AdminDashboard() {
             >
               {savingSlots ? "Saving..." : "Save Slot Limits"}
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Fix Payments */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment Reconciliation</CardTitle>
+            <CardDescription>Fix mismatched payment statuses and send missing confirmation emails</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={handleFixPayments}
+              disabled={fixingPayments}
+              variant="outline"
+            >
+              {fixingPayments ? "Fixing..." : "Fix Payments & Send Emails"}
+            </Button>
+            {fixResult && (
+              <p className="mt-3 text-sm text-slate-700 bg-slate-50 p-3 rounded-md">
+                {fixResult}
+              </p>
+            )}
           </CardContent>
         </Card>
 

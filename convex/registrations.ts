@@ -154,6 +154,26 @@ export const getByStripeSession = query({
   },
 });
 
+export const markEmailSent = mutation({
+  args: {
+    stripeSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const registration = await ctx.db
+      .query("registrations")
+      .withIndex("by_stripeSessionId", (q) =>
+        q.eq("stripeSessionId", args.stripeSessionId)
+      )
+      .first();
+
+    if (registration) {
+      await ctx.db.patch(registration._id, {
+        confirmationEmailSent: true,
+      });
+    }
+  },
+});
+
 export const deleteRegistration = mutation({
   args: {
     id: v.id("registrations"),
