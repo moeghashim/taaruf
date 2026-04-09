@@ -362,11 +362,15 @@ export function RegistrationForm() {
         {/* Describe Yourself Field */}
         <form.Field
           name="describeYourself"
+          validators={{
+            onChange: ({ value }) =>
+              !value || value.trim().length === 0 ? "About me is required" : undefined,
+          }}
         >
           {(field) => (
             <div className="space-y-2">
               <Label htmlFor={field.name}>
-                Describe yourself with any details you find important for the 1Plus1 team
+                About Me *
               </Label>
               <textarea
                 id={field.name}
@@ -377,6 +381,11 @@ export function RegistrationForm() {
                 className="flex min-h-[100px] w-full rounded-md border border-input bg-input px-3 py-2 text-base text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 rows={4}
               />
+              {field.state.meta.errors?.length > 0 && (
+                <p className="text-red-500 text-sm">
+                  {field.state.meta.errors.join(", ")}
+                </p>
+              )}
             </div>
           )}
         </form.Field>

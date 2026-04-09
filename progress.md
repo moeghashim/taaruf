@@ -21,3 +21,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Actor: Moe Ghashim <mohanadgh@gmail.com>
 - Changed Paths:
   - progress.md
+## 2026-04-09T19:23:22.000Z
+- Trigger: commit
+- Learning: Making core narrative fields mandatory improves registration quality and gives the team enough context to review applicants meaningfully.
+- Context: feat(register): require about me field
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/registration-form.tsx
+  - progress.md
