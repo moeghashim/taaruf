@@ -30,3 +30,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/registration-form.tsx
   - progress.md
+## 2026-04-09T19:24:56.000Z
+- Trigger: commit
+- Learning: Requiring both self-description and spouse-preference fields leads to more useful profiles for screening and matching decisions.
+- Context: feat(register): require spouse preferences field
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/registration-form.tsx
+  - progress.md

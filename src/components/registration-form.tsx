@@ -393,11 +393,15 @@ export function RegistrationForm() {
         {/* Looking For Field */}
         <form.Field
           name="lookingFor"
+          validators={{
+            onChange: ({ value }) =>
+              !value || value.trim().length === 0 ? "What you are looking for is required" : undefined,
+          }}
         >
           {(field) => (
             <div className="space-y-2">
               <Label htmlFor={field.name}>
-                Describe anything we should know about what you are looking for in a spouse
+                Describe anything we should know about what you are looking for in a spouse *
               </Label>
               <textarea
                 id={field.name}
@@ -408,6 +412,11 @@ export function RegistrationForm() {
                 className="flex min-h-[100px] w-full rounded-md border border-input bg-input px-3 py-2 text-base text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 rows={4}
               />
+              {field.state.meta.errors?.length > 0 && (
+                <p className="text-red-500 text-sm">
+                  {field.state.meta.errors.join(", ")}
+                </p>
+              )}
             </div>
           )}
         </form.Field>
