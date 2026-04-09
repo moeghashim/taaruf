@@ -154,6 +154,19 @@ export const getByStripeSession = query({
   },
 });
 
+export const updateAdminNotes = mutation({
+  args: {
+    id: v.id("registrations"),
+    adminNotes: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      adminNotes: args.adminNotes,
+    });
+    return args.id;
+  },
+});
+
 export const markEmailSent = mutation({
   args: {
     stripeSessionId: v.string(),

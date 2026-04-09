@@ -38,6 +38,8 @@ export default function AdminDashboard() {
   const deleteRegistration = useMutation(api.registrations.deleteRegistration);
   const updateSlotLimits = useMutation(api.settings.updateSlotLimits);
   const updateStatus = useMutation(api.registrations.updateStatus);
+  const updateAdminNotes = useMutation(api.registrations.updateAdminNotes);
+  const [editingNotes, setEditingNotes] = useState<{ id: string; notes: string } | null>(null);
   // Logout is handled client-side by clearing the cookie
 
   // Initialize slot inputs on load
@@ -166,6 +168,18 @@ export default function AdminDashboard() {
     a.download = `registrations-${filterStatus}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleSaveNotes = async () => {
+    if (!editingNotes) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await updateAdminNotes({ id: editingNotes.id as any, adminNotes: editingNotes.notes });
+      setEditingNotes(null);
+    } catch (error) {
+      console.error("Failed to save notes:", error);
+      alert("Failed to save notes");
+    }
   };
 
   const handleFixPayments = async () => {
@@ -407,6 +421,7 @@ export default function AdminDashboard() {
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Looking For</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Payment</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Notes</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Action</th>
                         </tr>
                       </thead>
@@ -510,6 +525,34 @@ export default function AdminDashboard() {
                               {registration._creationTime
                                 ? formatDate(registration._creationTime)
                                 : "-"}
+                            </td>
+                            <td className="py-3 px-4 text-xs max-w-[200px]">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <button
+                                    className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer"
+                                    onClick={() => setEditingNotes({ id: registration._id, notes: registration.adminNotes || "" })}
+                                  >
+                                    {registration.adminNotes || "Add note..."}
+                                  </button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-lg">
+                                  <DialogHeader>
+                                    <DialogTitle>Notes - {registration.name}</DialogTitle>
+                                  </DialogHeader>
+                                  <textarea
+                                    value={editingNotes?.id === registration._id ? editingNotes.notes : (registration.adminNotes || "")}
+                                    onChange={(e) => setEditingNotes({ id: registration._id, notes: e.target.value })}
+                                    onFocus={() => setEditingNotes({ id: registration._id, notes: registration.adminNotes || "" })}
+                                    placeholder="Add notes about background check, follow-ups, etc..."
+                                    className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                    rows={4}
+                                  />
+                                  <Button onClick={handleSaveNotes} className="w-full">
+                                    Save Notes
+                                  </Button>
+                                </DialogContent>
+                              </Dialog>
                             </td>
                             <td className="py-3 px-4 space-x-2">
                               {(registration.status === "pending" || registration.status === "waitlisted") && (
