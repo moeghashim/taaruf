@@ -1,14 +1,14 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
-import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "../../convex/_generated/api";
 
 function formatDate(timestamp: number): string {
@@ -21,6 +21,7 @@ function formatDate(timestamp: number): string {
 
 export default function AdminDashboard() {
   type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
+
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [maleSlots, setMaleSlots] = useState<number | string>("");
   const [femaleSlots, setFemaleSlots] = useState<number | string>("");
@@ -29,6 +30,7 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [fixingPayments, setFixingPayments] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
+  const [editingNotes, setEditingNotes] = useState<{ id: string; notes: string } | null>(null);
 
   const allRegistrations = useQuery(api.registrations.getAll) || [];
   const slotLimits = useQuery(api.settings.getSlotLimits);
@@ -37,7 +39,6 @@ export default function AdminDashboard() {
   const updateSlotLimits = useMutation(api.settings.updateSlotLimits);
   const updateStatus = useMutation(api.registrations.updateStatus);
   const updateAdminNotes = useMutation(api.registrations.updateAdminNotes);
-  const [editingNotes, setEditingNotes] = useState<{ id: string; notes: string } | null>(null);
 
   if (slotLimits && !maleSlots && !femaleSlots) {
     setMaleSlots(slotLimits.maleSlots || 40);
@@ -47,43 +48,50 @@ export default function AdminDashboard() {
   const maleLimit = slotLimits?.maleSlots || 40;
   const femaleLimit = slotLimits?.femaleSlots || 40;
 
-  const nonRejectedMales = allRegistrations
+  const nonRejectedMales = [...allRegistrations]
     .filter((r) => r.gender === "male" && r.status !== "rejected")
     .sort((a, b) => a._creationTime - b._creationTime);
-  const nonRejectedFemales = allRegistrations
+  const nonRejectedFemales = [...allRegistrations]
     .filter((r) => r.gender === "female" && r.status !== "rejected")
     .sort((a, b) => a._creationTime - b._creationTime);
 
-  const waitlistIds = new Set<string>();
-  nonRejectedMales.slice(maleLimit).forEach((r) => waitlistIds.add(r._id));
-  nonRejectedFemales.slice(femaleLimit).forEach((r) => waitlistIds.add(r._id));
+  const waitlistIds = useMemo(() => {
+    const ids = new Set<string>();
+    nonRejectedMales.slice(maleLimit).forEach((r) => ids.add(r._id));
+    nonRejectedFemales.slice(femaleLimit).forEach((r) => ids.add(r._id));
+    return ids;
+  }, [femaleLimit, maleLimit, nonRejectedFemales, nonRejectedMales]);
 
-  const isOnWaitlist = (id: string) => waitlistIds.has(id);
-
-  const sortedRegistrations = [...allRegistrations].sort(
-    (a, b) => a._creationTime - b._creationTime
+  const sortedRegistrations = useMemo(
+    () => [...allRegistrations].sort((a, b) => a._creationTime - b._creationTime),
+    [allRegistrations]
   );
-  const registrationNumbers = new Map(
-    sortedRegistrations.map((registration, index) => [registration._id, index + 1])
+
+  const registrationNumbers = useMemo(
+    () => new Map(sortedRegistrations.map((registration, index) => [registration._id, index + 1])),
+    [sortedRegistrations]
   );
 
-  const filteredRegistrations = allRegistrations.filter((reg) => {
-    if (filterStatus === "waitlisted") {
-      if (!isOnWaitlist(reg._id)) return false;
-    } else if (filterStatus !== "all" && reg.status !== filterStatus) {
-      return false;
-    }
+  const filteredRegistrations = useMemo(() => {
+    return allRegistrations.filter((reg) => {
+      if (filterStatus === "waitlisted") {
+        if (!waitlistIds.has(reg._id)) return false;
+      } else if (filterStatus !== "all" && reg.status !== filterStatus) {
+        return false;
+      }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      return (
-        reg.name.toLowerCase().includes(q) ||
-        reg.email.toLowerCase().includes(q) ||
-        (reg.phone && reg.phone.includes(q))
-      );
-    }
-    return true;
-  });
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          reg.name.toLowerCase().includes(q) ||
+          reg.email.toLowerCase().includes(q) ||
+          (reg.phone && reg.phone.includes(q))
+        );
+      }
+
+      return true;
+    });
+  }, [allRegistrations, filterStatus, searchQuery, waitlistIds]);
 
   const totalCount = allRegistrations.length;
   const approvedCount = allRegistrations.filter((r) => r.status === "approved").length;
@@ -136,9 +144,20 @@ export default function AdminDashboard() {
 
   const handleExportCSV = () => {
     const headers = [
-      "Number", "Name", "Age", "Gender", "Status", "Marital Status", "Education",
-      "Job", "Email", "Phone", "Describe Yourself", "Looking For",
-      "Payment Status", "Date"
+      "Number",
+      "Name",
+      "Age",
+      "Gender",
+      "Status",
+      "Marital Status",
+      "Education",
+      "Job",
+      "Email",
+      "Phone",
+      "Describe Yourself",
+      "Looking For",
+      "Payment Status",
+      "Date",
     ];
     const rows = filteredRegistrations.map((r) => [
       registrationNumbers.get(r._id) || "",
@@ -217,11 +236,7 @@ export default function AdminDashboard() {
             <h1 className="text-4xl font-bold text-gray-900">Admin Dashboard</h1>
             <p className="text-gray-600 mt-2">Manage Taaruf registrations and settings</p>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            className="text-red-600 hover:bg-red-50"
-          >
+          <Button variant="outline" onClick={handleLogout} className="text-red-600 hover:bg-red-50">
             Logout
           </Button>
         </div>
@@ -325,11 +340,7 @@ export default function AdminDashboard() {
                 />
               </div>
             </div>
-            <Button
-              onClick={handleSaveSlots}
-              disabled={savingSlots}
-              className="mt-4"
-            >
+            <Button onClick={handleSaveSlots} disabled={savingSlots} className="mt-4">
               {savingSlots ? "Saving..." : "Save Slot Limits"}
             </Button>
           </CardContent>
@@ -341,17 +352,11 @@ export default function AdminDashboard() {
             <CardDescription>Fix mismatched payment statuses and send missing confirmation emails</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              onClick={handleFixPayments}
-              disabled={fixingPayments}
-              variant="outline"
-            >
+            <Button onClick={handleFixPayments} disabled={fixingPayments} variant="outline">
               {fixingPayments ? "Fixing..." : "Fix Payments & Send Emails"}
             </Button>
             {fixResult && (
-              <p className="mt-3 text-sm text-slate-700 bg-slate-50 p-3 rounded-md">
-                {fixResult}
-              </p>
+              <p className="mt-3 text-sm text-slate-700 bg-slate-50 p-3 rounded-md">{fixResult}</p>
             )}
           </CardContent>
         </Card>
@@ -374,7 +379,8 @@ export default function AdminDashboard() {
                 Export CSV
               </Button>
             </div>
-            <Tabs defaultValue="all" onValueChange={(value) => setFilterStatus(value as FilterStatus)}>
+
+            <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as FilterStatus)}>
               <TabsList>
                 <TabsTrigger value="all">
                   All <span className="ml-2 text-xs">{allRegistrations.length}</span>
@@ -392,205 +398,207 @@ export default function AdminDashboard() {
                   Waitlisted <span className="ml-2 text-xs">{waitlistedCount}</span>
                 </TabsTrigger>
               </TabsList>
+            </Tabs>
 
-              <TabsContent value={filterStatus} className="space-y-4 mt-4">
-                {filteredRegistrations.length === 0 ? (
-                  <p className="text-gray-500 py-8 text-center">No registrations found</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">#</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Age</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Gender</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Marital</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Education</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Job</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Phone</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">About</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Looking For</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Payment</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Notes</th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredRegistrations.map((registration) => (
-                          <tr key={registration._id} className="border-b hover:bg-gray-50">
-                            <td className="py-3 px-4 font-medium text-gray-700">
-                              {registrationNumbers.get(registration._id)}
-                            </td>
-                            <td className="py-3 px-4">{registration.name}</td>
-                            <td className="py-3 px-4">{registration.age}</td>
-                            <td className="py-3 px-4">
-                              <Badge variant={registration.gender === "male" ? "default" : "secondary"}>
-                                {registration.gender}
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex gap-1 flex-wrap">
-                                <Badge
-                                  variant={
-                                    registration.status === "approved"
-                                      ? "default"
-                                      : registration.status === "rejected"
-                                      ? "destructive"
-                                      : "outline"
-                                  }
-                                  className={
-                                    registration.status === "approved"
-                                      ? "bg-green-100 text-green-800"
-                                      : registration.status === "rejected"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-yellow-100 text-yellow-800"
-                                  }
-                                >
-                                  {registration.status}
-                                </Badge>
-                                {isOnWaitlist(registration._id) && (
-                                  <Badge variant="outline" className="bg-amber-100 text-amber-800">
-                                    Waitlist
-                                  </Badge>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-3 px-4 text-xs">
-                              {registration.maritalStatus || "-"}
-                            </td>
-                            <td className="py-3 px-4 text-xs">
-                              {registration.education || "-"}
-                            </td>
-                            <td className="py-3 px-4 text-xs">
-                              {registration.job || "-"}
-                            </td>
-                            <td className="py-3 px-4 text-xs">{registration.email}</td>
-                            <td className="py-3 px-4 text-xs">{registration.phone}</td>
-                            <td className="py-3 px-4 text-xs max-w-[200px]">
-                              {registration.describeYourself ? (
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <button className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer">
-                                      {registration.describeYourself}
-                                    </button>
-                                  </DialogTrigger>
-                                  <DialogContent className="max-w-lg">
-                                    <DialogHeader>
-                                      <DialogTitle>About - {registration.name}</DialogTitle>
-                                    </DialogHeader>
-                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{registration.describeYourself}</p>
-                                  </DialogContent>
-                                </Dialog>
-                              ) : "-"}
-                            </td>
-                            <td className="py-3 px-4 text-xs max-w-[200px]">
-                              {registration.lookingFor ? (
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <button className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer">
-                                      {registration.lookingFor}
-                                    </button>
-                                  </DialogTrigger>
-                                  <DialogContent className="max-w-lg">
-                                    <DialogHeader>
-                                      <DialogTitle>Looking For - {registration.name}</DialogTitle>
-                                    </DialogHeader>
-                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{registration.lookingFor}</p>
-                                  </DialogContent>
-                                </Dialog>
-                              ) : "-"}
-                            </td>
-                            <td className="py-3 px-4 text-xs">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  registration.paymentStatus === "paid"
-                                    ? "bg-green-100 text-green-800"
-                                    : registration.paymentStatus === "failed"
+            {filteredRegistrations.length === 0 ? (
+              <p className="text-gray-500 py-8 text-center">No registrations found</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">#</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Age</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Gender</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Marital</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Education</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Job</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Phone</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">About</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Looking For</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Payment</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Notes</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRegistrations.map((registration) => (
+                      <tr key={registration._id} className="border-b hover:bg-gray-50">
+                        <td className="py-3 px-4 font-medium text-gray-700">
+                          {registrationNumbers.get(registration._id)}
+                        </td>
+                        <td className="py-3 px-4">{registration.name}</td>
+                        <td className="py-3 px-4">{registration.age}</td>
+                        <td className="py-3 px-4">
+                          <Badge variant={registration.gender === "male" ? "default" : "secondary"}>
+                            {registration.gender}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex gap-1 flex-wrap">
+                            <Badge
+                              variant={
+                                registration.status === "approved"
+                                  ? "default"
+                                  : registration.status === "rejected"
+                                    ? "destructive"
+                                    : "outline"
+                              }
+                              className={
+                                registration.status === "approved"
+                                  ? "bg-green-100 text-green-800"
+                                  : registration.status === "rejected"
                                     ? "bg-red-100 text-red-800"
                                     : "bg-yellow-100 text-yellow-800"
+                              }
+                            >
+                              {registration.status}
+                            </Badge>
+                            {waitlistIds.has(registration._id) && (
+                              <Badge variant="outline" className="bg-amber-100 text-amber-800">
+                                Waitlist
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-xs">{registration.maritalStatus || "-"}</td>
+                        <td className="py-3 px-4 text-xs">{registration.education || "-"}</td>
+                        <td className="py-3 px-4 text-xs">{registration.job || "-"}</td>
+                        <td className="py-3 px-4 text-xs">{registration.email}</td>
+                        <td className="py-3 px-4 text-xs">{registration.phone}</td>
+                        <td className="py-3 px-4 text-xs max-w-[200px]">
+                          {registration.describeYourself ? (
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <button className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer">
+                                  {registration.describeYourself}
+                                </button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-lg">
+                                <DialogHeader>
+                                  <DialogTitle>About - {registration.name}</DialogTitle>
+                                </DialogHeader>
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                                  {registration.describeYourself}
+                                </p>
+                              </DialogContent>
+                            </Dialog>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-xs max-w-[200px]">
+                          {registration.lookingFor ? (
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <button className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer">
+                                  {registration.lookingFor}
+                                </button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-lg">
+                                <DialogHeader>
+                                  <DialogTitle>Looking For - {registration.name}</DialogTitle>
+                                </DialogHeader>
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                                  {registration.lookingFor}
+                                </p>
+                              </DialogContent>
+                            </Dialog>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-xs">
+                          <Badge
+                            variant="outline"
+                            className={
+                              registration.paymentStatus === "paid"
+                                ? "bg-green-100 text-green-800"
+                                : registration.paymentStatus === "failed"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-yellow-100 text-yellow-800"
+                            }
+                          >
+                            {registration.paymentStatus || "-"}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-xs">
+                          {registration._creationTime ? formatDate(registration._creationTime) : "-"}
+                        </td>
+                        <td className="py-3 px-4 text-xs max-w-[200px]">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <button
+                                className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer"
+                                onClick={() =>
+                                  setEditingNotes({ id: registration._id, notes: registration.adminNotes || "" })
                                 }
                               >
-                                {registration.paymentStatus || "-"}
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-4 text-xs">
-                              {registration._creationTime
-                                ? formatDate(registration._creationTime)
-                                : "-"}
-                            </td>
-                            <td className="py-3 px-4 text-xs max-w-[200px]">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <button
-                                    className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer"
-                                    onClick={() => setEditingNotes({ id: registration._id, notes: registration.adminNotes || "" })}
-                                  >
-                                    {registration.adminNotes || "Add note..."}
-                                  </button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-lg">
-                                  <DialogHeader>
-                                    <DialogTitle>Notes - {registration.name}</DialogTitle>
-                                  </DialogHeader>
-                                  <textarea
-                                    value={editingNotes?.id === registration._id ? editingNotes.notes : (registration.adminNotes || "")}
-                                    onChange={(e) => setEditingNotes({ id: registration._id, notes: e.target.value })}
-                                    onFocus={() => setEditingNotes({ id: registration._id, notes: registration.adminNotes || "" })}
-                                    placeholder="Add notes about background check, follow-ups, etc..."
-                                    className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                    rows={4}
-                                  />
-                                  <Button onClick={handleSaveNotes} className="w-full">
-                                    Save Notes
-                                  </Button>
-                                </DialogContent>
-                              </Dialog>
-                            </td>
-                            <td className="py-3 px-4 space-x-2">
-                              {(registration.status === "pending" || registration.status === "waitlisted") && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleStatusUpdate(registration._id, "approved")}
-                                    disabled={updatingStatus === registration._id}
-                                    className="text-green-600 hover:bg-green-50"
-                                  >
-                                    {updatingStatus === registration._id ? "..." : "Approve"}
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleStatusUpdate(registration._id, "rejected")}
-                                    disabled={updatingStatus === registration._id}
-                                    className="text-red-600 hover:bg-red-50"
-                                  >
-                                    {updatingStatus === registration._id ? "..." : "Reject"}
-                                  </Button>
-                                </>
-                              )}
+                                {registration.adminNotes || "Add note..."}
+                              </button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-lg">
+                              <DialogHeader>
+                                <DialogTitle>Notes - {registration.name}</DialogTitle>
+                              </DialogHeader>
+                              <textarea
+                                value={editingNotes?.id === registration._id ? editingNotes.notes : (registration.adminNotes || "")}
+                                onChange={(e) => setEditingNotes({ id: registration._id, notes: e.target.value })}
+                                onFocus={() =>
+                                  setEditingNotes({ id: registration._id, notes: registration.adminNotes || "" })
+                                }
+                                placeholder="Add notes about background check, follow-ups, etc..."
+                                className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                rows={4}
+                              />
+                              <Button onClick={handleSaveNotes} className="w-full">
+                                Save Notes
+                              </Button>
+                            </DialogContent>
+                          </Dialog>
+                        </td>
+                        <td className="py-3 px-4 space-x-2">
+                          {(registration.status === "pending" || registration.status === "waitlisted") && (
+                            <>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDeleteRegistration(registration._id)}
+                                onClick={() => handleStatusUpdate(registration._id, "approved")}
+                                disabled={updatingStatus === registration._id}
+                                className="text-green-600 hover:bg-green-50"
+                              >
+                                {updatingStatus === registration._id ? "..." : "Approve"}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleStatusUpdate(registration._id, "rejected")}
+                                disabled={updatingStatus === registration._id}
                                 className="text-red-600 hover:bg-red-50"
                               >
-                                Delete
+                                {updatingStatus === registration._id ? "..." : "Reject"}
                               </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
+                            </>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteRegistration(registration._id)}
+                            className="text-red-600 hover:bg-red-50"
+                          >
+                            Delete
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
