@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api } from "../../convex/_generated/api";
-// Simple date formatter
+
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString("en-US", {
     year: "numeric",
@@ -30,49 +30,23 @@ export default function AdminDashboard() {
   const [fixingPayments, setFixingPayments] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
 
-  // Queries
   const allRegistrations = useQuery(api.registrations.getAll) || [];
   const slotLimits = useQuery(api.settings.getSlotLimits);
 
-  // Mutations
   const deleteRegistration = useMutation(api.registrations.deleteRegistration);
   const updateSlotLimits = useMutation(api.settings.updateSlotLimits);
   const updateStatus = useMutation(api.registrations.updateStatus);
   const updateAdminNotes = useMutation(api.registrations.updateAdminNotes);
   const [editingNotes, setEditingNotes] = useState<{ id: string; notes: string } | null>(null);
-  // Logout is handled client-side by clearing the cookie
 
-  // Initialize slot inputs on load
   if (slotLimits && !maleSlots && !femaleSlots) {
     setMaleSlots(slotLimits.maleSlots || 40);
     setFemaleSlots(slotLimits.femaleSlots || 40);
   }
 
-  // Filter registrations
-  const filteredRegistrations = allRegistrations.filter((reg) => {
-    // Status filter
-    if (filterStatus === "waitlisted") {
-      if (!isOnWaitlist(reg._id)) return false;
-    } else if (filterStatus !== "all" && reg.status !== filterStatus) {
-      return false;
-    }
-    // Search filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      return (
-        reg.name.toLowerCase().includes(q) ||
-        reg.email.toLowerCase().includes(q) ||
-        (reg.phone && reg.phone.includes(q))
-      );
-    }
-    return true;
-  });
-
-  // Compute which registrations are on the waitlist (by creation order, per gender)
   const maleLimit = slotLimits?.maleSlots || 40;
   const femaleLimit = slotLimits?.femaleSlots || 40;
 
-  // Sort non-rejected by creation time, assign waitlist status by position
   const nonRejectedMales = allRegistrations
     .filter((r) => r.gender === "male" && r.status !== "rejected")
     .sort((a, b) => a._creationTime - b._creationTime);
@@ -86,7 +60,31 @@ export default function AdminDashboard() {
 
   const isOnWaitlist = (id: string) => waitlistIds.has(id);
 
-  // Statistics
+  const sortedRegistrations = [...allRegistrations].sort(
+    (a, b) => a._creationTime - b._creationTime
+  );
+  const registrationNumbers = new Map(
+    sortedRegistrations.map((registration, index) => [registration._id, index + 1])
+  );
+
+  const filteredRegistrations = allRegistrations.filter((reg) => {
+    if (filterStatus === "waitlisted") {
+      if (!isOnWaitlist(reg._id)) return false;
+    } else if (filterStatus !== "all" && reg.status !== filterStatus) {
+      return false;
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return (
+        reg.name.toLowerCase().includes(q) ||
+        reg.email.toLowerCase().includes(q) ||
+        (reg.phone && reg.phone.includes(q))
+      );
+    }
+    return true;
+  });
+
   const totalCount = allRegistrations.length;
   const approvedCount = allRegistrations.filter((r) => r.status === "approved").length;
   const pendingCount = allRegistrations.filter((r) => r.status === "pending").length;
@@ -138,11 +136,12 @@ export default function AdminDashboard() {
 
   const handleExportCSV = () => {
     const headers = [
-      "Name", "Age", "Gender", "Status", "Marital Status", "Education",
+      "Number", "Name", "Age", "Gender", "Status", "Marital Status", "Education",
       "Job", "Email", "Phone", "Describe Yourself", "Looking For",
       "Payment Status", "Date"
     ];
     const rows = filteredRegistrations.map((r) => [
+      registrationNumbers.get(r._id) || "",
       r.name,
       r.age,
       r.gender,
@@ -206,7 +205,6 @@ export default function AdminDashboard() {
   };
 
   const handleLogout = async () => {
-    // Clear the cookie by making a request, or redirect
     document.cookie = "admin_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
     window.location.href = "/admin";
   };
@@ -214,7 +212,6 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-4xl font-bold text-gray-900">Admin Dashboard</h1>
@@ -231,7 +228,6 @@ export default function AdminDashboard() {
 
         <Separator />
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
           <Card>
             <CardHeader className="pb-2">
@@ -297,7 +293,6 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        {/* Slot Limits Settings */}
         <Card>
           <CardHeader>
             <CardTitle>Slot Limits</CardTitle>
@@ -340,7 +335,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Fix Payments */}
         <Card>
           <CardHeader>
             <CardTitle>Payment Reconciliation</CardTitle>
@@ -362,7 +356,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Registrations */}
         <Card>
           <CardHeader>
             <CardTitle>Registrations</CardTitle>
@@ -408,6 +401,7 @@ export default function AdminDashboard() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">#</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Age</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Gender</th>
@@ -428,6 +422,9 @@ export default function AdminDashboard() {
                       <tbody>
                         {filteredRegistrations.map((registration) => (
                           <tr key={registration._id} className="border-b hover:bg-gray-50">
+                            <td className="py-3 px-4 font-medium text-gray-700">
+                              {registrationNumbers.get(registration._id)}
+                            </td>
                             <td className="py-3 px-4">{registration.name}</td>
                             <td className="py-3 px-4">{registration.age}</td>
                             <td className="py-3 px-4">
