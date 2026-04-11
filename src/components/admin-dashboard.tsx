@@ -28,6 +28,7 @@ export default function AdminDashboard() {
   const [savingSlots, setSavingSlots] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterGender, setFilterGender] = useState<"all" | "male" | "female">("all");
   const [fixingPayments, setFixingPayments] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
   const [editingNotes, setEditingNotes] = useState<{ id: string; notes: string } | null>(null);
@@ -80,6 +81,8 @@ export default function AdminDashboard() {
         return false;
       }
 
+      if (filterGender !== "all" && reg.gender !== filterGender) return false;
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
@@ -91,7 +94,7 @@ export default function AdminDashboard() {
 
       return true;
     });
-  }, [allRegistrations, filterStatus, searchQuery, waitlistIds]);
+  }, [allRegistrations, filterStatus, filterGender, searchQuery, waitlistIds]);
 
   const totalCount = allRegistrations.length;
   const approvedCount = allRegistrations.filter((r) => r.status === "approved").length;
@@ -367,21 +370,49 @@ export default function AdminDashboard() {
             <CardDescription>View and manage all registrations</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-4">
-              <Input
-                type="text"
-                placeholder="Search by name, email, or phone..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="max-w-sm"
-              />
-              <Button variant="outline" onClick={handleExportCSV}>
-                Export CSV
-              </Button>
+            <div className="bg-slate-100 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-4 flex-wrap">
+                <Input
+                  type="text"
+                  placeholder="Search by name, email, or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="max-w-sm bg-white"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-600">Gender:</span>
+                  <Button
+                    variant={filterGender === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterGender("all")}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={filterGender === "male" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterGender("male")}
+                    className={filterGender === "male" ? "bg-blue-600 hover:bg-blue-700" : ""}
+                  >
+                    Male
+                  </Button>
+                  <Button
+                    variant={filterGender === "female" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterGender("female")}
+                    className={filterGender === "female" ? "bg-pink-600 hover:bg-pink-700" : ""}
+                  >
+                    Female
+                  </Button>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleExportCSV}>
+                  Export CSV
+                </Button>
+              </div>
             </div>
 
             <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as FilterStatus)}>
-              <TabsList>
+              <TabsList className="bg-slate-200">
                 <TabsTrigger value="all">
                   All <span className="ml-2 text-xs">{allRegistrations.length}</span>
                 </TabsTrigger>
