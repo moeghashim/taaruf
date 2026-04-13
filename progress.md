@@ -50,3 +50,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/registrations.ts
   - src/app/api/profile/[token]/route.ts
   - progress.md
+## 2026-04-13T20:31:37.000Z
+- Trigger: commit
+- Learning: Expanding the registration form first with required structured profile fields and Convex-backed image uploads creates a clean foundation before retrofitting admin outreach and backfill flows.
+- Context: feat(register): add extended profile fields and image uploads
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/registration-form.tsx
+  - src/app/api/create-checkout-session/route.ts
+  - progress.md

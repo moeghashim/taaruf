@@ -15,12 +15,23 @@ export async function POST(request: NextRequest) {
       job,
       email,
       phone,
-      describeYourself,
-      lookingFor,
+      ethnicity,
+      prayerCommitment,
+      hijabResponse,
+      spouseRequirement1,
+      spouseRequirement2,
+      spouseRequirement3,
+      shareableBio,
+      photoSharingPermission,
+      imageStorageIds,
     } = body;
 
     // Validate required fields
-    if (!name || !age || !gender || !maritalStatus || !education || !job || !email || !phone) {
+    if (
+      !name || !age || !gender || !maritalStatus || !education || !job || !email || !phone ||
+      !ethnicity || !prayerCommitment || !hijabResponse || !spouseRequirement1 || !spouseRequirement2 ||
+      !spouseRequirement3 || !shareableBio || !photoSharingPermission || !Array.isArray(imageStorageIds) || imageStorageIds.length < 1
+    ) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -81,8 +92,17 @@ export async function POST(request: NextRequest) {
       job,
       email,
       phone,
-      describeYourself: describeYourself || undefined,
-      lookingFor: lookingFor || undefined,
+      ethnicity,
+      imageStorageIds,
+      prayerCommitment,
+      hijabResponse,
+      spouseRequirement1,
+      spouseRequirement2,
+      spouseRequirement3,
+      shareableBio,
+      photoSharingPermission,
+      describeYourself: shareableBio,
+      lookingFor: [spouseRequirement1, spouseRequirement2, spouseRequirement3].join(", "),
       stripeSessionId: session.id,
       paymentStatus: "pending",
       status: isFull ? "waitlisted" : "pending",
