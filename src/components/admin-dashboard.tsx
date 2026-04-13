@@ -34,7 +34,15 @@ export default function AdminDashboard() {
   const [fixResult, setFixResult] = useState<string | null>(null);
 
   const allRegistrationsQuery = useQuery(api.registrations.getAll);
-  const allRegistrations = useMemo(() => allRegistrationsQuery || [], [allRegistrationsQuery]);
+  const allRegistrations = useMemo(
+    () => [...(allRegistrationsQuery || [])].sort((a, b) => a._creationTime - b._creationTime),
+    [allRegistrationsQuery]
+  );
+  const registrationNumberMap = useMemo(
+    () =>
+      new Map(allRegistrations.map((registration, index) => [registration._id, index + 1] as const)),
+    [allRegistrations]
+  );
   const slotLimits = useQuery(api.settings.getSlotLimits);
 
   const deleteRegistration = useMutation(api.registrations.deleteRegistration);
@@ -293,6 +301,7 @@ export default function AdminDashboard() {
                       <thead>
                         <tr className="border-b">
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Select</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">#</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Approval</th>
                           <th className="text-left py-3 px-4 font-semibold text-gray-700">Profile</th>
@@ -310,6 +319,9 @@ export default function AdminDashboard() {
                                 onChange={() => toggleSelection(registration._id)}
                                 className="h-4 w-4"
                               />
+                            </td>
+                            <td className="py-3 px-4 text-sm font-semibold text-slate-600">
+                              {registrationNumberMap.get(registration._id) || "-"}
                             </td>
                             <td className="py-3 px-4">
                               <div className="flex items-start gap-3">

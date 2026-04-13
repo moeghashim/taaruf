@@ -92,3 +92,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/profile/[token]/page.tsx
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-13T23:59:59.000Z
+- Trigger: commit
+- Learning: Applicant numbering in admin needs a stable sort order, so the list now uses  ascending and derives a persistent 1-based number from that order.
+- Context: feat(admin): add applicant numbers to main view
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
