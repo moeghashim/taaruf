@@ -81,3 +81,14 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/lib/email.ts
   - progress.md
+## 2026-04-13T23:48:55.000Z
+- Trigger: commit
+- Learning: Admin list rows and detail dialogs need signed Convex image URLs from the query layer, otherwise uploaded profile photos exist in storage but never render in the dashboard.
+- Context: feat(admin): show applicant image thumbnails and detail photos
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/registrations.ts
+  - src/app/profile/[token]/page.tsx
+  - src/components/admin-dashboard.tsx
+  - progress.md

@@ -312,9 +312,26 @@ export default function AdminDashboard() {
                               />
                             </td>
                             <td className="py-3 px-4">
-                              <div className="font-medium">{registration.name}</div>
-                              <div className="text-xs text-slate-500">{registration.email}</div>
-                              <div className="text-xs text-slate-500">{registration.phone}</div>
+                              <div className="flex items-start gap-3">
+                                <div className="h-12 w-12 overflow-hidden rounded-md bg-slate-100 border border-slate-200 shrink-0">
+                                  {registration.imageUrls?.[0] ? (
+                                    <img
+                                      src={registration.imageUrls[0]}
+                                      alt={`${registration.name} profile thumbnail`}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
+                                      No photo
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-medium">{registration.name}</div>
+                                  <div className="text-xs text-slate-500">{registration.email}</div>
+                                  <div className="text-xs text-slate-500">{registration.phone}</div>
+                                </div>
+                              </div>
                             </td>
                             <td className="py-3 px-4">
                               <div className="flex gap-1 flex-wrap">
@@ -351,7 +368,31 @@ export default function AdminDashboard() {
                                     <div><strong>Photo permission:</strong> {titleizeValue(registration.photoSharingPermission)}</div>
                                     <div><strong>Search status:</strong> {titleizeValue((registration.searchStatus || "active") as SearchStatus)}</div>
                                   </div>
-                                  <div className="space-y-2 text-sm">
+                                  <div className="space-y-3 text-sm">
+                                    <div>
+                                      <strong>Photos:</strong>
+                                      {registration.imageUrls?.length ? (
+                                        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                          {registration.imageUrls.map((imageUrl: string, index: number) => (
+                                            <a
+                                              key={`${registration._id}-image-${index}`}
+                                              href={imageUrl}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="block overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                                            >
+                                              <img
+                                                src={imageUrl}
+                                                alt={`${registration.name} profile image ${index + 1}`}
+                                                className="h-32 w-full object-cover"
+                                              />
+                                            </a>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="mt-1 text-slate-500">No profile photos uploaded.</p>
+                                      )}
+                                    </div>
                                     <div><strong>Requirement 1:</strong> {registration.spouseRequirement1 || "-"}</div>
                                     <div><strong>Requirement 2:</strong> {registration.spouseRequirement2 || "-"}</div>
                                     <div><strong>Requirement 3:</strong> {registration.spouseRequirement3 || "-"}</div>

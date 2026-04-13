@@ -80,7 +80,21 @@ export const create = mutation({
 export const getAll = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("registrations").collect();
+    const registrations = await ctx.db.query("registrations").collect();
+
+    return await Promise.all(
+      registrations.map(async (registration) => {
+        const imageStorageIds = registration.imageStorageIds || [];
+        const imageUrls = await Promise.all(
+          imageStorageIds.map((storageId) => ctx.storage.getUrl(storageId))
+        );
+
+        return {
+          ...registration,
+          imageUrls: imageUrls.filter((url): url is string => Boolean(url)),
+        };
+      })
+    );
   },
 });
 
