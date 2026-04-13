@@ -39,3 +39,14 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/registration-form.tsx
   - progress.md
+## 2026-04-13T20:27:50.000Z
+- Trigger: commit
+- Learning: Reusing the repo’s existing profile-link foundation is faster, but the backend needed to be hardened around persistent update tracking and Convex storage IDs before the UI work could safely expand.
+- Context: feat(profile): add backend groundwork for extended profile updates
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/schema.ts
+  - convex/registrations.ts
+  - src/app/api/profile/[token]/route.ts
+  - progress.md
