@@ -60,3 +60,15 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/components/registration-form.tsx
   - src/app/api/create-checkout-session/route.ts
   - progress.md
+## 2026-04-13T20:34:38.000Z
+- Trigger: commit
+- Learning: Converting the existing profile-link draft into a real update workflow required simplifying the admin surface, batching profile-update emails, and keeping profile completion on secure persistent links instead of ad hoc one-off actions.
+- Context: feat(profile): add admin update-profile emails and completion flow
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/profile-completion-form.tsx
+  - src/app/api/admin/send-profile-link/route.ts
+  - src/lib/email.ts
+  - src/components/admin-dashboard.tsx
+  - progress.md
