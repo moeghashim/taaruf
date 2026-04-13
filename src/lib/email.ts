@@ -21,7 +21,7 @@ export async function sendConfirmationEmail({
   try {
     const resend = getResend();
 
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: defaultFrom,
       to: email,
       subject: "Registration Confirmed - 1Plus1 Pre-Marriage Workshop",
@@ -63,6 +63,10 @@ export async function sendConfirmationEmail({
       `,
     });
 
+    if (result.error) {
+      return { success: false, error: result.error.message };
+    }
+
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -83,7 +87,7 @@ export async function sendProfileCompletionEmail({
   try {
     const resend = getResend();
 
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: defaultFrom,
       to: email,
       subject: "Please Complete Your 1 Plus 1 Profile",
@@ -133,6 +137,10 @@ export async function sendProfileCompletionEmail({
         </div>
       `,
     });
+
+    if (result.error) {
+      return { success: false, error: result.error.message };
+    }
 
     return { success: true };
   } catch (error) {

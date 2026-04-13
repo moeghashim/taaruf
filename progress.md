@@ -72,3 +72,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/lib/email.ts
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-13T21:07:39.000Z
+- Trigger: commit
+- Learning: Resend can return delivery failures as structured error payloads without throwing, so email helpers must inspect  before marking messages as sent.
+- Context: fix(email): handle resend api errors explicitly
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/lib/email.ts
+  - progress.md
