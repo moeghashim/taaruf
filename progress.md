@@ -138,3 +138,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-14T19:35:02.000Z
+- Trigger: commit
+- Learning: Reconciliation works better as an explicit "progress first" backend action that activates one interest while automatically queueing competing inbound and outbound open interests around the same applicants.
+- Context: feat(interests): add reconciliation workflow
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/interests.ts
+  - src/components/admin-dashboard.tsx
+  - progress.md

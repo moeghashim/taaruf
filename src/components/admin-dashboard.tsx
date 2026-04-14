@@ -69,6 +69,7 @@ export default function AdminDashboard() {
   const updateAdminNotes = useMutation(api.registrations.updateAdminNotes);
   const createInterest = useMutation(api.interests.create);
   const updateInterestStatus = useMutation(api.interests.updateStatus);
+  const progressInterestFirst = useMutation(api.interests.progressFirst);
   const convertInterestToMatch = useMutation(api.interests.convertToMatch);
 
   if (slotLimits && !maleSlots && !femaleSlots) {
@@ -318,6 +319,20 @@ export default function AdminDashboard() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await convertInterestToMatch({ interestId: interestId as any });
       setInterestResult("Interest converted to match.");
+    } catch (error) {
+      setInterestResult(error instanceof Error ? error.message : String(error));
+    } finally {
+      setConvertingInterestId(null);
+    }
+  }
+
+  async function handleProgressInterestFirst(interestId: string) {
+    setConvertingInterestId(interestId);
+    setInterestResult(null);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await progressInterestFirst({ interestId: interestId as any });
+      setInterestResult("Selected interest is now active. Competing interests were queued.");
     } catch (error) {
       setInterestResult(error instanceof Error ? error.message : String(error));
     } finally {
@@ -597,6 +612,17 @@ export default function AdminDashboard() {
                                                 <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
                                                 <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
                                               </div>
+                                              {interest.status !== "converted_to_match" && (
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="mt-3"
+                                                  onClick={() => handleProgressInterestFirst(interest._id)}
+                                                  disabled={convertingInterestId === interest._id}
+                                                >
+                                                  {convertingInterestId === interest._id ? "Updating..." : "Progress This First"}
+                                                </Button>
+                                              )}
                                             </div>
                                           ))}
                                         </div>
@@ -828,7 +854,7 @@ export default function AdminDashboard() {
                                   <td className="py-3 px-4 space-y-2">
                                     <div className="flex flex-wrap gap-2">
                                       {interest.status !== "active" && interest.status !== "converted_to_match" && (
-                                        <Button variant="outline" size="sm" onClick={() => handleSetInterestStatus(interest._id, "active")}>Mark Active</Button>
+                                        <Button variant="outline" size="sm" onClick={() => handleProgressInterestFirst(interest._id)} disabled={convertingInterestId === interest._id}>Progress First</Button>
                                       )}
                                       {interest.status !== "queued" && interest.status !== "converted_to_match" && (
                                         <Button variant="outline" size="sm" onClick={() => handleSetInterestStatus(interest._id, "queued")}>Queue</Button>

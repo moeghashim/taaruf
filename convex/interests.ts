@@ -138,6 +138,53 @@ export const updateStatus = mutation({
   },
 });
 
+export const progressFirst = mutation({
+  args: {
+    interestId: v.id("interests"),
+  },
+  handler: async (ctx, args) => {
+    const interest = await ctx.db.get(args.interestId);
+    if (!interest) {
+      throw new Error("Interest not found");
+    }
+
+    const now = Date.now();
+    const inboundCompetitors = await ctx.db
+      .query("interests")
+      .withIndex("by_toRegistrationId", (q) => q.eq("toRegistrationId", interest.toRegistrationId))
+      .collect();
+    const outboundAlternatives = await ctx.db
+      .query("interests")
+      .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", interest.fromRegistrationId))
+      .collect();
+
+    for (const competitor of inboundCompetitors) {
+      if (competitor._id === interest._id) continue;
+      if (!openInterestStatuses.has(competitor.status)) continue;
+      await ctx.db.patch(competitor._id, {
+        status: "queued",
+        updatedAt: now,
+      });
+    }
+
+    for (const alternative of outboundAlternatives) {
+      if (alternative._id === interest._id) continue;
+      if (!openInterestStatuses.has(alternative.status)) continue;
+      await ctx.db.patch(alternative._id, {
+        status: "queued",
+        updatedAt: now,
+      });
+    }
+
+    await ctx.db.patch(args.interestId, {
+      status: "active",
+      updatedAt: now,
+    });
+
+    return args.interestId;
+  },
+});
+
 export const convertToMatch = mutation({
   args: {
     interestId: v.id("interests"),
