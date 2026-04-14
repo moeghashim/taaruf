@@ -335,6 +335,18 @@ export default function AdminDashboard() {
     }
   }
 
+  function getOutboundInterests(registrationId: string) {
+    return interests
+      .filter((interest) => interest.fromRegistrationId === registrationId)
+      .sort((a, b) => (a.rank || Number.MAX_SAFE_INTEGER) - (b.rank || Number.MAX_SAFE_INTEGER));
+  }
+
+  function getInboundInterests(registrationId: string) {
+    return interests
+      .filter((interest) => interest.toRegistrationId === registrationId)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
   function handleLogout() {
     document.cookie = "admin_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
     window.location.href = "/admin";
@@ -541,6 +553,67 @@ export default function AdminDashboard() {
                                     <div><strong>Requirement 3:</strong> {registration.spouseRequirement3 || "-"}</div>
                                     <div><strong>Basic bio:</strong><p className="whitespace-pre-wrap">{registration.shareableBio || "-"}</p></div>
                                   </div>
+                                  <div className="grid gap-4 lg:grid-cols-2 text-sm">
+                                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <h3 className="font-semibold text-slate-900">Outbound interests</h3>
+                                        <Badge variant="outline">{getOutboundInterests(registration._id).length}</Badge>
+                                      </div>
+                                      {getOutboundInterests(registration._id).length ? (
+                                        <div className="space-y-2">
+                                          {getOutboundInterests(registration._id).map((interest) => (
+                                            <div key={interest._id} className="rounded-md border border-slate-200 bg-white p-3">
+                                              <div className="font-medium text-slate-900">
+                                                #{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}
+                                              </div>
+                                              <div className="text-xs text-slate-500">{interest.toRegistration?.email || "-"}</div>
+                                              <div className="mt-2 flex flex-wrap gap-2">
+                                                <Badge variant="outline">Rank: {interest.rank || "-"}</Badge>
+                                                <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
+                                                <Badge variant="outline">{titleizeValue(interest.source)}</Badge>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-slate-500">No outbound interests recorded yet.</p>
+                                      )}
+                                    </div>
+
+                                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <h3 className="font-semibold text-slate-900">Inbound interests</h3>
+                                        <Badge variant="outline">{getInboundInterests(registration._id).length}</Badge>
+                                      </div>
+                                      {getInboundInterests(registration._id).length ? (
+                                        <div className="space-y-2">
+                                          {getInboundInterests(registration._id).map((interest) => (
+                                            <div key={interest._id} className="rounded-md border border-slate-200 bg-white p-3">
+                                              <div className="font-medium text-slate-900">
+                                                #{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"}
+                                              </div>
+                                              <div className="text-xs text-slate-500">{interest.fromRegistration?.email || "-"}</div>
+                                              <div className="mt-2 flex flex-wrap gap-2">
+                                                <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
+                                                <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-slate-500">No inbound interests recorded yet.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {getInboundInterests(registration._id).length > 1 && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                      <div className="font-semibold">Reconciliation needed</div>
+                                      <p className="mt-1">
+                                        This applicant currently has {getInboundInterests(registration._id).length} inbound interests.
+                                        Review the candidates above and choose which one should move forward first.
+                                      </p>
+                                    </div>
+                                  )}
                                 </DialogContent>
                               </Dialog>
                             </td>

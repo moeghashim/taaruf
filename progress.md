@@ -129,3 +129,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-14T19:29:43.000Z
+- Trigger: commit
+- Learning: Reconciliation becomes much clearer when admins can see inbound and outbound interests directly inside the applicant detail view, with a visible alert when multiple inbound interests compete for the same person.
+- Context: feat(interests): add applicant interest panels
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
