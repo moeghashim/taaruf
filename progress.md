@@ -120,3 +120,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/interests.ts
   - convex/schema.ts
   - progress.md
+## 2026-04-14T19:26:22.000Z
+- Trigger: commit
+- Learning: The first admin UI phase for interest tracking needs two simple workflows to unlock momentum quickly: a manual create-interest form and a queue view with status changes and convert-to-match actions.
+- Context: feat(interests): add admin interest queue ui
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md

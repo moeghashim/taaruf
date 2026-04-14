@@ -13,6 +13,7 @@ import { api } from "../../convex/_generated/api";
 
 type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
 type SearchStatus = "active" | "paused" | "inactive";
+type InterestFilterStatus = "all" | "new" | "queued" | "active" | "converted_to_match" | "deferred" | "withdrawn" | "declined" | "closed";
 
 function titleizeValue(value?: string) {
   if (!value) return "-";
@@ -32,6 +33,18 @@ export default function AdminDashboard() {
   const [updateProfileResult, setUpdateProfileResult] = useState<string | null>(null);
   const [fixingPayments, setFixingPayments] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
+  const [interestFilterStatus, setInterestFilterStatus] = useState<InterestFilterStatus>("all");
+  const [interestSearchQuery, setInterestSearchQuery] = useState("");
+  const [creatingInterest, setCreatingInterest] = useState(false);
+  const [interestResult, setInterestResult] = useState<string | null>(null);
+  const [convertingInterestId, setConvertingInterestId] = useState<string | null>(null);
+  const [newInterest, setNewInterest] = useState({
+    fromRegistrationId: "",
+    toRegistrationId: "",
+    source: "admin_entered",
+    rank: "",
+    notes: "",
+  });
 
   const allRegistrationsQuery = useQuery(api.registrations.getAll);
   const allRegistrations = useMemo(
@@ -44,11 +57,19 @@ export default function AdminDashboard() {
     [allRegistrations]
   );
   const slotLimits = useQuery(api.settings.getSlotLimits);
+  const interestsQuery = useQuery(api.interests.getAll);
+  const interests = useMemo(
+    () => [...(interestsQuery || [])].sort((a, b) => b.updatedAt - a.updatedAt),
+    [interestsQuery]
+  );
 
   const deleteRegistration = useMutation(api.registrations.deleteRegistration);
   const updateSlotLimits = useMutation(api.settings.updateSlotLimits);
   const updateStatus = useMutation(api.registrations.updateStatus);
   const updateAdminNotes = useMutation(api.registrations.updateAdminNotes);
+  const createInterest = useMutation(api.interests.create);
+  const updateInterestStatus = useMutation(api.interests.updateStatus);
+  const convertInterestToMatch = useMutation(api.interests.convertToMatch);
 
   if (slotLimits && !maleSlots && !femaleSlots) {
     setMaleSlots(slotLimits.maleSlots || 40);
@@ -100,6 +121,41 @@ export default function AdminDashboard() {
   const waitlistedCount = waitlistIds.size;
   const maleCount = allRegistrations.filter((r) => r.gender === "male").length;
   const femaleCount = allRegistrations.filter((r) => r.gender === "female").length;
+  const availableInterestApplicants = useMemo(
+    () => allRegistrations.filter((registration) => registration.status !== "rejected"),
+    [allRegistrations]
+  );
+  const selectedFromRegistration = useMemo(
+    () => allRegistrations.find((registration) => registration._id === newInterest.fromRegistrationId),
+    [allRegistrations, newInterest.fromRegistrationId]
+  );
+  const interestRecipientOptions = useMemo(() => {
+    if (!selectedFromRegistration) return availableInterestApplicants;
+    return availableInterestApplicants.filter(
+      (registration) =>
+        registration._id !== selectedFromRegistration._id &&
+        registration.gender !== selectedFromRegistration.gender
+    );
+  }, [availableInterestApplicants, selectedFromRegistration]);
+  const filteredInterests = useMemo(() => {
+    return interests.filter((interest) => {
+      if (interestFilterStatus !== "all" && interest.status !== interestFilterStatus) {
+        return false;
+      }
+
+      if (interestSearchQuery.trim()) {
+        const q = interestSearchQuery.toLowerCase();
+        return (
+          interest.fromRegistration?.name?.toLowerCase().includes(q) ||
+          interest.toRegistration?.name?.toLowerCase().includes(q) ||
+          interest.fromRegistration?.email?.toLowerCase().includes(q) ||
+          interest.toRegistration?.email?.toLowerCase().includes(q)
+        );
+      }
+
+      return true;
+    });
+  }, [interestFilterStatus, interestSearchQuery, interests]);
 
   function toggleSelection(registrationId: string) {
     setSelectedIds((current) =>
@@ -222,6 +278,63 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleCreateInterest() {
+    if (!newInterest.fromRegistrationId || !newInterest.toRegistrationId) {
+      setInterestResult("Please choose both applicants.");
+      return;
+    }
+
+    setCreatingInterest(true);
+    setInterestResult(null);
+    try {
+      await createInterest({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fromRegistrationId: newInterest.fromRegistrationId as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        toRegistrationId: newInterest.toRegistrationId as any,
+        source: newInterest.source as "admin_entered" | "email" | "whatsapp" | "platform_submission",
+        rank: newInterest.rank ? Number(newInterest.rank) : undefined,
+        notes: newInterest.notes.trim() || undefined,
+      });
+      setInterestResult("Interest saved.");
+      setNewInterest({
+        fromRegistrationId: "",
+        toRegistrationId: "",
+        source: "admin_entered",
+        rank: "",
+        notes: "",
+      });
+    } catch (error) {
+      setInterestResult(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreatingInterest(false);
+    }
+  }
+
+  async function handleConvertInterest(interestId: string) {
+    setConvertingInterestId(interestId);
+    setInterestResult(null);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await convertInterestToMatch({ interestId: interestId as any });
+      setInterestResult("Interest converted to match.");
+    } catch (error) {
+      setInterestResult(error instanceof Error ? error.message : String(error));
+    } finally {
+      setConvertingInterestId(null);
+    }
+  }
+
+  async function handleSetInterestStatus(interestId: string, status: InterestFilterStatus) {
+    if (status === "all") return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await updateInterestStatus({ id: interestId as any, status });
+    } catch (error) {
+      setInterestResult(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function handleLogout() {
     document.cookie = "admin_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
     window.location.href = "/admin";
@@ -259,6 +372,12 @@ export default function AdminDashboard() {
               className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900"
             >
               Registrations
+            </TabsTrigger>
+            <TabsTrigger
+              value="interests"
+              className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900"
+            >
+              Interests
             </TabsTrigger>
             <TabsTrigger
               value="settings"
@@ -456,6 +575,208 @@ export default function AdminDashboard() {
                     </table>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="interests" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Interest Tracking</CardTitle>
+                <CardDescription className="text-slate-700">
+                  Record interest signals, review queues, and convert selected interests into matches.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-6 lg:grid-cols-[380px,1fr]">
+                  <Card className="border-slate-200">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Create Interest</CardTitle>
+                      <CardDescription className="text-slate-700">
+                        Add a ranked interest signal from email, WhatsApp, admin notes, or future platform submission.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">From applicant</label>
+                        <select
+                          value={newInterest.fromRegistrationId}
+                          onChange={(e) =>
+                            setNewInterest((current) => ({
+                              ...current,
+                              fromRegistrationId: e.target.value,
+                              toRegistrationId:
+                                current.toRegistrationId &&
+                                allRegistrations.find((registration) => registration._id === current.toRegistrationId)?.gender ===
+                                  allRegistrations.find((registration) => registration._id === e.target.value)?.gender
+                                  ? ""
+                                  : current.toRegistrationId,
+                            }))
+                          }
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">Select applicant</option>
+                          {availableInterestApplicants.map((registration) => (
+                            <option key={registration._id} value={registration._id}>
+                              #{registrationNumberMap.get(registration._id)} {registration.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Interested in</label>
+                        <select
+                          value={newInterest.toRegistrationId}
+                          onChange={(e) => setNewInterest((current) => ({ ...current, toRegistrationId: e.target.value }))}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">Select applicant</option>
+                          {interestRecipientOptions.map((registration) => (
+                            <option key={registration._id} value={registration._id}>
+                              #{registrationNumberMap.get(registration._id)} {registration.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Source</label>
+                          <select
+                            value={newInterest.source}
+                            onChange={(e) => setNewInterest((current) => ({ ...current, source: e.target.value }))}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="admin_entered">Admin entered</option>
+                            <option value="email">Email</option>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="platform_submission">Platform submission</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Rank</label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={newInterest.rank}
+                            onChange={(e) => setNewInterest((current) => ({ ...current, rank: e.target.value }))}
+                            placeholder="Optional"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Notes</label>
+                        <textarea
+                          value={newInterest.notes}
+                          onChange={(e) => setNewInterest((current) => ({ ...current, notes: e.target.value }))}
+                          className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          placeholder="Context, ranking note, or admin reasoning"
+                        />
+                      </div>
+
+                      <Button onClick={handleCreateInterest} disabled={creatingInterest} className="w-full">
+                        {creatingInterest ? "Saving..." : "Create Interest"}
+                      </Button>
+                      {interestResult && <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-md">{interestResult}</p>}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-slate-200">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Interest Queue</CardTitle>
+                      <CardDescription className="text-slate-700">
+                        Review inbound and outbound interest, then convert the chosen one into an active match.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <Input
+                          type="text"
+                          placeholder="Search by applicant name or email..."
+                          value={interestSearchQuery}
+                          onChange={(e) => setInterestSearchQuery(e.target.value)}
+                          className="max-w-sm bg-white"
+                        />
+                        <select
+                          value={interestFilterStatus}
+                          onChange={(e) => setInterestFilterStatus(e.target.value as InterestFilterStatus)}
+                          className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="all">All statuses</option>
+                          <option value="new">New</option>
+                          <option value="queued">Queued</option>
+                          <option value="active">Active</option>
+                          <option value="converted_to_match">Converted to match</option>
+                          <option value="deferred">Deferred</option>
+                          <option value="withdrawn">Withdrawn</option>
+                          <option value="declined">Declined</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </div>
+
+                      {filteredInterests.length === 0 ? (
+                        <p className="text-gray-500 py-8 text-center">No interests found</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left py-3 px-4 font-semibold text-gray-700">From</th>
+                                <th className="text-left py-3 px-4 font-semibold text-gray-700">To</th>
+                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Rank</th>
+                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Source</th>
+                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Visibility</th>
+                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredInterests.map((interest) => (
+                                <tr key={interest._id} className="border-b align-top hover:bg-gray-50">
+                                  <td className="py-3 px-4">
+                                    <div className="font-medium">#{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"}</div>
+                                    <div className="text-xs text-slate-500">{interest.fromRegistration?.email || "-"}</div>
+                                  </td>
+                                  <td className="py-3 px-4">
+                                    <div className="font-medium">#{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}</div>
+                                    <div className="text-xs text-slate-500">{interest.toRegistration?.email || "-"}</div>
+                                  </td>
+                                  <td className="py-3 px-4">{interest.rank || "-"}</td>
+                                  <td className="py-3 px-4">{titleizeValue(interest.source)}</td>
+                                  <td className="py-3 px-4">
+                                    <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
+                                  </td>
+                                  <td className="py-3 px-4 space-y-2">
+                                    <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
+                                    {interest.matchId && <div className="text-xs text-emerald-700">Linked to match</div>}
+                                  </td>
+                                  <td className="py-3 px-4 space-y-2">
+                                    <div className="flex flex-wrap gap-2">
+                                      {interest.status !== "active" && interest.status !== "converted_to_match" && (
+                                        <Button variant="outline" size="sm" onClick={() => handleSetInterestStatus(interest._id, "active")}>Mark Active</Button>
+                                      )}
+                                      {interest.status !== "queued" && interest.status !== "converted_to_match" && (
+                                        <Button variant="outline" size="sm" onClick={() => handleSetInterestStatus(interest._id, "queued")}>Queue</Button>
+                                      )}
+                                      {!interest.matchId && (
+                                        <Button size="sm" onClick={() => handleConvertInterest(interest._id)} disabled={convertingInterestId === interest._id}>
+                                          {convertingInterestId === interest._id ? "Converting..." : "Convert to Match"}
+                                        </Button>
+                                      )}
+                                    </div>
+                                    {interest.notes && <p className="text-xs text-slate-600 max-w-xs whitespace-pre-wrap">{interest.notes}</p>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
