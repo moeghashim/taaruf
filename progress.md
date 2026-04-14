@@ -170,3 +170,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-14T22:22:14.000Z
+- Trigger: commit
+- Learning: Full-height slideout dialogs need an always-visible absolute close button on mobile; the previous sticky close control could become unreachable or unclickable in the profile detail view.
+- Context: fix(dialog): keep slideout close button usable on mobile
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/ui/dialog.tsx
+  - progress.md
