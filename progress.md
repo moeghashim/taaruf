@@ -101,3 +101,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-14T00:04:40.000Z
+- Trigger: commit
+- Learning: Shadcn tab triggers and card descriptions on the admin page needed explicit text color classes, otherwise inactive labels became too low-contrast to read against the background.
+- Context: fix(admin): improve inactive label contrast
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md

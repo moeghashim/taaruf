@@ -253,16 +253,28 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="registrations" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="registrations">Registrations</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsList className="bg-slate-200 text-slate-700">
+            <TabsTrigger
+              value="registrations"
+              className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900"
+            >
+              Registrations
+            </TabsTrigger>
+            <TabsTrigger
+              value="settings"
+              className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900"
+            >
+              Settings
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="registrations" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Registrations</CardTitle>
-                <CardDescription>Approve participants, track profile completion, and request profile updates.</CardDescription>
+                <CardDescription className="text-slate-700">
+                  Approve participants, track profile completion, and request profile updates.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="bg-slate-100 rounded-lg p-4 space-y-3">
@@ -282,12 +294,12 @@ export default function AdminDashboard() {
                     </Button>
                   </div>
                   <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as FilterStatus)}>
-                    <TabsList className="bg-slate-200">
-                      <TabsTrigger value="all">All <span className="ml-2 text-xs">{allRegistrations.length}</span></TabsTrigger>
-                      <TabsTrigger value="approved">Approved <span className="ml-2 text-xs">{approvedCount}</span></TabsTrigger>
-                      <TabsTrigger value="pending">Pending <span className="ml-2 text-xs">{pendingCount}</span></TabsTrigger>
-                      <TabsTrigger value="rejected">Rejected <span className="ml-2 text-xs">{rejectedCount}</span></TabsTrigger>
-                      <TabsTrigger value="waitlisted">Waitlisted <span className="ml-2 text-xs">{waitlistedCount}</span></TabsTrigger>
+                    <TabsList className="bg-slate-200 text-slate-700">
+                      <TabsTrigger value="all" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900">All <span className="ml-2 text-xs">{allRegistrations.length}</span></TabsTrigger>
+                      <TabsTrigger value="approved" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900">Approved <span className="ml-2 text-xs">{approvedCount}</span></TabsTrigger>
+                      <TabsTrigger value="pending" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900">Pending <span className="ml-2 text-xs">{pendingCount}</span></TabsTrigger>
+                      <TabsTrigger value="rejected" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900">Rejected <span className="ml-2 text-xs">{rejectedCount}</span></TabsTrigger>
+                      <TabsTrigger value="waitlisted" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-slate-900">Waitlisted <span className="ml-2 text-xs">{waitlistedCount}</span></TabsTrigger>
                     </TabsList>
                   </Tabs>
                   {updateProfileResult && <p className="text-sm text-slate-700 bg-white p-3 rounded-md">{updateProfileResult}</p>}
@@ -452,7 +464,7 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Slot Limits</CardTitle>
-                <CardDescription>Set maximum registration slots for each gender</CardDescription>
+                <CardDescription className="text-slate-700">Set maximum registration slots for each gender</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -472,7 +484,7 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Payment Reconciliation</CardTitle>
-                <CardDescription>Fix mismatched payment statuses and send missing confirmation emails</CardDescription>
+                <CardDescription className="text-slate-700">Fix mismatched payment statuses and send missing confirmation emails</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button onClick={handleFixPayments} disabled={fixingPayments} variant="outline">{fixingPayments ? "Fixing..." : "Fix Payments & Send Emails"}</Button>
