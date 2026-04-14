@@ -38,6 +38,7 @@ export default function AdminDashboard() {
   const [creatingInterest, setCreatingInterest] = useState(false);
   const [interestResult, setInterestResult] = useState<string | null>(null);
   const [convertingInterestId, setConvertingInterestId] = useState<string | null>(null);
+  const [sendingMatchNotificationId, setSendingMatchNotificationId] = useState<string | null>(null);
   const [newInterest, setNewInterest] = useState({
     fromRegistrationId: "",
     toRegistrationId: "",
@@ -347,6 +348,27 @@ export default function AdminDashboard() {
       await updateInterestStatus({ id: interestId as any, status });
     } catch (error) {
       setInterestResult(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleNotifyMatch(matchId: string) {
+    setSendingMatchNotificationId(matchId);
+    setInterestResult(null);
+    try {
+      const response = await fetch("/api/admin/notify-match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to notify matched applicants");
+      }
+      setInterestResult(`Match notifications sent: ${data.summary.sent}. Failed: ${data.summary.failed}.`);
+    } catch (error) {
+      setInterestResult(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSendingMatchNotificationId(null);
     }
   }
 
@@ -850,6 +872,9 @@ export default function AdminDashboard() {
                                   <td className="py-3 px-4 space-y-2">
                                     <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
                                     {interest.matchId && <div className="text-xs text-emerald-700">Linked to match</div>}
+                                    {interest.match?.matchNotificationSentAt && (
+                                      <div className="text-xs text-slate-500">Applicants notified</div>
+                                    )}
                                   </td>
                                   <td className="py-3 px-4 space-y-2">
                                     <div className="flex flex-wrap gap-2">
@@ -862,6 +887,11 @@ export default function AdminDashboard() {
                                       {!interest.matchId && (
                                         <Button size="sm" onClick={() => handleConvertInterest(interest._id)} disabled={convertingInterestId === interest._id}>
                                           {convertingInterestId === interest._id ? "Converting..." : "Convert to Match"}
+                                        </Button>
+                                      )}
+                                      {interest.matchId && (
+                                        <Button variant="secondary" size="sm" onClick={() => handleNotifyMatch(interest.matchId as string)} disabled={sendingMatchNotificationId === interest.matchId}>
+                                          {sendingMatchNotificationId === interest.matchId ? "Sending..." : "Notify Match"}
                                         </Button>
                                       )}
                                     </div>

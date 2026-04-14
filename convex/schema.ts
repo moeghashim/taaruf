@@ -142,6 +142,8 @@ export default defineSchema({
     followUpNeeded: v.optional(v.boolean()),
     followUpAt: v.optional(v.number()),
     closedReason: v.optional(v.string()),
+    matchNotificationSentAt: v.optional(v.number()),
+    matchNotificationError: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

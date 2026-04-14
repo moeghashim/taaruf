@@ -149,3 +149,50 @@ export async function sendProfileCompletionEmail({
     return { success: false, error: message };
   }
 }
+
+export async function sendMatchNotificationEmail({
+  name,
+  email,
+}: {
+  name: string;
+  email: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const resend = getResend();
+
+    const result = await resend.emails.send({
+      from: defaultFrom,
+      to: email,
+      subject: "A 1 Plus 1 Match Update for You",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
+          <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
+          <p style="line-height: 1.6;">
+            We wanted to let you know that the 1 Plus 1 team has identified a potential match for you.
+          </p>
+          <p style="line-height: 1.6;">
+            We are reviewing the next steps internally and will reach out again when there is something specific for you to review or respond to.
+          </p>
+          <p style="line-height: 1.6;">
+            At this stage, no action is needed from you.
+          </p>
+          <p style="line-height: 1.6; margin-top: 24px;">
+            Warmly,<br />
+            <strong>Bader & Danielle</strong><br />
+            <strong>1 Plus 1 Leads</strong>
+          </p>
+        </div>
+      `,
+    });
+
+    if (result.error) {
+      return { success: false, error: result.error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to send match notification email:", message);
+    return { success: false, error: message };
+  }
+}

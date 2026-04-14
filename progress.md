@@ -148,3 +148,16 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/interests.ts
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-14T20:06:46.000Z
+- Trigger: commit
+- Learning: Match notifications work best as an admin-triggered email action on linked matches, with explicit send-status tracking on the match record so admins can see whether both applicants were already notified.
+- Context: feat(matches): add admin-triggered match notifications
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/matches.ts
+  - convex/schema.ts
+  - src/app/api/admin/notify-match/route.ts
+  - src/components/admin-dashboard.tsx
+  - src/lib/email.ts
+  - progress.md
