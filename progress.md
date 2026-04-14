@@ -110,3 +110,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-14T19:23:41.000Z
+- Trigger: commit
+- Learning: Interest tracking needs to live separately from matches, with strict backend validation for opposite-gender-only interest, duplicate open-interest blocking, and explicit conversion from interest records into match records.
+- Context: feat(interests): add backend groundwork for interest tracking
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/interests.ts
+  - convex/schema.ts
+  - progress.md

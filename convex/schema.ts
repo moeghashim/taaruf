@@ -38,6 +38,26 @@ const shareStatus = v.union(
   v.literal("follow_up_needed"),
   v.literal("closed")
 );
+const interestSource = v.union(
+  v.literal("admin_entered"),
+  v.literal("email"),
+  v.literal("whatsapp"),
+  v.literal("platform_submission")
+);
+const interestStatus = v.union(
+  v.literal("new"),
+  v.literal("queued"),
+  v.literal("active"),
+  v.literal("converted_to_match"),
+  v.literal("deferred"),
+  v.literal("withdrawn"),
+  v.literal("declined"),
+  v.literal("closed")
+);
+const interestVisibility = v.union(
+  v.literal("internal_only"),
+  v.literal("admin_actionable")
+);
 
 export default defineSchema({
   registrations: defineTable({
@@ -87,11 +107,29 @@ export default defineSchema({
     spouseRequirement3: v.optional(v.string()),
     shareableBio: v.optional(v.string()),
     photoSharingPermission: v.optional(photoSharingPermission),
+    activeMatchId: v.optional(v.id("matches")),
   })
     .index("by_gender", ["gender"])
     .index("by_status", ["status"])
     .index("by_stripeSessionId", ["stripeSessionId"])
     .index("by_profileAccessToken", ["profileAccessToken"]),
+
+  interests: defineTable({
+    fromRegistrationId: v.id("registrations"),
+    toRegistrationId: v.id("registrations"),
+    rank: v.optional(v.number()),
+    source: interestSource,
+    status: interestStatus,
+    visibility: interestVisibility,
+    notes: v.optional(v.string()),
+    matchId: v.optional(v.id("matches")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_fromRegistrationId", ["fromRegistrationId"])
+    .index("by_toRegistrationId", ["toRegistrationId"])
+    .index("by_status", ["status"])
+    .index("by_matchId", ["matchId"]),
 
   matches: defineTable({
     maleRegistrationId: v.id("registrations"),
@@ -99,6 +137,11 @@ export default defineSchema({
     interestType,
     status: matchStatus,
     adminNotes: v.optional(v.string()),
+    interestId: v.optional(v.id("interests")),
+    initiatedBy: v.optional(v.union(v.literal("admin_recommendation"), v.literal("interest_signal"))),
+    followUpNeeded: v.optional(v.boolean()),
+    followUpAt: v.optional(v.number()),
+    closedReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -113,6 +156,11 @@ export default defineSchema({
     status: shareStatus,
     adminNotes: v.optional(v.string()),
     shareToken: v.string(),
+    interestId: v.optional(v.id("interests")),
+    matchId: v.optional(v.id("matches")),
+    sentAt: v.optional(v.number()),
+    respondedAt: v.optional(v.number()),
+    responseNote: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     viewedAt: v.optional(v.number()),
