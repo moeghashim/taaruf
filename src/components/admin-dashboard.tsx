@@ -546,7 +546,7 @@ export default function AdminDashboard() {
                                 <DialogTrigger asChild>
                                   <button className="text-left text-blue-600 hover:underline">View profile details</button>
                                 </DialogTrigger>
-                                <DialogContent className="max-w-2xl">
+                                <DialogContent className="left-auto right-0 top-0 h-screen max-h-screen w-full max-w-4xl translate-x-0 translate-y-0 rounded-none border-l border-slate-200 p-6 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-right-full data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:rounded-none">
                                   <DialogHeader><DialogTitle>{registration.name}</DialogTitle></DialogHeader>
                                   <div className="grid gap-4 md:grid-cols-2 text-sm">
                                     <div><strong>Age:</strong> {registration.age}</div>

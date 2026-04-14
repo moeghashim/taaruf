@@ -161,3 +161,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/components/admin-dashboard.tsx
   - src/lib/email.ts
   - progress.md
+## 2026-04-14T20:09:46.000Z
+- Trigger: commit
+- Learning: The full applicant profile reads much better as a right-side slideout than a centered popup, especially once interest panels and reconciliation context are part of the detail view.
+- Context: feat(admin): use slideout for profile details
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
