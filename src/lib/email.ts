@@ -9,7 +9,7 @@ function getResend(): Resend {
   return _resend;
 }
 
-const defaultFrom = process.env.RESEND_FROM_EMAIL || "1Plus1 Taaruf <bader@taarufusa.com>";
+const defaultFrom = "1Plus1 Match <contact@1plus1match.com>";
 
 export async function sendConfirmationEmail({
   name,

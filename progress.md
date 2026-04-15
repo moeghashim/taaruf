@@ -218,3 +218,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/api/admin/notify-match/route.ts
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-15T02:00:33.000Z
+- Trigger: commit
+- Learning: All outbound email in Taaruf must use the single verified sender `contact@1plus1match.com`; allowing fallback to the old taarufusa.com sender causes delivery failures for match notifications.
+- Context: fix(email): use contact@1plus1match.com sender
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/lib/email.ts
+  - progress.md
