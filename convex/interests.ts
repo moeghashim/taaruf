@@ -21,6 +21,12 @@ const interestVisibility = v.union(
   v.literal("internal_only"),
   v.literal("admin_actionable")
 );
+const interestAdminStatus = v.union(
+  v.literal("pending"),
+  v.literal("requested"),
+  v.literal("declined"),
+  v.literal("matched")
+);
 
 const openInterestStatuses = new Set(["new", "queued", "active", "deferred"]);
 
@@ -109,10 +115,31 @@ export const create = mutation({
       source: args.source,
       status: "new",
       visibility,
+      adminStatus: "pending",
       notes: args.notes,
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+export const updateAdminStatus = mutation({
+  args: {
+    id: v.id("interests"),
+    adminStatus: interestAdminStatus,
+  },
+  handler: async (ctx, args) => {
+    const interest = await ctx.db.get(args.id);
+    if (!interest) {
+      throw new Error("Interest not found");
+    }
+
+    await ctx.db.patch(args.id, {
+      adminStatus: args.adminStatus,
+      updatedAt: Date.now(),
+    });
+
+    return args.id;
   },
 });
 
@@ -225,6 +252,7 @@ export const convertToMatch = mutation({
     await ctx.db.patch(args.interestId, {
       matchId,
       status: "converted_to_match",
+      adminStatus: "matched",
       updatedAt: now,
     });
 

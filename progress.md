@@ -278,3 +278,14 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/lib/email.ts
   - progress.md
+## 2026-04-15T16:15:42.000Z
+- Trigger: commit
+- Learning: Interest tracking needs a separate admin-facing status layer (`pending`, `requested`, `declined`, `matched`) that stays clearly visible and editable in the dashboard without replacing the existing internal workflow states used for reconciliation and conversion.
+- Context: feat(interests): add admin-facing status tracking
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/schema.ts
+  - convex/interests.ts
+  - src/components/admin-dashboard.tsx
+  - progress.md

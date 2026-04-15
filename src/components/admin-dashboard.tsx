@@ -13,8 +13,9 @@ import { api } from "../../convex/_generated/api";
 
 type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
 type SearchStatus = "active" | "paused" | "inactive";
-type PairFilterStatus = "all" | "matched" | "accepted" | "declined";
+type PairFilterStatus = "all" | "pending" | "requested" | "declined" | "matched";
 type InterestStatus = "new" | "queued" | "active" | "converted_to_match" | "deferred" | "withdrawn" | "declined" | "closed";
+type InterestAdminStatus = "pending" | "requested" | "declined" | "matched";
 
 function titleizeValue(value?: string) {
   if (!value) return "-";
@@ -72,6 +73,7 @@ export default function AdminDashboard() {
   const updateAdminNotes = useMutation(api.registrations.updateAdminNotes);
   const createInterest = useMutation(api.interests.create);
   const updateInterestStatus = useMutation(api.interests.updateStatus);
+  const updateInterestAdminStatus = useMutation(api.interests.updateAdminStatus);
   const progressInterestFirst = useMutation(api.interests.progressFirst);
   const convertInterestToMatch = useMutation(api.interests.convertToMatch);
 
@@ -149,7 +151,7 @@ export default function AdminDashboard() {
       interests: typeof interests;
       linkedMatches: NonNullable<(typeof interests)[number]["match"]>[];
       latestUpdatedAt: number;
-      derivedStatus: "matched" | "accepted" | "declined" | "none";
+      derivedStatus: "matched" | "requested" | "declined" | "pending";
       searchHaystack: string;
     }>();
 
@@ -176,7 +178,7 @@ export default function AdminDashboard() {
         interests: [interest],
         linkedMatches: interest.match ? [interest.match] : [],
         latestUpdatedAt: interest.updatedAt,
-        derivedStatus: "none",
+        derivedStatus: "pending",
         searchHaystack: "",
       });
     }
@@ -188,13 +190,14 @@ export default function AdminDashboard() {
         pair.interests.sort((a, b) => b.updatedAt - a.updatedAt);
 
         const hasDeclined =
-          pair.interests.some((interest) => interest.status === "declined") ||
+          pair.interests.some((interest) => (interest.adminStatus || "pending") === "declined") ||
           pair.linkedMatches.some((match) => match.status === "declined" || match.status === "closed");
-        const hasAccepted =
-          pair.linkedMatches.some((match) => match.status === "contact_shared" || Boolean(match.matchNotificationSentAt));
-        const hasMatched = pair.linkedMatches.length > 0;
+        const hasRequested = pair.interests.some((interest) => (interest.adminStatus || "pending") === "requested");
+        const hasMatched =
+          pair.interests.some((interest) => (interest.adminStatus || "pending") === "matched") ||
+          pair.linkedMatches.length > 0;
 
-        pair.derivedStatus = hasDeclined ? "declined" : hasAccepted ? "accepted" : hasMatched ? "matched" : "none";
+        pair.derivedStatus = hasMatched ? "matched" : hasDeclined ? "declined" : hasRequested ? "requested" : "pending";
         pair.searchHaystack = [
           pair.registrations[0] ? registrationNumberMap.get(pair.registrations[0]._id) : "",
           pair.registrations[1] ? registrationNumberMap.get(pair.registrations[1]._id) : "",
@@ -408,6 +411,15 @@ export default function AdminDashboard() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await updateInterestStatus({ id: interestId as any, status });
+    } catch (error) {
+      setInterestResult(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleSetInterestAdminStatus(interestId: string, adminStatus: InterestAdminStatus) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await updateInterestAdminStatus({ id: interestId as any, adminStatus });
     } catch (error) {
       setInterestResult(error instanceof Error ? error.message : String(error));
     }
@@ -687,8 +699,8 @@ export default function AdminDashboard() {
                                               </button>
                                               <div className="text-xs text-slate-500">{interest.toRegistration?.email || "-"}</div>
                                               <div className="mt-2 flex flex-wrap gap-2">
+                                                <Badge variant="outline">Status: {titleizeValue(interest.adminStatus || "pending")}</Badge>
                                                 <Badge variant="outline">Rank: {interest.rank || "-"}</Badge>
-                                                <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
                                                 <Badge variant="outline">{titleizeValue(interest.source)}</Badge>
                                               </div>
                                             </div>
@@ -717,8 +729,8 @@ export default function AdminDashboard() {
                                               </button>
                                               <div className="text-xs text-slate-500">{interest.fromRegistration?.email || "-"}</div>
                                               <div className="mt-2 flex flex-wrap gap-2">
+                                                <Badge variant="outline">Status: {titleizeValue(interest.adminStatus || "pending")}</Badge>
                                                 <Badge variant="outline">Their rank: {interest.rank || "-"}</Badge>
-                                                <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
                                                 <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
                                               </div>
                                               {interest.status !== "converted_to_match" && (
@@ -914,9 +926,10 @@ export default function AdminDashboard() {
                           className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                         >
                           <option value="all">All pairs</option>
-                          <option value="matched">Matched</option>
-                          <option value="accepted">Accepted</option>
+                          <option value="pending">Pending</option>
+                          <option value="requested">Requested</option>
                           <option value="declined">Declined</option>
+                          <option value="matched">Matched</option>
                         </select>
                       </div>
 
@@ -958,7 +971,7 @@ export default function AdminDashboard() {
                                       <Badge variant="outline">{directionLabel}</Badge>
                                       <Badge variant="outline">{pair.interests.length} {pair.interests.length === 1 ? "interest" : "interests"}</Badge>
                                       <Badge variant={pair.derivedStatus === "declined" ? "destructive" : "outline"}>
-                                        {pair.derivedStatus === "none" ? "No match yet" : titleizeValue(pair.derivedStatus)}
+                                        {titleizeValue(pair.derivedStatus)}
                                       </Badge>
                                     </div>
                                   </div>
@@ -976,7 +989,7 @@ export default function AdminDashboard() {
                                             #{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"} → #{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}
                                           </div>
                                           <div className="flex flex-wrap gap-2 text-xs">
-                                            <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
+                                            <Badge variant="outline">Status: {titleizeValue(interest.adminStatus || "pending")}</Badge>
                                             <Badge variant="outline">{titleizeValue(interest.source)}</Badge>
                                             <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
                                             {interest.rank ? <Badge variant="outline">Rank {interest.rank}</Badge> : null}
@@ -989,6 +1002,16 @@ export default function AdminDashboard() {
                                           ) : null}
                                         </div>
                                         <div className="flex flex-wrap gap-2 lg:max-w-sm lg:justify-end">
+                                          <select
+                                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                                            value={interest.adminStatus || "pending"}
+                                            onChange={(e) => handleSetInterestAdminStatus(interest._id, e.target.value as InterestAdminStatus)}
+                                          >
+                                            <option value="pending">Pending</option>
+                                            <option value="requested">Requested</option>
+                                            <option value="declined">Declined</option>
+                                            <option value="matched">Matched</option>
+                                          </select>
                                           {interest.status !== "active" && interest.status !== "converted_to_match" && (
                                             <Button variant="outline" size="sm" onClick={() => handleProgressInterestFirst(interest._id)} disabled={convertingInterestId === interest._id}>Progress First</Button>
                                           )}

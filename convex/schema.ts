@@ -58,6 +58,12 @@ const interestVisibility = v.union(
   v.literal("internal_only"),
   v.literal("admin_actionable")
 );
+const interestAdminStatus = v.union(
+  v.literal("pending"),
+  v.literal("requested"),
+  v.literal("declined"),
+  v.literal("matched")
+);
 
 export default defineSchema({
   registrations: defineTable({
@@ -122,6 +128,7 @@ export default defineSchema({
     source: interestSource,
     status: interestStatus,
     visibility: interestVisibility,
+    adminStatus: v.optional(interestAdminStatus),
     notes: v.optional(v.string()),
     matchId: v.optional(v.id("matches")),
     createdAt: v.number(),
