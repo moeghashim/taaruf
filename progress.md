@@ -189,3 +189,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/registrations.ts
   - src/app/api/admin/send-profile-link/route.ts
   - progress.md
+## 2026-04-15T00:16:37.000Z
+- Trigger: commit
+- Learning: Mobile slideouts need a fixed header plus an inner scroll region using dynamic viewport height; relying on the whole dialog container to scroll can trap the bottom of long profile content.
+- Context: fix(admin): make profile slideout scroll on mobile
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
