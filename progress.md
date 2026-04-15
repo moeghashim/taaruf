@@ -198,3 +198,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-15T00:18:12.000Z
+- Trigger: commit
+- Learning: For tall mobile slideouts, the scrollable body needs `min-h-0`, a non-growing header, and extra safe-area bottom padding or the final actions can remain unreachable even when overflow is enabled.
+- Context: fix(admin): let mobile slideout reach final actions
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md

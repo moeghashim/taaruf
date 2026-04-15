@@ -546,8 +546,8 @@ export default function AdminDashboard() {
                                 <DialogTrigger asChild>
                                   <button className="text-left text-blue-600 hover:underline">View profile details</button>
                                 </DialogTrigger>
-                                <DialogContent className="left-auto right-0 top-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-4xl translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none border-l border-slate-200 p-0 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-right-full data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:rounded-none">
-                                  <div className="border-b border-slate-200 bg-white px-6 py-5 pr-16">
+                                <DialogContent className="left-auto right-0 top-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-4xl translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-l border-slate-200 p-0 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-right-full data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:rounded-none">
+                                  <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-5 pr-16">
                                     <DialogHeader><DialogTitle>{registration.name}</DialogTitle></DialogHeader>
                                     <div className="mt-3 flex justify-end">
                                       <DialogClose asChild>
@@ -555,7 +555,7 @@ export default function AdminDashboard() {
                                       </DialogClose>
                                     </div>
                                   </div>
-                                  <div className="flex-1 overflow-y-auto px-6 py-5 pb-10">
+                                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 [padding-bottom:calc(env(safe-area-inset-bottom)+7rem)]">
                                   <div className="grid gap-4 md:grid-cols-2 text-sm">
                                     <div><strong>Age:</strong> {registration.age}</div>
                                     <div><strong>Gender:</strong> {registration.gender}</div>
