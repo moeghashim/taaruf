@@ -50,6 +50,11 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      if (registration.profileCompletionStatus === "completed") {
+        results.push({ registrationId, success: false, error: "Profile already completed" });
+        continue;
+      }
+
       const token = registration.profileAccessToken || crypto.randomBytes(24).toString("hex");
 
       if (!registration.profileAccessToken) {

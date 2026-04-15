@@ -15,6 +15,30 @@ const photoSharingPermission = v.union(
 );
 const searchStatus = v.union(v.literal("active"), v.literal("paused"), v.literal("inactive"));
 
+function hasCompletedProfile(args: {
+  ethnicity?: string;
+  imageStorageIds?: Array<unknown>;
+  prayerCommitment?: string;
+  hijabResponse?: string;
+  spouseRequirement1?: string;
+  spouseRequirement2?: string;
+  spouseRequirement3?: string;
+  shareableBio?: string;
+  photoSharingPermission?: string;
+}) {
+  return Boolean(
+    args.ethnicity?.trim() &&
+    args.imageStorageIds?.length &&
+    args.prayerCommitment &&
+    args.hijabResponse &&
+    args.spouseRequirement1?.trim() &&
+    args.spouseRequirement2?.trim() &&
+    args.spouseRequirement3?.trim() &&
+    args.shareableBio?.trim() &&
+    args.photoSharingPermission
+  );
+}
+
 export const create = mutation({
   args: {
     name: v.string(),
@@ -45,6 +69,9 @@ export const create = mutation({
     photoSharingPermission: v.optional(photoSharingPermission),
   },
   handler: async (ctx, args) => {
+    const now = Date.now();
+    const profileCompleted = hasCompletedProfile(args);
+
     return await ctx.db.insert("registrations", {
       name: args.name,
       age: args.age,
@@ -61,9 +88,11 @@ export const create = mutation({
       paymentStatus: args.paymentStatus ?? "pending",
       status: args.status ?? "pending",
       searchStatus: "active",
-      createdAt: Date.now(),
+      createdAt: now,
       profileAccessToken: args.profileAccessToken,
-      profileCompletionStatus: "not_started",
+      profileCompletionStatus: profileCompleted ? "completed" : "not_started",
+      profileCompletedAt: profileCompleted ? now : undefined,
+      profileLastUpdatedAt: profileCompleted ? now : undefined,
       ethnicity: args.ethnicity,
       imageStorageIds: args.imageStorageIds,
       prayerCommitment: args.prayerCommitment,

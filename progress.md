@@ -179,3 +179,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/ui/dialog.tsx
   - progress.md
+## 2026-04-15T00:09:57.000Z
+- Trigger: commit
+- Learning: New registrations that already submit the full extended profile must be marked  at creation time, and admin profile-update sends should skip those completed records to avoid unnecessary outreach.
+- Context: fix(profile): mark new full registrations completed
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/registrations.ts
+  - src/app/api/admin/send-profile-link/route.ts
+  - progress.md
