@@ -40,6 +40,7 @@ export default function AdminDashboard() {
   const [interestResult, setInterestResult] = useState<string | null>(null);
   const [convertingInterestId, setConvertingInterestId] = useState<string | null>(null);
   const [sendingMatchNotificationId, setSendingMatchNotificationId] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [newInterest, setNewInterest] = useState({
     fromRegistrationId: "",
     toRegistrationId: "",
@@ -603,10 +604,17 @@ export default function AdminDashboard() {
                               </div>
                             </td>
                             <td className="py-3 px-4 text-xs">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <button className="text-left text-blue-600 hover:underline">View profile details</button>
-                                </DialogTrigger>
+                              <Dialog
+                                open={selectedProfileId === registration._id}
+                                onOpenChange={(open) => setSelectedProfileId(open ? registration._id : null)}
+                              >
+                                <button
+                                  type="button"
+                                  className="text-left text-blue-600 hover:underline"
+                                  onClick={() => setSelectedProfileId(registration._id)}
+                                >
+                                  View profile details
+                                </button>
                                 <DialogContent className="left-auto right-0 top-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-4xl translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-l border-slate-200 p-0 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-right-full data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:rounded-none">
                                   <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-5 pr-16">
                                     <DialogHeader><DialogTitle>{registration.name}</DialogTitle></DialogHeader>
@@ -669,9 +677,13 @@ export default function AdminDashboard() {
                                         <div className="space-y-2">
                                           {getOutboundInterests(registration._id).map((interest) => (
                                             <div key={interest._id} className="rounded-md border border-slate-200 bg-white p-3">
-                                              <div className="font-medium text-slate-900">
+                                              <button
+                                                type="button"
+                                                className="text-left font-medium text-slate-900 hover:text-blue-700 hover:underline"
+                                                onClick={() => setSelectedProfileId(interest.toRegistrationId)}
+                                              >
                                                 #{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}
-                                              </div>
+                                              </button>
                                               <div className="text-xs text-slate-500">{interest.toRegistration?.email || "-"}</div>
                                               <div className="mt-2 flex flex-wrap gap-2">
                                                 <Badge variant="outline">Rank: {interest.rank || "-"}</Badge>
@@ -695,11 +707,16 @@ export default function AdminDashboard() {
                                         <div className="space-y-2">
                                           {getInboundInterests(registration._id).map((interest) => (
                                             <div key={interest._id} className="rounded-md border border-slate-200 bg-white p-3">
-                                              <div className="font-medium text-slate-900">
+                                              <button
+                                                type="button"
+                                                className="text-left font-medium text-slate-900 hover:text-blue-700 hover:underline"
+                                                onClick={() => setSelectedProfileId(interest.fromRegistrationId)}
+                                              >
                                                 #{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"}
-                                              </div>
+                                              </button>
                                               <div className="text-xs text-slate-500">{interest.fromRegistration?.email || "-"}</div>
                                               <div className="mt-2 flex flex-wrap gap-2">
+                                                <Badge variant="outline">Their rank: {interest.rank || "-"}</Badge>
                                                 <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
                                                 <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
                                               </div>

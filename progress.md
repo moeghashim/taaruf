@@ -227,3 +227,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/lib/email.ts
   - progress.md
+## 2026-04-15T02:53:07.000Z
+- Trigger: commit
+- Learning: In the admin profile slideout, inbound interests should show the sender's rank for that recipient, and interest cards should be navigable so admins can jump directly into the related applicant profile without closing and searching again.
+- Context: feat(admin): improve profile interest navigation
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
