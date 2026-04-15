@@ -13,7 +13,8 @@ import { api } from "../../convex/_generated/api";
 
 type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
 type SearchStatus = "active" | "paused" | "inactive";
-type InterestFilterStatus = "all" | "new" | "queued" | "active" | "converted_to_match" | "deferred" | "withdrawn" | "declined" | "closed";
+type PairFilterStatus = "all" | "matched" | "accepted" | "declined";
+type InterestStatus = "new" | "queued" | "active" | "converted_to_match" | "deferred" | "withdrawn" | "declined" | "closed";
 
 function titleizeValue(value?: string) {
   if (!value) return "-";
@@ -33,7 +34,7 @@ export default function AdminDashboard() {
   const [updateProfileResult, setUpdateProfileResult] = useState<string | null>(null);
   const [fixingPayments, setFixingPayments] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
-  const [interestFilterStatus, setInterestFilterStatus] = useState<InterestFilterStatus>("all");
+  const [interestFilterStatus, setInterestFilterStatus] = useState<PairFilterStatus>("all");
   const [interestSearchQuery, setInterestSearchQuery] = useState("");
   const [creatingInterest, setCreatingInterest] = useState(false);
   const [interestResult, setInterestResult] = useState<string | null>(null);
@@ -139,25 +140,86 @@ export default function AdminDashboard() {
         registration.gender !== selectedFromRegistration.gender
     );
   }, [availableInterestApplicants, selectedFromRegistration]);
-  const filteredInterests = useMemo(() => {
-    return interests.filter((interest) => {
-      if (interestFilterStatus !== "all" && interest.status !== interestFilterStatus) {
-        return false;
+  const filteredInterestPairs = useMemo(() => {
+    const pairMap = new Map<string, {
+      key: string;
+      registrationIds: [string, string];
+      registrations: [typeof allRegistrations[number] | null, typeof allRegistrations[number] | null];
+      interests: typeof interests;
+      linkedMatches: NonNullable<(typeof interests)[number]["match"]>[];
+      latestUpdatedAt: number;
+      derivedStatus: "matched" | "accepted" | "declined" | "none";
+      searchHaystack: string;
+    }>();
+
+    for (const interest of interests) {
+      const pairIds = [interest.fromRegistrationId, interest.toRegistrationId].sort();
+      const key = pairIds.join("::");
+      const existing = pairMap.get(key);
+      const registrationA = allRegistrations.find((registration) => registration._id === pairIds[0]) || null;
+      const registrationB = allRegistrations.find((registration) => registration._id === pairIds[1]) || null;
+
+      if (existing) {
+        existing.interests.push(interest);
+        if (interest.match && !existing.linkedMatches.some((match) => match._id === interest.match?._id)) {
+          existing.linkedMatches.push(interest.match);
+        }
+        existing.latestUpdatedAt = Math.max(existing.latestUpdatedAt, interest.updatedAt);
+        continue;
       }
 
-      if (interestSearchQuery.trim()) {
-        const q = interestSearchQuery.toLowerCase();
-        return (
-          interest.fromRegistration?.name?.toLowerCase().includes(q) ||
-          interest.toRegistration?.name?.toLowerCase().includes(q) ||
-          interest.fromRegistration?.email?.toLowerCase().includes(q) ||
-          interest.toRegistration?.email?.toLowerCase().includes(q)
-        );
-      }
+      pairMap.set(key, {
+        key,
+        registrationIds: [pairIds[0], pairIds[1]],
+        registrations: [registrationA, registrationB],
+        interests: [interest],
+        linkedMatches: interest.match ? [interest.match] : [],
+        latestUpdatedAt: interest.updatedAt,
+        derivedStatus: "none",
+        searchHaystack: "",
+      });
+    }
 
-      return true;
-    });
-  }, [interestFilterStatus, interestSearchQuery, interests]);
+    const query = interestSearchQuery.trim().toLowerCase();
+
+    return [...pairMap.values()]
+      .map((pair) => {
+        pair.interests.sort((a, b) => b.updatedAt - a.updatedAt);
+
+        const hasDeclined =
+          pair.interests.some((interest) => interest.status === "declined") ||
+          pair.linkedMatches.some((match) => match.status === "declined" || match.status === "closed");
+        const hasAccepted =
+          pair.linkedMatches.some((match) => match.status === "contact_shared" || Boolean(match.matchNotificationSentAt));
+        const hasMatched = pair.linkedMatches.length > 0;
+
+        pair.derivedStatus = hasDeclined ? "declined" : hasAccepted ? "accepted" : hasMatched ? "matched" : "none";
+        pair.searchHaystack = [
+          pair.registrations[0] ? registrationNumberMap.get(pair.registrations[0]._id) : "",
+          pair.registrations[1] ? registrationNumberMap.get(pair.registrations[1]._id) : "",
+          pair.registrations[0]?.name || "",
+          pair.registrations[1]?.name || "",
+          pair.registrations[0]?.email || "",
+          pair.registrations[1]?.email || "",
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        return pair;
+      })
+      .filter((pair) => {
+        if (interestFilterStatus !== "all" && pair.derivedStatus !== interestFilterStatus) {
+          return false;
+        }
+
+        if (query) {
+          return pair.searchHaystack.includes(query);
+        }
+
+        return true;
+      })
+      .sort((a, b) => b.latestUpdatedAt - a.latestUpdatedAt);
+  }, [allRegistrations, interestFilterStatus, interestSearchQuery, interests, registrationNumberMap]);
 
   function toggleSelection(registrationId: string) {
     setSelectedIds((current) =>
@@ -341,8 +403,7 @@ export default function AdminDashboard() {
     }
   }
 
-  async function handleSetInterestStatus(interestId: string, status: InterestFilterStatus) {
-    if (status === "all") return;
+  async function handleSetInterestStatus(interestId: string, status: InterestStatus) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await updateInterestStatus({ id: interestId as any, status });
@@ -817,102 +878,123 @@ export default function AdminDashboard() {
                     <CardHeader>
                       <CardTitle className="text-lg">Interest Queue</CardTitle>
                       <CardDescription className="text-slate-700">
-                        Review inbound and outbound interest, then convert the chosen one into an active match.
+                        Review each pair once, see whether interest is one-sided or mutual, and manage the linked match from a single row.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex flex-wrap items-center gap-4">
                         <Input
                           type="text"
-                          placeholder="Search by applicant name or email..."
+                          placeholder="Search by applicant number, name, or email..."
                           value={interestSearchQuery}
                           onChange={(e) => setInterestSearchQuery(e.target.value)}
                           className="max-w-sm bg-white"
                         />
                         <select
                           value={interestFilterStatus}
-                          onChange={(e) => setInterestFilterStatus(e.target.value as InterestFilterStatus)}
+                          onChange={(e) => setInterestFilterStatus(e.target.value as PairFilterStatus)}
                           className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                         >
-                          <option value="all">All statuses</option>
-                          <option value="new">New</option>
-                          <option value="queued">Queued</option>
-                          <option value="active">Active</option>
-                          <option value="converted_to_match">Converted to match</option>
-                          <option value="deferred">Deferred</option>
-                          <option value="withdrawn">Withdrawn</option>
+                          <option value="all">All pairs</option>
+                          <option value="matched">Matched</option>
+                          <option value="accepted">Accepted</option>
                           <option value="declined">Declined</option>
-                          <option value="closed">Closed</option>
                         </select>
                       </div>
 
-                      {filteredInterests.length === 0 ? (
+                      {filteredInterestPairs.length === 0 ? (
                         <p className="text-gray-500 py-8 text-center">No interests found</p>
                       ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b">
-                                <th className="text-left py-3 px-4 font-semibold text-gray-700">From</th>
-                                <th className="text-left py-3 px-4 font-semibold text-gray-700">To</th>
-                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Rank</th>
-                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Source</th>
-                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Visibility</th>
-                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
-                                <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filteredInterests.map((interest) => (
-                                <tr key={interest._id} className="border-b align-top hover:bg-gray-50">
-                                  <td className="py-3 px-4">
-                                    <div className="font-medium">#{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"}</div>
-                                    <div className="text-xs text-slate-500">{interest.fromRegistration?.email || "-"}</div>
-                                  </td>
-                                  <td className="py-3 px-4">
-                                    <div className="font-medium">#{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}</div>
-                                    <div className="text-xs text-slate-500">{interest.toRegistration?.email || "-"}</div>
-                                  </td>
-                                  <td className="py-3 px-4">{interest.rank || "-"}</td>
-                                  <td className="py-3 px-4">{titleizeValue(interest.source)}</td>
-                                  <td className="py-3 px-4">
-                                    <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
-                                  </td>
-                                  <td className="py-3 px-4 space-y-2">
-                                    <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
-                                    {interest.matchId && <div className="text-xs text-emerald-700">Linked to match</div>}
-                                    {interest.match?.matchNotificationSentAt && (
-                                      <div className="text-xs text-slate-500">Applicants notified</div>
-                                    )}
-                                    {interest.match?.matchNotificationError && (
-                                      <div className="text-xs text-red-600">Notification issue: {interest.match.matchNotificationError}</div>
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-4 space-y-2">
-                                    <div className="flex flex-wrap gap-2">
-                                      {interest.status !== "active" && interest.status !== "converted_to_match" && (
-                                        <Button variant="outline" size="sm" onClick={() => handleProgressInterestFirst(interest._id)} disabled={convertingInterestId === interest._id}>Progress First</Button>
-                                      )}
-                                      {interest.status !== "queued" && interest.status !== "converted_to_match" && (
-                                        <Button variant="outline" size="sm" onClick={() => handleSetInterestStatus(interest._id, "queued")}>Queue</Button>
-                                      )}
-                                      {!interest.matchId && (
-                                        <Button size="sm" onClick={() => handleConvertInterest(interest._id)} disabled={convertingInterestId === interest._id}>
-                                          {convertingInterestId === interest._id ? "Converting..." : "Convert to Match"}
-                                        </Button>
-                                      )}
-                                      {interest.matchId && (
-                                        <Button variant="secondary" size="sm" onClick={() => handleNotifyMatch(interest.matchId as string)} disabled={sendingMatchNotificationId === interest.matchId}>
-                                          {sendingMatchNotificationId === interest.matchId ? "Sending..." : "Notify Match"}
-                                        </Button>
-                                      )}
+                        <div className="space-y-4">
+                          {filteredInterestPairs.map((pair) => {
+                            const [registrationA, registrationB] = pair.registrations;
+                            const registrationANumber = registrationA ? registrationNumberMap.get(registrationA._id) ?? "?" : "?";
+                            const registrationBNumber = registrationB ? registrationNumberMap.get(registrationB._id) ?? "?" : "?";
+                            const hasAtoB = pair.interests.some(
+                              (interest) =>
+                                interest.fromRegistrationId === registrationA?._id && interest.toRegistrationId === registrationB?._id
+                            );
+                            const hasBtoA = pair.interests.some(
+                              (interest) =>
+                                interest.fromRegistrationId === registrationB?._id && interest.toRegistrationId === registrationA?._id
+                            );
+                            const directionLabel = hasAtoB && hasBtoA
+                              ? `${registrationANumber} ↔ ${registrationBNumber}`
+                              : hasAtoB
+                                ? `${registrationANumber} → ${registrationBNumber}`
+                                : `${registrationBNumber} → ${registrationANumber}`;
+
+                            return (
+                              <div key={pair.key} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="space-y-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        #{registrationANumber} {registrationA?.name || "Unknown"} and #{registrationBNumber} {registrationB?.name || "Unknown"}
+                                      </p>
+                                      <p className="text-xs text-slate-500">
+                                        {registrationA?.email || "-"} • {registrationB?.email || "-"}
+                                      </p>
                                     </div>
-                                    {interest.notes && <p className="text-xs text-slate-600 max-w-xs whitespace-pre-wrap">{interest.notes}</p>}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Badge variant="outline">{directionLabel}</Badge>
+                                      <Badge variant="outline">{pair.interests.length} {pair.interests.length === 1 ? "interest" : "interests"}</Badge>
+                                      <Badge variant={pair.derivedStatus === "declined" ? "destructive" : "outline"}>
+                                        {pair.derivedStatus === "none" ? "No match yet" : titleizeValue(pair.derivedStatus)}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    Last updated {new Date(pair.latestUpdatedAt).toLocaleString()}
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 grid gap-3">
+                                  {pair.interests.map((interest) => (
+                                    <div key={interest._id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                        <div className="space-y-2">
+                                          <div className="font-medium text-slate-900">
+                                            #{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"} → #{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}
+                                          </div>
+                                          <div className="flex flex-wrap gap-2 text-xs">
+                                            <Badge variant="outline">{titleizeValue(interest.status)}</Badge>
+                                            <Badge variant="outline">{titleizeValue(interest.source)}</Badge>
+                                            <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
+                                            {interest.rank ? <Badge variant="outline">Rank {interest.rank}</Badge> : null}
+                                          </div>
+                                          {interest.notes ? (
+                                            <p className="max-w-2xl whitespace-pre-wrap text-xs text-slate-600">{interest.notes}</p>
+                                          ) : null}
+                                          {interest.match?.matchNotificationError ? (
+                                            <p className="text-xs text-red-600">Notification issue: {interest.match.matchNotificationError}</p>
+                                          ) : null}
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 lg:max-w-sm lg:justify-end">
+                                          {interest.status !== "active" && interest.status !== "converted_to_match" && (
+                                            <Button variant="outline" size="sm" onClick={() => handleProgressInterestFirst(interest._id)} disabled={convertingInterestId === interest._id}>Progress First</Button>
+                                          )}
+                                          {interest.status !== "queued" && interest.status !== "converted_to_match" && (
+                                            <Button variant="outline" size="sm" onClick={() => handleSetInterestStatus(interest._id, "queued")}>Queue</Button>
+                                          )}
+                                          {!interest.matchId && (
+                                            <Button size="sm" onClick={() => handleConvertInterest(interest._id)} disabled={convertingInterestId === interest._id}>
+                                              {convertingInterestId === interest._id ? "Converting..." : "Convert to Match"}
+                                            </Button>
+                                          )}
+                                          {interest.matchId && (
+                                            <Button variant="secondary" size="sm" onClick={() => handleNotifyMatch(interest.matchId as string)} disabled={sendingMatchNotificationId === interest.matchId}>
+                                              {sendingMatchNotificationId === interest.matchId ? "Sending..." : "Notify Match"}
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </CardContent>
