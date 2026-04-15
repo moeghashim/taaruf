@@ -884,6 +884,9 @@ export default function AdminDashboard() {
                                     {interest.match?.matchNotificationSentAt && (
                                       <div className="text-xs text-slate-500">Applicants notified</div>
                                     )}
+                                    {interest.match?.matchNotificationError && (
+                                      <div className="text-xs text-red-600">Notification issue: {interest.match.matchNotificationError}</div>
+                                    )}
                                   </td>
                                   <td className="py-3 px-4 space-y-2">
                                     <div className="flex flex-wrap gap-2">

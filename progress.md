@@ -207,3 +207,14 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-15T00:31:58.000Z
+- Trigger: commit
+- Learning: Match notifications need explicit delivery diagnostics. The admin route should log per-recipient provider results, return a non-200 status when any recipient fails, and the dashboard should surface stored notification errors instead of only showing successful sends.
+- Context: fix(matches): surface notification delivery failures
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/lib/email.ts
+  - src/app/api/admin/notify-match/route.ts
+  - src/components/admin-dashboard.tsx
+  - progress.md

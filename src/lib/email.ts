@@ -156,7 +156,7 @@ export async function sendMatchNotificationEmail({
 }: {
   name: string;
   email: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; id?: string }> {
   try {
     const resend = getResend();
 
@@ -164,6 +164,7 @@ export async function sendMatchNotificationEmail({
       from: defaultFrom,
       to: email,
       subject: "A 1 Plus 1 Match Update for You",
+      text: `Assalamu Alaikum ${name},\n\nWe wanted to let you know that the 1 Plus 1 team has identified a potential match for you.\n\nWe are reviewing the next steps internally and will reach out again when there is something specific for you to review or respond to.\n\nAt this stage, no action is needed from you.\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
           <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
@@ -189,7 +190,7 @@ export async function sendMatchNotificationEmail({
       return { success: false, error: result.error.message };
     }
 
-    return { success: true };
+    return { success: true, id: result.data?.id };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Failed to send match notification email:", message);

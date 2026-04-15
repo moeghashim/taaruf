@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Matched applicant not found" }, { status: 404 });
     }
 
-    const results = [] as { registrationId: string; email: string; success: boolean; error?: string }[];
+    const results = [] as { registrationId: string; email: string; success: boolean; error?: string; providerId?: string }[];
 
     for (const registration of [male, female]) {
       const emailResult = await sendMatchNotificationEmail({
@@ -53,11 +53,21 @@ export async function POST(request: NextRequest) {
         email: registration.email,
       });
 
+      console.log("Match notification result", {
+        matchId,
+        registrationId: registration._id,
+        email: registration.email,
+        success: emailResult.success,
+        error: emailResult.error,
+        providerId: emailResult.id,
+      });
+
       results.push({
         registrationId: registration._id,
         email: registration.email,
         success: emailResult.success,
         error: emailResult.error,
+        providerId: emailResult.id,
       });
     }
 
@@ -76,7 +86,7 @@ export async function POST(request: NextRequest) {
         sent: results.filter((result) => result.success).length,
         failed: results.filter((result) => !result.success).length,
       },
-    });
+    }, { status: success ? 200 : 502 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },
