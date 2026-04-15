@@ -39,6 +39,7 @@ export default function AdminDashboard() {
   const [interestSearchQuery, setInterestSearchQuery] = useState("");
   const [creatingInterest, setCreatingInterest] = useState(false);
   const [interestResult, setInterestResult] = useState<string | null>(null);
+  const [editingInterestNotes, setEditingInterestNotes] = useState<{ id: string; notes: string } | null>(null);
   const [convertingInterestId, setConvertingInterestId] = useState<string | null>(null);
   const [sendingMatchNotificationId, setSendingMatchNotificationId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export default function AdminDashboard() {
   const createInterest = useMutation(api.interests.create);
   const updateInterestStatus = useMutation(api.interests.updateStatus);
   const updateInterestAdminStatus = useMutation(api.interests.updateAdminStatus);
+  const updateInterestNotes = useMutation(api.interests.updateNotes);
   const progressInterestFirst = useMutation(api.interests.progressFirst);
   const convertInterestToMatch = useMutation(api.interests.convertToMatch);
 
@@ -420,6 +422,18 @@ export default function AdminDashboard() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await updateInterestAdminStatus({ id: interestId as any, adminStatus });
+    } catch (error) {
+      setInterestResult(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleSaveInterestNotes() {
+    if (!editingInterestNotes) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await updateInterestNotes({ id: editingInterestNotes.id as any, notes: editingInterestNotes.notes });
+      setEditingInterestNotes(null);
+      setInterestResult("Interest notes saved.");
     } catch (error) {
       setInterestResult(error instanceof Error ? error.message : String(error));
     }
@@ -994,9 +1008,19 @@ export default function AdminDashboard() {
                                             <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
                                             {interest.rank ? <Badge variant="outline">Rank {interest.rank}</Badge> : null}
                                           </div>
-                                          {interest.notes ? (
-                                            <p className="max-w-2xl whitespace-pre-wrap text-xs text-slate-600">{interest.notes}</p>
-                                          ) : null}
+                                          <div className="max-w-2xl space-y-2">
+                                            <label className="text-xs font-medium text-slate-700">Notes</label>
+                                            <textarea
+                                              value={editingInterestNotes?.id === interest._id ? editingInterestNotes.notes : (interest.notes || "")}
+                                              onChange={(e) => setEditingInterestNotes({ id: interest._id, notes: e.target.value })}
+                                              onFocus={() => setEditingInterestNotes({ id: interest._id, notes: interest.notes || "" })}
+                                              placeholder="Add notes about decline reasons, outreach, or next steps..."
+                                              className="min-h-[88px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700"
+                                            />
+                                            <div>
+                                              <Button variant="outline" size="sm" onClick={handleSaveInterestNotes}>Save Notes</Button>
+                                            </div>
+                                          </div>
                                           {interest.match?.matchNotificationError ? (
                                             <p className="text-xs text-red-600">Notification issue: {interest.match.matchNotificationError}</p>
                                           ) : null}

@@ -289,3 +289,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/interests.ts
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-15T16:32:41.000Z
+- Trigger: commit
+- Learning: Interest records need dedicated editable notes in the dashboard so admins can capture decline reasons, outreach details, and next steps directly on the interest itself rather than burying that context elsewhere.
+- Context: feat(interests): add editable notes
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/interests.ts
+  - src/components/admin-dashboard.tsx
+  - progress.md

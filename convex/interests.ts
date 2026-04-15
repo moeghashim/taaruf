@@ -143,6 +143,26 @@ export const updateAdminStatus = mutation({
   },
 });
 
+export const updateNotes = mutation({
+  args: {
+    id: v.id("interests"),
+    notes: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const interest = await ctx.db.get(args.id);
+    if (!interest) {
+      throw new Error("Interest not found");
+    }
+
+    await ctx.db.patch(args.id, {
+      notes: args.notes.trim() || undefined,
+      updatedAt: Date.now(),
+    });
+
+    return args.id;
+  },
+});
+
 export const updateStatus = mutation({
   args: {
     id: v.id("interests"),
