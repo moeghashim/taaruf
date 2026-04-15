@@ -165,6 +165,26 @@ export const updateStatus = mutation({
   },
 });
 
+export const updateRank = mutation({
+  args: {
+    id: v.id("interests"),
+    rank: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const interest = await ctx.db.get(args.id);
+    if (!interest) {
+      throw new Error("Interest not found");
+    }
+
+    await ctx.db.patch(args.id, {
+      rank: args.rank,
+      updatedAt: Date.now(),
+    });
+
+    return args.id;
+  },
+});
+
 export const progressFirst = mutation({
   args: {
     interestId: v.id("interests"),
