@@ -1,23 +1,21 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { api } from "../../convex/_generated/api";
-
-function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+import { RegistrationsTable } from "@/components/registrations-table";
+import { RegistrationDetail } from "@/components/registration-detail";
 
 export default function AdminDashboard() {
   type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
@@ -31,9 +29,12 @@ export default function AdminDashboard() {
   const [filterGender, setFilterGender] = useState<"all" | "male" | "female">("all");
   const [fixingPayments, setFixingPayments] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
-  const [editingNotes, setEditingNotes] = useState<{ id: string; notes: string } | null>(null);
+  const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [slotSaveMessage, setSlotSaveMessage] = useState<string | null>(null);
 
-  const allRegistrations = useQuery(api.registrations.getAll) || [];
+  const rawRegistrations = useQuery(api.registrations.getAll);
+  const allRegistrations = useMemo(() => rawRegistrations || [], [rawRegistrations]);
   const slotLimits = useQuery(api.settings.getSlotLimits);
 
   const deleteRegistration = useMutation(api.registrations.deleteRegistration);
@@ -104,15 +105,22 @@ export default function AdminDashboard() {
   const maleCount = allRegistrations.filter((r) => r.gender === "male").length;
   const femaleCount = allRegistrations.filter((r) => r.gender === "female").length;
 
+  const selectedRegistration = allRegistrations.find(
+    (r) => r._id === selectedRegistrationId
+  ) || null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleRowClick = (registration: any) => {
+    setSelectedRegistrationId(registration._id);
+    setSheetOpen(true);
+  };
+
   const handleDeleteRegistration = async (registrationId: string) => {
-    if (window.confirm("Are you sure you want to delete this registration?")) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await deleteRegistration({ id: registrationId as any });
-      } catch (error) {
-        console.error("Error deleting registration:", error);
-        alert("Failed to delete registration");
-      }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await deleteRegistration({ id: registrationId as any });
+    } catch (error) {
+      console.error("Error deleting registration:", error);
     }
   };
 
@@ -123,7 +131,6 @@ export default function AdminDashboard() {
       await updateStatus({ id: registrationId as any, status: newStatus });
     } catch (error) {
       console.error("Error updating status:", error);
-      alert("Failed to update status");
     } finally {
       setUpdatingStatus(null);
     }
@@ -136,14 +143,21 @@ export default function AdminDashboard() {
         maleSlots: Number(maleSlots),
         femaleSlots: Number(femaleSlots),
       });
-      alert("Slot limits updated successfully");
+      setSlotSaveMessage("Slot limits updated successfully");
     } catch (error) {
       console.error("Error updating slots:", error);
-      alert("Failed to update slot limits");
+      setSlotSaveMessage("Failed to update slot limits");
     } finally {
       setSavingSlots(false);
     }
   };
+
+  useEffect(() => {
+    if (slotSaveMessage) {
+      const timer = setTimeout(() => setSlotSaveMessage(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [slotSaveMessage]);
 
   const handleExportCSV = () => {
     const headers = [
@@ -191,15 +205,12 @@ export default function AdminDashboard() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSaveNotes = async () => {
-    if (!editingNotes) return;
+  const handleSaveNotes = async (id: string, notes: string) => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await updateAdminNotes({ id: editingNotes.id as any, adminNotes: editingNotes.notes });
-      setEditingNotes(null);
+      await updateAdminNotes({ id: id as any, adminNotes: notes });
     } catch (error) {
       console.error("Failed to save notes:", error);
-      alert("Failed to save notes");
     }
   };
 
@@ -231,408 +242,155 @@ export default function AdminDashboard() {
     window.location.href = "/admin";
   };
 
+  const stats = [
+    { label: "Total registrations", value: totalCount, color: "zinc-300" },
+    { label: "Approved", value: approvedCount, color: "green-500" },
+    { label: "Pending", value: pendingCount, color: "yellow-500" },
+    { label: "Rejected", value: rejectedCount, color: "red-500" },
+    { label: "Waitlisted", value: waitlistedCount, color: "amber-500" },
+    { label: "Males", value: maleCount, color: "blue-500" },
+    { label: "Females", value: femaleCount, color: "pink-500" },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="text-gray-600 mt-2">Manage Taaruf registrations and settings</p>
+    <TooltipProvider>
+      <div className="min-h-screen bg-zinc-50 p-8">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-semibold text-zinc-900">Admin Dashboard</h1>
+              <p className="text-sm text-zinc-500 mt-1">Manage Taaruf registrations and settings</p>
+            </div>
+            <Button variant="outline" onClick={handleLogout} className="text-red-600 hover:bg-red-50">
+              Logout
+            </Button>
           </div>
-          <Button variant="outline" onClick={handleLogout} className="text-red-600 hover:bg-red-50">
-            Logout
-          </Button>
-        </div>
 
-        <Separator />
+          <Separator />
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Registrations</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{totalCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-green-600">Approved</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-green-600">{approvedCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-yellow-600">Pending</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-yellow-600">{pendingCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-red-600">Rejected</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-red-600">{rejectedCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-amber-600">Waitlisted</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-600">{waitlistedCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-blue-600">Males</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-blue-600">{maleCount}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-pink-600">Females</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-pink-600">{femaleCount}</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Slot Limits</CardTitle>
-            <CardDescription>Set maximum registration slots for each gender</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label htmlFor="male-slots" className="text-sm font-medium">
-                  Male Slots
-                </label>
-                <Input
-                  id="male-slots"
-                  type="number"
-                  value={maleSlots}
-                  onChange={(e) => setMaleSlots(e.target.value)}
-                  placeholder="50"
-                />
+          {/* Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
+            {stats.map((stat) => (
+              <div
+                key={stat.label}
+                className={`border-t-2 border-${stat.color} px-4 py-3`}
+              >
+                <p className="text-sm text-zinc-500 truncate">{stat.label}</p>
+                <p className="text-2xl font-semibold tabular-nums text-zinc-900">{stat.value}</p>
               </div>
-              <div className="space-y-2">
-                <label htmlFor="female-slots" className="text-sm font-medium">
-                  Female Slots
-                </label>
-                <Input
-                  id="female-slots"
-                  type="number"
-                  value={femaleSlots}
-                  onChange={(e) => setFemaleSlots(e.target.value)}
-                  placeholder="50"
-                />
-              </div>
-            </div>
-            <Button onClick={handleSaveSlots} disabled={savingSlots} className="mt-4">
-              {savingSlots ? "Saving..." : "Save Slot Limits"}
-            </Button>
-          </CardContent>
-        </Card>
+            ))}
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Reconciliation</CardTitle>
-            <CardDescription>Fix mismatched payment statuses and send missing confirmation emails</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={handleFixPayments} disabled={fixingPayments} variant="outline">
-              {fixingPayments ? "Fixing..." : "Fix Payments & Send Emails"}
-            </Button>
-            {fixResult && (
-              <p className="mt-3 text-sm text-slate-700 bg-slate-50 p-3 rounded-md">{fixResult}</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Registrations</CardTitle>
-            <CardDescription>View and manage all registrations</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-slate-100 rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-4 flex-wrap">
-                <Input
-                  type="text"
-                  placeholder="Search by name, email, or phone..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="max-w-sm bg-white"
-                />
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-600">Gender:</span>
-                  <Button
-                    variant={filterGender === "all" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilterGender("all")}
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant={filterGender === "male" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilterGender("male")}
-                    className={filterGender === "male" ? "bg-blue-600 hover:bg-blue-700" : ""}
-                  >
-                    Male
-                  </Button>
-                  <Button
-                    variant={filterGender === "female" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilterGender("female")}
-                    className={filterGender === "female" ? "bg-pink-600 hover:bg-pink-700" : ""}
-                  >
-                    Female
-                  </Button>
+          {/* Slot Limits */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Slot limits</CardTitle>
+              <CardDescription>Set maximum registration slots for each gender</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="male-slots" className="text-sm font-medium">
+                    Male slots
+                  </label>
+                  <Input
+                    id="male-slots"
+                    type="number"
+                    value={maleSlots}
+                    onChange={(e) => setMaleSlots(e.target.value)}
+                    placeholder="50"
+                  />
                 </div>
-                <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                  Export CSV
+                <div className="space-y-2">
+                  <label htmlFor="female-slots" className="text-sm font-medium">
+                    Female slots
+                  </label>
+                  <Input
+                    id="female-slots"
+                    type="number"
+                    value={femaleSlots}
+                    onChange={(e) => setFemaleSlots(e.target.value)}
+                    placeholder="50"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 mt-4">
+                <Button onClick={handleSaveSlots} disabled={savingSlots}>
+                  {savingSlots ? "Saving..." : "Save slot limits"}
                 </Button>
+                {slotSaveMessage && (
+                  <p className="text-sm text-zinc-600">{slotSaveMessage}</p>
+                )}
               </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            <Tabs value={filterStatus} onValueChange={(value) => setFilterStatus(value as FilterStatus)}>
-              <TabsList className="bg-slate-200">
-                <TabsTrigger value="all">
-                  All <span className="ml-2 text-xs">{allRegistrations.length}</span>
-                </TabsTrigger>
-                <TabsTrigger value="approved">
-                  Approved <span className="ml-2 text-xs">{approvedCount}</span>
-                </TabsTrigger>
-                <TabsTrigger value="pending">
-                  Pending <span className="ml-2 text-xs">{pendingCount}</span>
-                </TabsTrigger>
-                <TabsTrigger value="rejected">
-                  Rejected <span className="ml-2 text-xs">{rejectedCount}</span>
-                </TabsTrigger>
-                <TabsTrigger value="waitlisted">
-                  Waitlisted <span className="ml-2 text-xs">{waitlistedCount}</span>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+          {/* Payment Reconciliation */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment reconciliation</CardTitle>
+              <CardDescription>Fix mismatched payment statuses and send missing confirmation emails</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={handleFixPayments} disabled={fixingPayments} variant="outline">
+                {fixingPayments ? "Fixing..." : "Fix payments and send emails"}
+              </Button>
+              {fixResult && (
+                <p className="mt-3 text-sm text-zinc-700 bg-zinc-100 p-3 rounded-md">{fixResult}</p>
+              )}
+            </CardContent>
+          </Card>
 
-            {filteredRegistrations.length === 0 ? (
-              <p className="text-gray-500 py-8 text-center">No registrations found</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">#</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Age</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Gender</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Marital</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Education</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Job</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Phone</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">About</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Looking For</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Payment</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Notes</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRegistrations.map((registration) => (
-                      <tr key={registration._id} className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-4 font-medium text-gray-700">
-                          {registrationNumbers.get(registration._id)}
-                        </td>
-                        <td className="py-3 px-4">{registration.name}</td>
-                        <td className="py-3 px-4">{registration.age}</td>
-                        <td className="py-3 px-4">
-                          <Badge variant={registration.gender === "male" ? "default" : "secondary"}>
-                            {registration.gender}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex gap-1 flex-wrap">
-                            <Badge
-                              variant={
-                                registration.status === "approved"
-                                  ? "default"
-                                  : registration.status === "rejected"
-                                    ? "destructive"
-                                    : "outline"
-                              }
-                              className={
-                                registration.status === "approved"
-                                  ? "bg-green-100 text-green-800"
-                                  : registration.status === "rejected"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-yellow-100 text-yellow-800"
-                              }
-                            >
-                              {registration.status}
-                            </Badge>
-                            {waitlistIds.has(registration._id) && (
-                              <Badge variant="outline" className="bg-amber-100 text-amber-800">
-                                Waitlist
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-xs">{registration.maritalStatus || "-"}</td>
-                        <td className="py-3 px-4 text-xs">{registration.education || "-"}</td>
-                        <td className="py-3 px-4 text-xs">{registration.job || "-"}</td>
-                        <td className="py-3 px-4 text-xs">{registration.email}</td>
-                        <td className="py-3 px-4 text-xs">{registration.phone}</td>
-                        <td className="py-3 px-4 text-xs max-w-[200px]">
-                          {registration.describeYourself ? (
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <button className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer">
-                                  {registration.describeYourself}
-                                </button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-lg">
-                                <DialogHeader>
-                                  <DialogTitle>About - {registration.name}</DialogTitle>
-                                </DialogHeader>
-                                <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                                  {registration.describeYourself}
-                                </p>
-                              </DialogContent>
-                            </Dialog>
-                          ) : (
-                            "-"
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-xs max-w-[200px]">
-                          {registration.lookingFor ? (
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <button className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer">
-                                  {registration.lookingFor}
-                                </button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-lg">
-                                <DialogHeader>
-                                  <DialogTitle>Looking For - {registration.name}</DialogTitle>
-                                </DialogHeader>
-                                <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                                  {registration.lookingFor}
-                                </p>
-                              </DialogContent>
-                            </Dialog>
-                          ) : (
-                            "-"
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          <Badge
-                            variant="outline"
-                            className={
-                              registration.paymentStatus === "paid"
-                                ? "bg-green-100 text-green-800"
-                                : registration.paymentStatus === "failed"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                            }
-                          >
-                            {registration.paymentStatus || "-"}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          {registration._creationTime ? formatDate(registration._creationTime) : "-"}
-                        </td>
-                        <td className="py-3 px-4 text-xs max-w-[200px]">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <button
-                                className="text-left truncate block max-w-[200px] text-blue-600 hover:underline cursor-pointer"
-                                onClick={() =>
-                                  setEditingNotes({ id: registration._id, notes: registration.adminNotes || "" })
-                                }
-                              >
-                                {registration.adminNotes || "Add note..."}
-                              </button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-lg">
-                              <DialogHeader>
-                                <DialogTitle>Notes - {registration.name}</DialogTitle>
-                              </DialogHeader>
-                              <textarea
-                                value={editingNotes?.id === registration._id ? editingNotes.notes : (registration.adminNotes || "")}
-                                onChange={(e) => setEditingNotes({ id: registration._id, notes: e.target.value })}
-                                onFocus={() =>
-                                  setEditingNotes({ id: registration._id, notes: registration.adminNotes || "" })
-                                }
-                                placeholder="Add notes about background check, follow-ups, etc..."
-                                className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                rows={4}
-                              />
-                              <Button onClick={handleSaveNotes} className="w-full">
-                                Save Notes
-                              </Button>
-                            </DialogContent>
-                          </Dialog>
-                        </td>
-                        <td className="py-3 px-4 space-x-2">
-                          {(registration.status === "pending" || registration.status === "waitlisted") && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleStatusUpdate(registration._id, "approved")}
-                                disabled={updatingStatus === registration._id}
-                                className="text-green-600 hover:bg-green-50"
-                              >
-                                {updatingStatus === registration._id ? "..." : "Approve"}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleStatusUpdate(registration._id, "rejected")}
-                                disabled={updatingStatus === registration._id}
-                                className="text-red-600 hover:bg-red-50"
-                              >
-                                {updatingStatus === registration._id ? "..." : "Reject"}
-                              </Button>
-                            </>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteRegistration(registration._id)}
-                            className="text-red-600 hover:bg-red-50"
-                          >
-                            Delete
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          {/* Registrations Table */}
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-900 mb-4">Registrations</h2>
+            <RegistrationsTable
+              registrations={filteredRegistrations}
+              allCount={totalCount}
+              approvedCount={approvedCount}
+              pendingCount={pendingCount}
+              rejectedCount={rejectedCount}
+              waitlistedCount={waitlistedCount}
+              registrationNumbers={registrationNumbers}
+              waitlistIds={waitlistIds}
+              filterStatus={filterStatus}
+              setFilterStatus={(s) => setFilterStatus(s as FilterStatus)}
+              filterGender={filterGender}
+              setFilterGender={(g) => setFilterGender(g as "all" | "male" | "female")}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onRowClick={handleRowClick}
+              onExportCSV={handleExportCSV}
+              onStatusUpdate={handleStatusUpdate}
+              onDelete={handleDeleteRegistration}
+              updatingStatus={updatingStatus}
+              selectedId={selectedRegistrationId}
+            />
+          </div>
+
+          {/* Registration Detail Sheet */}
+          <RegistrationDetail
+            registration={selectedRegistration}
+            open={sheetOpen}
+            onOpenChange={(open) => {
+              setSheetOpen(open);
+              if (!open) setSelectedRegistrationId(null);
+            }}
+            registrationNumber={
+              selectedRegistration
+                ? registrationNumbers.get(selectedRegistration._id)
+                : undefined
+            }
+            isWaitlisted={
+              selectedRegistration ? waitlistIds.has(selectedRegistration._id) : false
+            }
+            onStatusUpdate={handleStatusUpdate}
+            onDelete={handleDeleteRegistration}
+            onSaveNotes={handleSaveNotes}
+            updatingStatus={updatingStatus}
+          />
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
