@@ -341,17 +341,17 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="interestSubmission">Optional: are there any applicants you are interested in?</Label>
+          <Label htmlFor="interestSubmission">Do you have any interests from a previous event that you would like us to follow up on?</Label>
           <textarea
             id="interestSubmission"
             value={profile.interestSubmission}
             onChange={(e) => setProfile({ ...profile, interestSubmission: e.target.value })}
-            placeholder="You can list profile numbers, names, or any notes for the admin team."
+            placeholder="Please provide their participant number or name."
             className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             rows={5}
           />
           <p className="text-xs text-slate-500">
-            This field is optional and helps the admin team record your interests.
+            Please provide their participant number or name.
           </p>
         </div>
 

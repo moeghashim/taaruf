@@ -251,3 +251,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/components/registration-form.tsx
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-15T03:15:33.000Z
+- Trigger: commit
+- Learning: The profile update interest prompt should explicitly reference prior events and ask for participant number or name so applicants know exactly what kind of follow-up information to provide.
+- Context: copy(profile): clarify prior-event interest prompt
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/profile-completion-form.tsx
+  - progress.md
