@@ -299,3 +299,16 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/interests.ts
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-15T17:44:00.000Z
+- Trigger: commit
+- Learning: A schema placeholder is not the same as a usable feature. For profile sharing, admins need an end-to-end flow in the dashboard plus a secure share page, otherwise the capability is effectively invisible.
+- Context: feat(profile-shares): add admin share flow
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/profileShares.ts
+  - src/app/api/admin/create-profile-share/route.ts
+  - src/app/api/share/[token]/route.ts
+  - src/app/share/[token]/page.tsx
+  - src/components/admin-dashboard.tsx
+  - progress.md

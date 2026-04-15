@@ -10,6 +10,7 @@
 
 import type * as interests from "../interests.js";
 import type * as matches from "../matches.js";
+import type * as profileShares from "../profileShares.js";
 import type * as registrations from "../registrations.js";
 import type * as settings from "../settings.js";
 
@@ -22,6 +23,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   interests: typeof interests;
   matches: typeof matches;
+  profileShares: typeof profileShares;
   registrations: typeof registrations;
   settings: typeof settings;
 }>;

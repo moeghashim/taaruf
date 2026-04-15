@@ -43,6 +43,10 @@ export default function AdminDashboard() {
   const [convertingInterestId, setConvertingInterestId] = useState<string | null>(null);
   const [sendingMatchNotificationId, setSendingMatchNotificationId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [shareRecipientId, setShareRecipientId] = useState<string>("");
+  const [shareIncludeImages, setShareIncludeImages] = useState(false);
+  const [creatingShareForId, setCreatingShareForId] = useState<string | null>(null);
+  const [shareResult, setShareResult] = useState<string | null>(null);
   const [newInterest, setNewInterest] = useState({
     fromRegistrationId: "",
     toRegistrationId: "",
@@ -460,6 +464,36 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleCreateProfileShare(ownerRegistrationId: string) {
+    if (!shareRecipientId) {
+      setShareResult("Please choose who to share the profile with.");
+      return;
+    }
+
+    setCreatingShareForId(ownerRegistrationId);
+    setShareResult(null);
+    try {
+      const response = await fetch("/api/admin/create-profile-share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerRegistrationId,
+          recipientRegistrationId: shareRecipientId,
+          includeImages: shareIncludeImages,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create share link");
+      }
+      setShareResult(data.shareUrl);
+    } catch (error) {
+      setShareResult(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreatingShareForId(null);
+    }
+  }
+
   function getOutboundInterests(registrationId: string) {
     return interests
       .filter((interest) => interest.fromRegistrationId === registrationId)
@@ -693,6 +727,54 @@ export default function AdminDashboard() {
                                     <div><strong>Requirement 3:</strong> {registration.spouseRequirement3 || "-"}</div>
                                     <div><strong>Basic bio:</strong><p className="whitespace-pre-wrap">{registration.shareableBio || "-"}</p></div>
                                     <div><strong>Submitted interests:</strong><p className="whitespace-pre-wrap">{registration.interestSubmission || "-"}</p></div>
+                                  </div>
+                                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 text-sm">
+                                    <div className="font-semibold text-slate-900">Share this profile</div>
+                                    <div className="grid gap-3 md:grid-cols-[1fr,auto] md:items-end">
+                                      <div className="space-y-2">
+                                        <label className="text-xs font-medium text-slate-700">Share with</label>
+                                        <select
+                                          value={shareRecipientId}
+                                          onChange={(e) => setShareRecipientId(e.target.value)}
+                                          className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                                        >
+                                          <option value="">Select recipient</option>
+                                          {allRegistrations
+                                            .filter((candidate) => candidate._id !== registration._id && candidate.gender !== registration.gender && candidate.status !== "rejected")
+                                            .map((candidate) => (
+                                              <option key={`${registration._id}-share-${candidate._id}`} value={candidate._id}>
+                                                #{registrationNumberMap.get(candidate._id)} {candidate.name}
+                                              </option>
+                                            ))}
+                                        </select>
+                                      </div>
+                                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                                        <input
+                                          type="checkbox"
+                                          checked={shareIncludeImages}
+                                          onChange={(e) => setShareIncludeImages(e.target.checked)}
+                                          className="h-4 w-4"
+                                        />
+                                        Include photos
+                                      </label>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleCreateProfileShare(registration._id)}
+                                        disabled={creatingShareForId === registration._id}
+                                      >
+                                        {creatingShareForId === registration._id ? "Creating link..." : "Create share link"}
+                                      </Button>
+                                    </div>
+                                    {shareResult && (
+                                      <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                                        <div className="text-xs font-medium text-slate-700">Share link</div>
+                                        <input readOnly value={shareResult} className="flex h-10 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700" />
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="grid gap-4 lg:grid-cols-2 text-sm">
                                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
