@@ -91,39 +91,32 @@ export async function sendProfileCompletionEmail({
       from: defaultFrom,
       to: email,
       subject: "Please Complete Your 1 Plus 1 Profile",
+      text: `Assalamu Alaikum ${name},\n\nWe hope you are doing well.\n\nWe’re reaching out with a quick reminder to complete your 1 Plus 1 profile update if you have not already done so. At this stage, we are not able to move forward with introductions, match follow-up, or interest review until your profile has been fully updated.\n\nCompleting your profile helps us review compatibility more accurately, follow up on interests more effectively, and support introductions in a more thoughtful and organized way.\n\nWe have also now added a space in the profile update form where you can share any interests from a previous workshop or event. If you have not already submitted your interests to an admin, you can now include them directly in your profile update by providing the participant’s name or number.\n\nPlease complete your profile as soon as possible so we can continue moving your profile forward.\n\nComplete your profile: ${profileUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
           <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
           <p style="line-height: 1.6;">
-            As part of improving the 1 Plus 1 participant profile process, we’re asking you to complete a few additional profile details so we can better support thoughtful and appropriate matches.
+            We hope you are doing well.
           </p>
           <p style="line-height: 1.6;">
-            Please use the secure link below to update your profile:
+            We’re reaching out with a quick reminder to complete your 1 Plus 1 profile update if you have not already done so. At this stage, we are not able to move forward with introductions, match follow-up, or interest review until your profile has been fully updated.
+          </p>
+          <p style="line-height: 1.6;">
+            Completing your profile helps us review compatibility more accurately, follow up on interests more effectively, and support introductions in a more thoughtful and organized way.
+          </p>
+          <p style="line-height: 1.6;">
+            We have also now added a space in the profile update form where you can share any interests from a previous workshop or event.
+          </p>
+          <p style="line-height: 1.6;">
+            If you have not already submitted your interests to an admin, you can now include them directly in your profile update by providing the participant’s name or number.
           </p>
           <p style="margin: 24px 0;">
             <a href="${profileUrl}" style="display: inline-block; background: #0f766e; color: white; text-decoration: none; padding: 12px 18px; border-radius: 8px; font-weight: 600;">
               Complete Your Profile
             </a>
           </p>
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 24px 0;">
-            <p style="margin: 0 0 8px; font-weight: 600; color: #0f172a;">This update will let you add:</p>
-            <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-              <li>ethnicity</li>
-              <li>profile photo(s)</li>
-              <li>prayer commitment</li>
-              <li>hijab preference or practice</li>
-              <li>top spouse requirements</li>
-              <li>a shareable bio</li>
-            </ul>
-          </div>
           <p style="line-height: 1.6;">
-            Your photo will not be shared with anyone without your permission.
-          </p>
-          <p style="line-height: 1.6;">
-            We’d appreciate it if you could complete your profile as soon as possible.
-          </p>
-          <p style="line-height: 1.6;">
-            If you have any questions, feel free to reply to this email.
+            Please complete your profile as soon as possible so we can continue moving your profile forward.
           </p>
           <p style="line-height: 1.6; margin-top: 24px;">
             Warmly,<br />

@@ -269,3 +269,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/registration-form.tsx
   - progress.md
+## 2026-04-15T03:35:11.000Z
+- Trigger: commit
+- Learning: The incomplete-profile reminder email should clearly state that introductions and interest review cannot move forward until profile completion, and it should mention that applicants can now submit prior-event interests directly in the update form.
+- Context: copy(email): refresh profile completion reminder
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/lib/email.ts
+  - progress.md
