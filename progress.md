@@ -260,3 +260,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/profile-completion-form.tsx
   - progress.md
+## 2026-04-15T03:29:39.000Z
+- Trigger: commit
+- Learning: The optional registration interest prompt should reference prior workshop attendance and reassure female participants that their interests are never shared, so the purpose and privacy boundary are both explicit.
+- Context: copy(registration): clarify workshop interest prompt
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/registration-form.tsx
+  - progress.md

@@ -513,17 +513,17 @@ export function RegistrationForm() {
         >
           {(field) => (
             <div className="space-y-2">
-              <Label htmlFor={field.name}>Optional: are there any applicants you are interested in?</Label>
+              <Label htmlFor={field.name}>Optional: if you have attended a workshop, were there any other participants you were interested in?</Label>
               <textarea
                 id={field.name}
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                placeholder="You can list profile numbers, names, or any notes for the admin team."
+                placeholder="Please provide their participant number or name."
                 className="flex min-h-[120px] w-full rounded-md border border-input bg-input px-3 py-2 text-base text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 rows={5}
               />
-              <p className="text-xs text-slate-500">This field is optional.</p>
+              <p className="text-xs text-slate-500">This helps our admin team to initiate matches or confirm mutual interest. For females, your interests will never be shared.</p>
             </div>
           )}
         </form.Field>
