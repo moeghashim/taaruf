@@ -107,6 +107,7 @@ export default defineSchema({
     spouseRequirement3: v.optional(v.string()),
     shareableBio: v.optional(v.string()),
     photoSharingPermission: v.optional(photoSharingPermission),
+    interestSubmission: v.optional(v.string()),
     activeMatchId: v.optional(v.id("matches")),
   })
     .index("by_gender", ["gender"])

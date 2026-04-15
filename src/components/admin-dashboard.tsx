@@ -666,6 +666,7 @@ export default function AdminDashboard() {
                                     <div><strong>Requirement 2:</strong> {registration.spouseRequirement2 || "-"}</div>
                                     <div><strong>Requirement 3:</strong> {registration.spouseRequirement3 || "-"}</div>
                                     <div><strong>Basic bio:</strong><p className="whitespace-pre-wrap">{registration.shareableBio || "-"}</p></div>
+                                    <div><strong>Submitted interests:</strong><p className="whitespace-pre-wrap">{registration.interestSubmission || "-"}</p></div>
                                   </div>
                                   <div className="grid gap-4 lg:grid-cols-2 text-sm">
                                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">

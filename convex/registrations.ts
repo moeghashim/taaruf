@@ -67,6 +67,7 @@ export const create = mutation({
     spouseRequirement3: v.optional(v.string()),
     shareableBio: v.optional(v.string()),
     photoSharingPermission: v.optional(photoSharingPermission),
+    interestSubmission: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -102,6 +103,7 @@ export const create = mutation({
       spouseRequirement3: args.spouseRequirement3,
       shareableBio: args.shareableBio,
       photoSharingPermission: args.photoSharingPermission,
+      interestSubmission: args.interestSubmission?.trim() || undefined,
     });
   },
 });
@@ -268,6 +270,7 @@ export const updateProfile = mutation({
     spouseRequirement3: v.string(),
     shareableBio: v.string(),
     photoSharingPermission,
+    interestSubmission: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const registration = await ctx.db
@@ -302,6 +305,7 @@ export const updateProfile = mutation({
       spouseRequirement3: args.spouseRequirement3.trim(),
       shareableBio: args.shareableBio.trim(),
       photoSharingPermission: args.photoSharingPermission,
+      interestSubmission: args.interestSubmission?.trim() || undefined,
       profileCompletionStatus: "completed",
       profileCompletedAt: registration.profileCompletedAt ?? now,
       profileLastUpdatedAt: now,

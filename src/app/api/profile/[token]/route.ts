@@ -42,6 +42,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
         spouseRequirement3: registration.spouseRequirement3 || "",
         shareableBio: registration.shareableBio || "",
         photoSharingPermission: registration.photoSharingPermission || "",
+        interestSubmission: registration.interestSubmission || "",
         profileCompletionStatus: registration.profileCompletionStatus || "not_started",
       },
     });
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       spouseRequirement3: body.spouseRequirement3,
       shareableBio: body.shareableBio,
       photoSharingPermission: body.photoSharingPermission,
+      interestSubmission: body.interestSubmission,
     });
 
     return NextResponse.json({ success: true });

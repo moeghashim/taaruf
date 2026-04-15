@@ -39,6 +39,7 @@ interface ProfileData {
   spouseRequirement3: string;
   shareableBio: string;
   photoSharingPermission: PhotoSharingPermission;
+  interestSubmission: string;
   profileCompletionStatus: string;
 }
 
@@ -177,6 +178,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
           spouseRequirement3: profile.spouseRequirement3,
           shareableBio: profile.shareableBio,
           photoSharingPermission: profile.photoSharingPermission,
+          interestSubmission: profile.interestSubmission,
         }),
       });
 
@@ -336,6 +338,21 @@ export function ProfileCompletionForm({ token }: { token: string }) {
             className="flex min-h-[140px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             rows={6}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="interestSubmission">Optional: are there any applicants you are interested in?</Label>
+          <textarea
+            id="interestSubmission"
+            value={profile.interestSubmission}
+            onChange={(e) => setProfile({ ...profile, interestSubmission: e.target.value })}
+            placeholder="You can list profile numbers, names, or any notes for the admin team."
+            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            rows={5}
+          />
+          <p className="text-xs text-slate-500">
+            This field is optional and helps the admin team record your interests.
+          </p>
         </div>
 
         {message && <p className="text-sm text-green-700">{message}</p>}

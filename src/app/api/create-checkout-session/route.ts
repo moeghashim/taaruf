@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
       spouseRequirement3,
       shareableBio,
       photoSharingPermission,
+      interestSubmission,
       imageStorageIds,
     } = body;
 
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
       spouseRequirement3,
       shareableBio,
       photoSharingPermission,
+      interestSubmission,
       describeYourself: shareableBio,
       lookingFor: [spouseRequirement1, spouseRequirement2, spouseRequirement3].join(", "),
       stripeSessionId: session.id,

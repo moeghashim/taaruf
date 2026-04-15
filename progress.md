@@ -236,3 +236,18 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-15T03:13:21.000Z
+- Trigger: commit
+- Learning: Applicants need an optional free-text field to submit interest notes directly from their profile or registration flow, and admins need to see that stored field in profile details without making it part of required profile completion.
+- Context: feat(profile): add optional interest submission field
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/schema.ts
+  - convex/registrations.ts
+  - src/app/api/create-checkout-session/route.ts
+  - src/app/api/profile/[token]/route.ts
+  - src/components/profile-completion-form.tsx
+  - src/components/registration-form.tsx
+  - src/components/admin-dashboard.tsx
+  - progress.md
