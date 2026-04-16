@@ -331,3 +331,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - convex/registrations.ts
   - progress.md
+## 2026-04-16T03:05:59.000Z
+- Trigger: commit
+- Learning: The profile slideout must make interest status obvious at a glance. Inbound and outbound items need prominent status badges there, not only in the main interest-tracking view.
+- Context: feat(admin): clarify profile interest statuses
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md

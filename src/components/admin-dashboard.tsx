@@ -22,6 +22,20 @@ function titleizeValue(value?: string) {
   return value.replace(/_/g, " ");
 }
 
+function getInterestAdminStatusBadgeClass(status?: InterestAdminStatus) {
+  switch (status || "pending") {
+    case "matched":
+      return "bg-green-100 text-green-800 border-green-200";
+    case "requested":
+      return "bg-blue-100 text-blue-800 border-blue-200";
+    case "declined":
+      return "bg-red-100 text-red-800 border-red-200";
+    case "pending":
+    default:
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+  }
+}
+
 export default function AdminDashboard() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -795,7 +809,8 @@ export default function AdminDashboard() {
                                               </button>
                                               <div className="text-xs text-slate-500">{interest.toRegistration?.email || "-"}</div>
                                               <div className="mt-2 flex flex-wrap gap-2">
-                                                <Badge variant="outline">Status: {titleizeValue(interest.adminStatus || "pending")}</Badge>
+                                                <Badge className={getInterestAdminStatusBadgeClass(interest.adminStatus || "pending")}>Status: {titleizeValue(interest.adminStatus || "pending")}</Badge>
+                                                <Badge variant="outline">Workflow: {titleizeValue(interest.status)}</Badge>
                                                 <Badge variant="outline">Rank: {interest.rank || "-"}</Badge>
                                                 <Badge variant="outline">{titleizeValue(interest.source)}</Badge>
                                               </div>
@@ -825,7 +840,8 @@ export default function AdminDashboard() {
                                               </button>
                                               <div className="text-xs text-slate-500">{interest.fromRegistration?.email || "-"}</div>
                                               <div className="mt-2 flex flex-wrap gap-2">
-                                                <Badge variant="outline">Status: {titleizeValue(interest.adminStatus || "pending")}</Badge>
+                                                <Badge className={getInterestAdminStatusBadgeClass(interest.adminStatus || "pending")}>Status: {titleizeValue(interest.adminStatus || "pending")}</Badge>
+                                                <Badge variant="outline">Workflow: {titleizeValue(interest.status)}</Badge>
                                                 <Badge variant="outline">Their rank: {interest.rank || "-"}</Badge>
                                                 <Badge variant="outline">{titleizeValue(interest.visibility)}</Badge>
                                               </div>
