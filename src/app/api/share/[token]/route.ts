@@ -36,7 +36,6 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
         includeImages: share.includeImages,
         status: share.status,
         owner: {
-          name: share.owner.name,
           age: share.owner.age,
           gender: share.owner.gender,
           maritalStatus: share.owner.maritalStatus,

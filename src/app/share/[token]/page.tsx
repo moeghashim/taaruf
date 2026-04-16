@@ -8,7 +8,6 @@ type SharedProfileResponse = {
     includeImages: boolean;
     status: string;
     owner: {
-      name: string;
       age: number;
       gender: string;
       maritalStatus: string;
@@ -77,7 +76,6 @@ export default function SharedProfilePage({ params }: { params: Promise<{ token:
 
         <Card className="p-8 space-y-6">
           <div className="grid gap-4 md:grid-cols-2 text-sm">
-            <div><strong>Name:</strong> {owner.name}</div>
             <div><strong>Age:</strong> {owner.age}</div>
             <div><strong>Gender:</strong> {owner.gender}</div>
             <div><strong>Marital status:</strong> {owner.maritalStatus}</div>
@@ -94,7 +92,7 @@ export default function SharedProfilePage({ params }: { params: Promise<{ token:
               <h2 className="font-semibold text-slate-900">Photos</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {owner.imageUrls.map((imageUrl, index) => (
-                  <img key={`${imageUrl}-${index}`} src={imageUrl} alt={`${owner.name} profile image ${index + 1}`} className="h-32 w-full rounded-lg object-cover border border-slate-200" />
+                  <img key={`${imageUrl}-${index}`} src={imageUrl} alt={`Profile image ${index + 1}`} className="h-32 w-full rounded-lg object-cover border border-slate-200" />
                 ))}
               </div>
             </div>

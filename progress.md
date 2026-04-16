@@ -312,3 +312,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/share/[token]/page.tsx
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-16T02:07:37.000Z
+- Trigger: commit
+- Learning: Shared profile links should minimize identity exposure by default. For privacy-sensitive review flows, omit direct identifiers like the person's name unless explicitly required.
+- Context: fix(profile-shares): hide shared profile name
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/app/api/share/[token]/route.ts
+  - src/app/share/[token]/page.tsx
+  - progress.md
