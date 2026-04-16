@@ -340,3 +340,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-16T14:24:25.000Z
+- Trigger: commit
+- Learning: Historical free-text interest submissions need audit and backfill tooling because once the product starts creating real outbound interests on save, older profile records may still lag behind until repaired.
+- Context: chore(scripts): add interest submission audit helpers
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - scripts/check_unlogged_interest_submissions.js
+  - scripts/backfill_interest_submissions.js
+  - progress.md
