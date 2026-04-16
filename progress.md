@@ -322,3 +322,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/api/share/[token]/route.ts
   - src/app/share/[token]/page.tsx
   - progress.md
+## 2026-04-16T02:16:33.000Z
+- Trigger: commit
+- Learning: Saving an interest submission as plain profile text is not enough. When the user supplies a participant number or exact name in profile update, the system should create a corresponding outbound interest record so admin views stay operationally correct.
+- Context: fix(profile): sync submitted interests to outbound records
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/registrations.ts
+  - progress.md

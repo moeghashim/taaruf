@@ -14,6 +14,89 @@ const photoSharingPermission = v.union(
   v.literal("ask_me_first")
 );
 const searchStatus = v.union(v.literal("active"), v.literal("paused"), v.literal("inactive"));
+const openInterestStatuses = new Set(["new", "queued", "active", "deferred"]);
+
+function deriveInterestVisibility(fromGender: "male" | "female", toGender: "male" | "female") {
+  if (fromGender === toGender) {
+    throw new Error("Interest must be between opposite-gender applicants");
+  }
+
+  if (fromGender === "female" && toGender === "male") {
+    return "internal_only" as const;
+  }
+
+  return "admin_actionable" as const;
+}
+
+async function syncSubmittedInterests(ctx: any, registration: any, rawInterestSubmission?: string) {
+  const trimmedSubmission = rawInterestSubmission?.trim();
+  if (!trimmedSubmission) return;
+
+  const registrations = [...(await ctx.db.query("registrations").collect())].sort(
+    (a, b) => a._creationTime - b._creationTime
+  );
+  const registrationNumberMap = new Map(registrations.map((item, index) => [String(index + 1), item] as const));
+
+  const candidateTokens = trimmedSubmission
+    .split(/[\n,;]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  const targetIds = new Set<string>();
+
+  const numericMatches = trimmedSubmission.match(/#?\d+/g) || [];
+  for (const match of numericMatches) {
+    const normalized = match.replace("#", "").trim();
+    const target = registrationNumberMap.get(normalized);
+    if (target) {
+      targetIds.add(String(target._id));
+    }
+  }
+
+  for (const token of candidateTokens) {
+    if (/^#?\d+$/.test(token)) continue;
+    const normalizedToken = token.toLowerCase();
+    const byName = registrations.find(
+      (candidate) => candidate.name.trim().toLowerCase() === normalizedToken
+    );
+    if (byName) {
+      targetIds.add(String(byName._id));
+    }
+  }
+
+  if (!targetIds.size) return;
+
+  const existingInterests = await ctx.db
+    .query("interests")
+    .withIndex("by_fromRegistrationId", (q: any) => q.eq("fromRegistrationId", registration._id))
+    .collect();
+
+  const now = Date.now();
+  for (const targetId of targetIds) {
+    if (String(registration._id) === targetId) continue;
+
+    const targetRegistration = registrations.find((candidate) => String(candidate._id) === targetId);
+    if (!targetRegistration) continue;
+    if (registration.gender === targetRegistration.gender) continue;
+
+    const duplicateOpenInterest = existingInterests.find(
+      (interest: any) => String(interest.toRegistrationId) === targetId && openInterestStatuses.has(interest.status)
+    );
+    if (duplicateOpenInterest) continue;
+
+    await ctx.db.insert("interests", {
+      fromRegistrationId: registration._id,
+      toRegistrationId: targetRegistration._id,
+      source: "platform_submission",
+      status: "new",
+      visibility: deriveInterestVisibility(registration.gender, targetRegistration.gender),
+      adminStatus: "pending",
+      notes: `Submitted via profile update: ${trimmedSubmission}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
 
 function hasCompletedProfile(args: {
   ethnicity?: string;
@@ -310,6 +393,8 @@ export const updateProfile = mutation({
       profileCompletedAt: registration.profileCompletedAt ?? now,
       profileLastUpdatedAt: now,
     });
+
+    await syncSubmittedInterests(ctx, registration, args.interestSubmission);
 
     return registration._id;
   },
