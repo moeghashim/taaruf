@@ -350,3 +350,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - scripts/check_unlogged_interest_submissions.js
   - scripts/backfill_interest_submissions.js
   - progress.md
+## 2026-04-16T18:52:43.000Z
+- Trigger: commit
+- Learning: The registrations homepage needs both approval-status and gender filters available together. Removing one makes day-to-day admin triage slower and harder.
+- Context: fix(admin): restore registration gender filter
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
