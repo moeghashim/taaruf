@@ -63,6 +63,7 @@ export default function AdminDashboard() {
   const [shareIncludeImages, setShareIncludeImages] = useState(false);
   const [creatingShareForId, setCreatingShareForId] = useState<string | null>(null);
   const [shareResult, setShareResult] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   const [newInterest, setNewInterest] = useState({
     fromRegistrationId: "",
     toRegistrationId: "",
@@ -508,10 +509,33 @@ export default function AdminDashboard() {
         throw new Error(data.error || "Failed to create share link");
       }
       setShareResult(data.shareUrl);
+      setShareCopied(false);
     } catch (error) {
       setShareResult(error instanceof Error ? error.message : String(error));
     } finally {
       setCreatingShareForId(null);
+    }
+  }
+
+  async function handleCopyShareLink() {
+    if (!shareResult) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareResult);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = shareResult;
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setShareCopied(true);
+    } catch (error) {
+      setShareResult(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -803,6 +827,14 @@ export default function AdminDashboard() {
                                       <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
                                         <div className="text-xs font-medium text-slate-700">Share link</div>
                                         <input readOnly value={shareResult} className="flex h-10 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700" />
+                                        <div className="flex flex-wrap gap-2">
+                                          <Button type="button" size="sm" onClick={handleCopyShareLink}>
+                                            {shareCopied ? "Copied" : "Copy link"}
+                                          </Button>
+                                          <Button type="button" variant="outline" size="sm" asChild>
+                                            <a href={shareResult} target="_blank" rel="noreferrer">Open link</a>
+                                          </Button>
+                                        </div>
                                       </div>
                                     )}
                                   </div>

@@ -359,3 +359,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-17T02:03:22.000Z
+- Trigger: commit
+- Learning: Mobile users should not need to manually highlight long URLs inside readonly inputs. Admin-generated share links need explicit copy/open actions to work reliably on phones.
+- Context: fix(admin): add mobile-friendly profile share actions
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
