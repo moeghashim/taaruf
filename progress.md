@@ -368,3 +368,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-18T23:00:58.000Z
+- Trigger: commit
+- Learning: Registrations need profile-completion status filtering alongside gender and approval filters so admins can quickly isolate completed or in-progress profiles without manual scanning.
+- Context: feat(admin): add profile status filter
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md

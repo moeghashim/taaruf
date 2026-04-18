@@ -13,6 +13,7 @@ import { api } from "../../convex/_generated/api";
 
 type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
 type GenderFilter = "all" | "male" | "female";
+type ProfileStatusFilter = "all" | "completed" | "in_progress" | "not_started";
 type SearchStatus = "active" | "paused" | "inactive";
 type PairFilterStatus = "all" | "pending" | "requested" | "declined" | "matched";
 type InterestStatus = "new" | "queued" | "active" | "converted_to_match" | "deferred" | "withdrawn" | "declined" | "closed";
@@ -40,6 +41,7 @@ function getInterestAdminStatusBadgeClass(status?: InterestAdminStatus) {
 export default function AdminDashboard() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [genderFilter, setGenderFilter] = useState<GenderFilter>("all");
+  const [profileStatusFilter, setProfileStatusFilter] = useState<ProfileStatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [maleSlots, setMaleSlots] = useState<number | string>("");
   const [femaleSlots, setFemaleSlots] = useState<number | string>("");
@@ -144,9 +146,14 @@ export default function AdminDashboard() {
         return false;
       }
 
+      const profileStatus = reg.profileCompletionStatus || "not_started";
+      if (profileStatusFilter !== "all" && profileStatus !== profileStatusFilter) {
+        return false;
+      }
+
       return true;
     });
-  }, [allRegistrations, filterStatus, genderFilter, searchQuery, waitlistIds]);
+  }, [allRegistrations, filterStatus, genderFilter, profileStatusFilter, searchQuery, waitlistIds]);
 
   const totalCount = allRegistrations.length;
   const approvedCount = allRegistrations.filter((r) => r.status === "approved").length;
@@ -629,6 +636,16 @@ export default function AdminDashboard() {
                       <option value="all">All genders</option>
                       <option value="male">Male</option>
                       <option value="female">Female</option>
+                    </select>
+                    <select
+                      value={profileStatusFilter}
+                      onChange={(e) => setProfileStatusFilter(e.target.value as ProfileStatusFilter)}
+                      className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+                    >
+                      <option value="all">All profile statuses</option>
+                      <option value="completed">Completed</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="not_started">Not started</option>
                     </select>
                     <Button variant="outline" size="sm" onClick={toggleSelectAllFiltered}>
                       {selectedIds.length === filteredRegistrations.length && filteredRegistrations.length > 0 ? "Clear Selection" : "Select All Filtered"}
