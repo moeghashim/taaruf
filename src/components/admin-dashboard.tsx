@@ -61,6 +61,7 @@ export default function AdminDashboard() {
   const [convertingInterestId, setConvertingInterestId] = useState<string | null>(null);
   const [sendingMatchNotificationId, setSendingMatchNotificationId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [profileHistory, setProfileHistory] = useState<string[]>([]);
   const [shareRecipientId, setShareRecipientId] = useState<string>("");
   const [shareIncludeImages, setShareIncludeImages] = useState(false);
   const [creatingShareForId, setCreatingShareForId] = useState<string | null>(null);
@@ -493,6 +494,30 @@ export default function AdminDashboard() {
     }
   }
 
+  function openProfile(registrationId: string) {
+    setProfileHistory([]);
+    setSelectedProfileId(registrationId);
+  }
+
+  function navigateToProfile(registrationId: string) {
+    if (!selectedProfileId || selectedProfileId === registrationId) return;
+    const currentProfileId = selectedProfileId;
+    setProfileHistory((current) => [...current, currentProfileId]);
+    setSelectedProfileId(null);
+    window.setTimeout(() => setSelectedProfileId(registrationId), 0);
+  }
+
+  function goBackProfile() {
+    setProfileHistory((current) => {
+      const nextHistory = [...current];
+      const previousProfileId = nextHistory.pop();
+      if (!previousProfileId) return current;
+      setSelectedProfileId(null);
+      window.setTimeout(() => setSelectedProfileId(previousProfileId), 0);
+      return nextHistory;
+    });
+  }
+
   async function handleCreateProfileShare(ownerRegistrationId: string) {
     if (!shareRecipientId) {
       setShareResult("Please choose who to share the profile with.");
@@ -737,19 +762,27 @@ export default function AdminDashboard() {
                             <td className="py-3 px-4 text-xs">
                               <Dialog
                                 open={selectedProfileId === registration._id}
-                                onOpenChange={(open) => setSelectedProfileId(open ? registration._id : null)}
+                                onOpenChange={(open) => {
+                                  if (!open) {
+                                    setSelectedProfileId(null);
+                                    setProfileHistory([]);
+                                  }
+                                }}
                               >
                                 <button
                                   type="button"
                                   className="text-left text-blue-600 hover:underline"
-                                  onClick={() => setSelectedProfileId(registration._id)}
+                                  onClick={() => openProfile(registration._id)}
                                 >
                                   View profile details
                                 </button>
                                 <DialogContent className="left-auto right-0 top-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-4xl translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-l border-slate-200 p-0 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-right-full data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:rounded-none">
                                   <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-5 pr-16">
                                     <DialogHeader><DialogTitle>{registration.name}</DialogTitle></DialogHeader>
-                                    <div className="mt-3 flex justify-end">
+                                    <div className="mt-3 flex justify-end gap-2">
+                                      {profileHistory.length > 0 ? (
+                                        <Button type="button" variant="outline" size="sm" onClick={goBackProfile}>Back</Button>
+                                      ) : null}
                                       <DialogClose asChild>
                                         <Button type="button" variant="outline" size="sm">Close profile</Button>
                                       </DialogClose>
@@ -868,7 +901,7 @@ export default function AdminDashboard() {
                                               <button
                                                 type="button"
                                                 className="text-left font-medium text-slate-900 hover:text-blue-700 hover:underline"
-                                                onClick={() => setSelectedProfileId(interest.toRegistrationId)}
+                                                onClick={() => navigateToProfile(interest.toRegistrationId)}
                                               >
                                                 #{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}
                                               </button>
@@ -899,7 +932,7 @@ export default function AdminDashboard() {
                                               <button
                                                 type="button"
                                                 className="text-left font-medium text-slate-900 hover:text-blue-700 hover:underline"
-                                                onClick={() => setSelectedProfileId(interest.fromRegistrationId)}
+                                                onClick={() => navigateToProfile(interest.fromRegistrationId)}
                                               >
                                                 #{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"}
                                               </button>

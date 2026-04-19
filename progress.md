@@ -377,3 +377,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-19T15:57:10.000Z
+- Trigger: commit
+- Learning: Profile-to-profile navigation inside the slideout needs explicit history state. Simply swapping the selected profile id can close the current dialog instead of behaving like in-place navigation.
+- Context: fix(admin): restore profile navigation between interests
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
