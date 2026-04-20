@@ -343,6 +343,7 @@ export const updateProfile = mutation({
     photoSharingPermission,
     interestSubmission: v.optional(v.string()),
     interestSubmissionNumbers: v.optional(v.array(v.number())),
+    applicantNotesToAdmin: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const registration = await ctx.db
@@ -382,6 +383,7 @@ export const updateProfile = mutation({
         ? normalizedInterestSubmissionNumbers.join(", ")
         : args.interestSubmission?.trim() || undefined,
       interestSubmissionNumbers: normalizedInterestSubmissionNumbers,
+      applicantNotesToAdmin: args.applicantNotesToAdmin?.trim() || undefined,
       profileCompletionStatus: "completed",
       profileCompletedAt: registration.profileCompletedAt ?? now,
       profileLastUpdatedAt: now,

@@ -115,6 +115,7 @@ export default defineSchema({
     photoSharingPermission: v.optional(photoSharingPermission),
     interestSubmission: v.optional(v.string()),
     interestSubmissionNumbers: v.optional(v.array(v.number())),
+    applicantNotesToAdmin: v.optional(v.string()),
     activeMatchId: v.optional(v.id("matches")),
   })
     .index("by_gender", ["gender"])

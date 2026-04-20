@@ -1003,6 +1003,12 @@ export default function AdminDashboard() {
                                 </DialogTrigger>
                                 <DialogContent className="max-w-lg">
                                   <DialogHeader><DialogTitle>Notes - {registration.name}</DialogTitle></DialogHeader>
+                                  {registration.applicantNotesToAdmin ? (
+                                    <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                                      <div className="font-medium text-slate-900">Applicant note</div>
+                                      <p className="mt-1 whitespace-pre-wrap">{registration.applicantNotesToAdmin}</p>
+                                    </div>
+                                  ) : null}
                                   <textarea
                                     value={editingNotes?.id === registration._id ? editingNotes.notes : (registration.adminNotes || "")}
                                     onChange={(e) => setEditingNotes({ id: registration._id, notes: e.target.value })}

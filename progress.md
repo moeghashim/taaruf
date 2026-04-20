@@ -430,3 +430,16 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-20T01:48:33.000Z
+- Trigger: commit
+- Learning: Applicants sometimes need to pass context directly to organizers outside the structured profile fields. A dedicated applicant-to-admin note field in the profile flow is better than overloading admin-only notes.
+- Context: feat(profile): add applicant notes to admin
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/schema.ts
+  - convex/registrations.ts
+  - src/app/api/profile/[token]/route.ts
+  - src/components/profile-completion-form.tsx
+  - src/components/admin-dashboard.tsx
+  - progress.md

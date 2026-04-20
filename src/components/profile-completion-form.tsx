@@ -42,6 +42,7 @@ interface ProfileData {
   photoSharingPermission: PhotoSharingPermission;
   interestSubmission: string;
   interestSubmissionNumbers: string[];
+  applicantNotesToAdmin: string;
   profileCompletionStatus: string;
 }
 
@@ -188,6 +189,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
           interestSubmissionNumbers: profile.interestSubmissionNumbers
             .map((value) => Number(value))
             .filter((value) => Number.isInteger(value) && value > 0),
+          applicantNotesToAdmin: profile.applicantNotesToAdmin,
         }),
       });
 
@@ -376,6 +378,18 @@ export function ProfileCompletionForm({ token }: { token: string }) {
             ))}
           </div>
           <p className="text-xs text-slate-500">Enter up to 3 applicant numbers. We will create the matching interests automatically.</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="applicantNotesToAdmin">Anything you want the admin team to know?</Label>
+          <textarea
+            id="applicantNotesToAdmin"
+            value={profile.applicantNotesToAdmin}
+            onChange={(e) => setProfile({ ...profile, applicantNotesToAdmin: e.target.value })}
+            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            rows={4}
+            placeholder="Optional note for the admin team"
+          />
         </div>
 
         {message && <p className="text-sm text-green-700">{message}</p>}
