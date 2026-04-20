@@ -398,3 +398,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/api/profile/[token]/route.ts
   - src/components/profile-completion-form.tsx
   - progress.md
+## 2026-04-20T01:31:12.000Z
+- Trigger: commit
+- Learning: Interest cleanup needs an explicit admin delete path. Otherwise stale or mistaken interests linger in the queue and create noise for matching decisions.
+- Context: feat(interests): allow admin deletion
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/interests.ts
+  - src/components/admin-dashboard.tsx
+  - progress.md

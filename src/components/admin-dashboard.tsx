@@ -100,6 +100,7 @@ export default function AdminDashboard() {
   const updateInterestStatus = useMutation(api.interests.updateStatus);
   const updateInterestAdminStatus = useMutation(api.interests.updateAdminStatus);
   const updateInterestNotes = useMutation(api.interests.updateNotes);
+  const deleteInterest = useMutation(api.interests.remove);
   const progressInterestFirst = useMutation(api.interests.progressFirst);
   const convertInterestToMatch = useMutation(api.interests.convertToMatch);
 
@@ -491,6 +492,17 @@ export default function AdminDashboard() {
       setInterestResult(error instanceof Error ? error.message : String(error));
     } finally {
       setSendingMatchNotificationId(null);
+    }
+  }
+
+  async function handleDeleteInterest(interestId: string) {
+    if (!window.confirm("Delete this interest? This cannot be undone.")) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await deleteInterest({ id: interestId as any });
+      setInterestResult("Interest deleted.");
+    } catch (error) {
+      setInterestResult(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -1243,6 +1255,9 @@ export default function AdminDashboard() {
                                               {convertingInterestId === interest._id ? "Converting..." : "Convert to Match"}
                                             </Button>
                                           )}
+                                          <Button variant="destructive" size="sm" onClick={() => handleDeleteInterest(interest._id)}>
+                                            Delete Interest
+                                          </Button>
                                           {interest.matchId && (
                                             <Button variant="secondary" size="sm" onClick={() => handleNotifyMatch(interest.matchId as string)} disabled={sendingMatchNotificationId === interest.matchId}>
                                               {sendingMatchNotificationId === interest.matchId ? "Sending..." : "Notify Match"}

@@ -205,6 +205,25 @@ export const updateRank = mutation({
   },
 });
 
+export const remove = mutation({
+  args: {
+    id: v.id("interests"),
+  },
+  handler: async (ctx, args) => {
+    const interest = await ctx.db.get(args.id);
+    if (!interest) {
+      throw new Error("Interest not found");
+    }
+
+    if (interest.matchId) {
+      throw new Error("Cannot delete an interest that is already linked to a match");
+    }
+
+    await ctx.db.delete(args.id);
+    return args.id;
+  },
+});
+
 export const progressFirst = mutation({
   args: {
     interestId: v.id("interests"),
