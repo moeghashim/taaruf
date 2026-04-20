@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { prepareImageFileForUpload } from "@/lib/image-upload";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -121,24 +122,25 @@ export function ProfileCompletionForm({ token }: { token: string }) {
       const newImages: UploadedImage[] = [];
 
       for (const file of chosenFiles) {
+        const preparedFile = await prepareImageFileForUpload(file);
         const uploadUrl = await generateUploadUrl({});
         const result = await fetch(uploadUrl, {
           method: "POST",
           headers: {
-            "Content-Type": file.type || "application/octet-stream",
+            "Content-Type": preparedFile.type || "application/octet-stream",
           },
-          body: file,
+          body: preparedFile,
         });
 
         if (!result.ok) {
-          throw new Error(`Failed to upload ${file.name}`);
+          throw new Error(`Failed to upload ${preparedFile.name}`);
         }
 
         const { storageId } = await result.json();
         newImages.push({
           storageId,
-          url: URL.createObjectURL(file),
-          name: file.name,
+          url: URL.createObjectURL(preparedFile),
+          name: preparedFile.name,
         });
       }
 

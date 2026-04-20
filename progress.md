@@ -408,3 +408,16 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/interests.ts
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-20T01:34:50.000Z
+- Trigger: commit
+- Learning: Browser image support is not enough for community uploads. HEIC/HEIF needs conversion to a web-safe format at upload time, and unsupported formats need clear user-facing errors.
+- Context: feat(images): support heic uploads with validation
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - package.json
+  - package-lock.json
+  - src/lib/image-upload.ts
+  - src/components/registration-form.tsx
+  - src/components/profile-completion-form.tsx
+  - progress.md
