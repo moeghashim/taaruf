@@ -40,6 +40,7 @@ interface ProfileData {
   shareableBio: string;
   photoSharingPermission: PhotoSharingPermission;
   interestSubmission: string;
+  interestSubmissionNumbers: string[];
   profileCompletionStatus: string;
 }
 
@@ -80,7 +81,10 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         if (!response.ok) {
           throw new Error(data.error || "Failed to load profile");
         }
-        setProfile(data.registration);
+        setProfile({
+          ...data.registration,
+          interestSubmissionNumbers: ((data.registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
+        });
         setUploadedImages(
           ((data.registration.imageStorageIds || []) as string[]).map((storageId, index) => ({
             storageId,
@@ -179,6 +183,9 @@ export function ProfileCompletionForm({ token }: { token: string }) {
           shareableBio: profile.shareableBio,
           photoSharingPermission: profile.photoSharingPermission,
           interestSubmission: profile.interestSubmission,
+          interestSubmissionNumbers: profile.interestSubmissionNumbers
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0),
         }),
       });
 
@@ -340,19 +347,33 @@ export function ProfileCompletionForm({ token }: { token: string }) {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="interestSubmission">Do you have any interests from a previous event that you would like us to follow up on?</Label>
-          <textarea
-            id="interestSubmission"
-            value={profile.interestSubmission}
-            onChange={(e) => setProfile({ ...profile, interestSubmission: e.target.value })}
-            placeholder="Please provide their participant number or name."
-            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            rows={5}
-          />
-          <p className="text-xs text-slate-500">
-            Please provide their participant number or name.
-          </p>
+        <div className="space-y-3">
+          <Label>Do you have any interests from a previous event that you would like us to follow up on?</Label>
+          <div className="grid gap-4 md:grid-cols-3">
+            {[0, 1, 2].map((index) => (
+              <div key={`interest-number-${index}`} className="space-y-2">
+                <Label htmlFor={`interestSubmissionNumber${index + 1}`}>Applicant number {index + 1}</Label>
+                <Input
+                  id={`interestSubmissionNumber${index + 1}`}
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  value={profile.interestSubmissionNumbers[index] || ""}
+                  onChange={(e) => {
+                    const nextNumbers = [...profile.interestSubmissionNumbers];
+                    nextNumbers[index] = e.target.value;
+                    setProfile({
+                      ...profile,
+                      interestSubmissionNumbers: nextNumbers,
+                      interestSubmission: nextNumbers.filter(Boolean).join(", "),
+                    });
+                  }}
+                  placeholder="e.g. 137"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500">Enter up to 3 applicant numbers. We will create the matching interests automatically.</p>
         </div>
 
         {message && <p className="text-sm text-green-700">{message}</p>}

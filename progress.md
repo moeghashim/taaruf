@@ -386,3 +386,15 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-20T01:28:48.000Z
+- Trigger: commit
+- Learning: Previous-event interests are much more reliable when collected as structured applicant numbers instead of free text. That lets the backend create outbound interests deterministically and avoids fragile parsing.
+- Context: feat(profile): use applicant number fields for prior interests
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/schema.ts
+  - convex/registrations.ts
+  - src/app/api/profile/[token]/route.ts
+  - src/components/profile-completion-form.tsx
+  - progress.md

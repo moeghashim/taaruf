@@ -16,6 +16,10 @@ const photoSharingPermission = v.union(
 const searchStatus = v.union(v.literal("active"), v.literal("paused"), v.literal("inactive"));
 const openInterestStatuses = new Set(["new", "queued", "active", "deferred"]);
 
+function normalizeInterestSubmissionNumbers(values?: number[]) {
+  return [...new Set((values || []).filter((value) => Number.isInteger(value) && value > 0))].slice(0, 3);
+}
+
 function deriveInterestVisibility(fromGender: "male" | "female", toGender: "male" | "female") {
   if (fromGender === toGender) {
     throw new Error("Interest must be between opposite-gender applicants");
@@ -28,39 +32,21 @@ function deriveInterestVisibility(fromGender: "male" | "female", toGender: "male
   return "admin_actionable" as const;
 }
 
-async function syncSubmittedInterests(ctx: any, registration: any, rawInterestSubmission?: string) {
-  const trimmedSubmission = rawInterestSubmission?.trim();
-  if (!trimmedSubmission) return;
+async function syncSubmittedInterestNumbers(ctx: any, registration: any, interestSubmissionNumbers?: number[]) {
+  const normalizedNumbers = normalizeInterestSubmissionNumbers(interestSubmissionNumbers);
+  if (!normalizedNumbers.length) return;
 
   const registrations = [...(await ctx.db.query("registrations").collect())].sort(
     (a, b) => a._creationTime - b._creationTime
   );
   const registrationNumberMap = new Map(registrations.map((item, index) => [String(index + 1), item] as const));
 
-  const candidateTokens = trimmedSubmission
-    .split(/[\n,;]+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
-
   const targetIds = new Set<string>();
 
-  const numericMatches = trimmedSubmission.match(/#?\d+/g) || [];
-  for (const match of numericMatches) {
-    const normalized = match.replace("#", "").trim();
-    const target = registrationNumberMap.get(normalized);
+  for (const submittedNumber of normalizedNumbers) {
+    const target = registrationNumberMap.get(String(submittedNumber));
     if (target) {
       targetIds.add(String(target._id));
-    }
-  }
-
-  for (const token of candidateTokens) {
-    if (/^#?\d+$/.test(token)) continue;
-    const normalizedToken = token.toLowerCase();
-    const byName = registrations.find(
-      (candidate) => candidate.name.trim().toLowerCase() === normalizedToken
-    );
-    if (byName) {
-      targetIds.add(String(byName._id));
     }
   }
 
@@ -91,7 +77,7 @@ async function syncSubmittedInterests(ctx: any, registration: any, rawInterestSu
       status: "new",
       visibility: deriveInterestVisibility(registration.gender, targetRegistration.gender),
       adminStatus: "pending",
-      notes: `Submitted via profile update: ${trimmedSubmission}`,
+      notes: `Submitted via profile update: ${normalizedNumbers.join(", ")}`,
       createdAt: now,
       updatedAt: now,
     });
@@ -151,6 +137,7 @@ export const create = mutation({
     shareableBio: v.optional(v.string()),
     photoSharingPermission: v.optional(photoSharingPermission),
     interestSubmission: v.optional(v.string()),
+    interestSubmissionNumbers: v.optional(v.array(v.number())),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -187,6 +174,7 @@ export const create = mutation({
       shareableBio: args.shareableBio,
       photoSharingPermission: args.photoSharingPermission,
       interestSubmission: args.interestSubmission?.trim() || undefined,
+      interestSubmissionNumbers: normalizeInterestSubmissionNumbers(args.interestSubmissionNumbers),
     });
   },
 });
@@ -354,6 +342,7 @@ export const updateProfile = mutation({
     shareableBio: v.string(),
     photoSharingPermission,
     interestSubmission: v.optional(v.string()),
+    interestSubmissionNumbers: v.optional(v.array(v.number())),
   },
   handler: async (ctx, args) => {
     const registration = await ctx.db
@@ -378,6 +367,7 @@ export const updateProfile = mutation({
 
     const now = Date.now();
 
+    const normalizedInterestSubmissionNumbers = normalizeInterestSubmissionNumbers(args.interestSubmissionNumbers);
     await ctx.db.patch(registration._id, {
       ethnicity: args.ethnicity.trim(),
       imageStorageIds: args.imageStorageIds,
@@ -388,13 +378,16 @@ export const updateProfile = mutation({
       spouseRequirement3: args.spouseRequirement3.trim(),
       shareableBio: args.shareableBio.trim(),
       photoSharingPermission: args.photoSharingPermission,
-      interestSubmission: args.interestSubmission?.trim() || undefined,
+      interestSubmission: normalizedInterestSubmissionNumbers.length
+        ? normalizedInterestSubmissionNumbers.join(", ")
+        : args.interestSubmission?.trim() || undefined,
+      interestSubmissionNumbers: normalizedInterestSubmissionNumbers,
       profileCompletionStatus: "completed",
       profileCompletedAt: registration.profileCompletedAt ?? now,
       profileLastUpdatedAt: now,
     });
 
-    await syncSubmittedInterests(ctx, registration, args.interestSubmission);
+    await syncSubmittedInterestNumbers(ctx, registration, normalizedInterestSubmissionNumbers);
 
     return registration._id;
   },

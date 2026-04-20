@@ -24,6 +24,11 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
     const imageUrls = imageStorageIds.length
       ? await convexClient.query(api.registrations.getImageUrls, { storageIds: imageStorageIds })
       : [];
+    const fallbackInterestSubmissionNumbers = (registration.interestSubmission || "")
+      .match(/\d+/g)
+      ?.slice(0, 3)
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0) || [];
 
     return NextResponse.json({
       registration: {
@@ -43,6 +48,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
         shareableBio: registration.shareableBio || "",
         photoSharingPermission: registration.photoSharingPermission || "",
         interestSubmission: registration.interestSubmission || "",
+        interestSubmissionNumbers: registration.interestSubmissionNumbers || fallbackInterestSubmissionNumbers,
         profileCompletionStatus: registration.profileCompletionStatus || "not_started",
       },
     });
@@ -72,6 +78,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       shareableBio: body.shareableBio,
       photoSharingPermission: body.photoSharingPermission,
       interestSubmission: body.interestSubmission,
+      interestSubmissionNumbers: body.interestSubmissionNumbers,
     });
 
     return NextResponse.json({ success: true });
