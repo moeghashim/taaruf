@@ -421,3 +421,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/components/registration-form.tsx
   - src/components/profile-completion-form.tsx
   - progress.md
+## 2026-04-20T01:43:08.000Z
+- Trigger: commit
+- Learning: Orphaned interest records can survive after related registrations are gone. The admin dashboard should hide those broken rows instead of rendering confusing "Unknown" pairs.
+- Context: fix(admin): hide orphaned interests in dashboard
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md

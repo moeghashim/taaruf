@@ -88,7 +88,10 @@ export default function AdminDashboard() {
   const slotLimits = useQuery(api.settings.getSlotLimits);
   const interestsQuery = useQuery(api.interests.getAll);
   const interests = useMemo(
-    () => [...(interestsQuery || [])].sort((a, b) => b.updatedAt - a.updatedAt),
+    () =>
+      [...(interestsQuery || [])]
+        .filter((interest) => interest.fromRegistration && interest.toRegistration)
+        .sort((a, b) => b.updatedAt - a.updatedAt),
     [interestsQuery]
   );
 
