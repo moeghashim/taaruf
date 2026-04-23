@@ -16,6 +16,7 @@ type GenderFilter = "all" | "male" | "female";
 type ProfileStatusFilter = "all" | "completed" | "in_progress" | "not_started";
 type SearchStatus = "active" | "paused" | "inactive";
 type PairFilterStatus = "all" | "pending" | "requested" | "declined" | "matched";
+type MainTab = "registrations" | "interests" | "settings";
 type InterestStatus = "new" | "queued" | "active" | "converted_to_match" | "deferred" | "withdrawn" | "declined" | "closed";
 type InterestAdminStatus = "pending" | "requested" | "declined" | "matched";
 
@@ -38,7 +39,14 @@ function getInterestAdminStatusBadgeClass(status?: InterestAdminStatus) {
   }
 }
 
+function getPriorityBadgeClass(status: "requested" | "matched") {
+  return status === "matched"
+    ? "bg-green-100 text-green-800 border-green-200"
+    : "bg-blue-100 text-blue-800 border-blue-200";
+}
+
 export default function AdminDashboard() {
+  const [activeTab, setActiveTab] = useState<MainTab>("registrations");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [genderFilter, setGenderFilter] = useState<GenderFilter>("all");
   const [profileStatusFilter, setProfileStatusFilter] = useState<ProfileStatusFilter>("all");
@@ -83,6 +91,10 @@ export default function AdminDashboard() {
   const registrationNumberMap = useMemo(
     () =>
       new Map(allRegistrations.map((registration, index) => [registration._id, index + 1] as const)),
+    [allRegistrations]
+  );
+  const registrationById = useMemo(
+    () => new Map(allRegistrations.map((registration) => [registration._id, registration] as const)),
     [allRegistrations]
   );
   const slotLimits = useQuery(api.settings.getSlotLimits);
@@ -192,6 +204,17 @@ export default function AdminDashboard() {
       linkedMatches: NonNullable<(typeof interests)[number]["match"]>[];
       latestUpdatedAt: number;
       derivedStatus: "matched" | "requested" | "declined" | "pending";
+      isMutual: boolean;
+      activityAlerts: Array<{
+        registrationId: string;
+        registrationNumber: number | string;
+        registrationName: string;
+        items: Array<{
+          status: "requested" | "matched";
+          otherRegistrationName: string;
+          otherRegistrationNumber: number | string;
+        }>;
+      }>;
       searchHaystack: string;
     }>();
 
@@ -199,8 +222,8 @@ export default function AdminDashboard() {
       const pairIds = [interest.fromRegistrationId, interest.toRegistrationId].sort();
       const key = pairIds.join("::");
       const existing = pairMap.get(key);
-      const registrationA = allRegistrations.find((registration) => registration._id === pairIds[0]) || null;
-      const registrationB = allRegistrations.find((registration) => registration._id === pairIds[1]) || null;
+      const registrationA = registrationById.get(pairIds[0]) || null;
+      const registrationB = registrationById.get(pairIds[1]) || null;
 
       if (existing) {
         existing.interests.push(interest);
@@ -219,15 +242,26 @@ export default function AdminDashboard() {
         linkedMatches: interest.match ? [interest.match] : [],
         latestUpdatedAt: interest.updatedAt,
         derivedStatus: "pending",
+        isMutual: false,
+        activityAlerts: [],
         searchHaystack: "",
       });
     }
 
     const query = interestSearchQuery.trim().toLowerCase();
 
-    return [...pairMap.values()]
+    const allPairs = [...pairMap.values()]
       .map((pair) => {
         pair.interests.sort((a, b) => b.updatedAt - a.updatedAt);
+
+        const [registrationA, registrationB] = pair.registrations;
+        pair.isMutual = pair.interests.some(
+          (interest) =>
+            interest.fromRegistrationId === registrationA?._id && interest.toRegistrationId === registrationB?._id
+        ) && pair.interests.some(
+          (interest) =>
+            interest.fromRegistrationId === registrationB?._id && interest.toRegistrationId === registrationA?._id
+        );
 
         const hasDeclined =
           pair.interests.some((interest) => (interest.adminStatus || "pending") === "declined") ||
@@ -250,7 +284,37 @@ export default function AdminDashboard() {
           .toLowerCase();
 
         return pair;
-      })
+      });
+
+    for (const pair of allPairs) {
+      pair.activityAlerts = pair.registrationIds.map((registrationId) => {
+        const typedRegistrationId = registrationId as typeof allRegistrations[number]["_id"];
+        const registration = registrationById.get(typedRegistrationId);
+        const otherPairs = allPairs.filter(
+          (otherPair) =>
+            otherPair.key !== pair.key &&
+            otherPair.registrationIds.includes(registrationId) &&
+            (otherPair.derivedStatus === "requested" || otherPair.derivedStatus === "matched")
+        );
+
+        return {
+          registrationId: typedRegistrationId,
+          registrationNumber: registration ? registrationNumberMap.get(registration._id) ?? "?" : "?",
+          registrationName: registration?.name || "Unknown",
+          items: otherPairs.slice(0, 3).map((otherPair) => {
+            const otherRegistrationId = otherPair.registrationIds.find((id) => id !== registrationId) || registrationId;
+            const otherRegistration = registrationById.get(otherRegistrationId as typeof allRegistrations[number]["_id"]);
+            return {
+              status: otherPair.derivedStatus as "requested" | "matched",
+              otherRegistrationName: otherRegistration?.name || "Unknown",
+              otherRegistrationNumber: otherRegistration ? registrationNumberMap.get(otherRegistration._id) ?? "?" : "?",
+            };
+          }),
+        };
+      });
+    }
+
+    return allPairs
       .filter((pair) => {
         if (interestFilterStatus !== "all" && pair.derivedStatus !== interestFilterStatus) {
           return false;
@@ -263,7 +327,7 @@ export default function AdminDashboard() {
         return true;
       })
       .sort((a, b) => b.latestUpdatedAt - a.latestUpdatedAt);
-  }, [allRegistrations, interestFilterStatus, interestSearchQuery, interests, registrationNumberMap]);
+  }, [interestFilterStatus, interestSearchQuery, interests, registrationById, registrationNumberMap]);
 
   function toggleSelection(registrationId: string) {
     setSelectedIds((current) =>
@@ -510,8 +574,10 @@ export default function AdminDashboard() {
   }
 
   function openProfile(registrationId: string) {
+    setActiveTab("registrations");
     setProfileHistory([]);
-    setSelectedProfileId(registrationId);
+    setSelectedProfileId(null);
+    window.setTimeout(() => setSelectedProfileId(registrationId), 0);
   }
 
   function navigateToProfile(registrationId: string) {
@@ -628,7 +694,7 @@ export default function AdminDashboard() {
           <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-pink-600">Females</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold text-pink-600">{femaleCount}</div></CardContent></Card>
         </div>
 
-        <Tabs defaultValue="registrations" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as MainTab)} className="space-y-6">
           <TabsList className="bg-slate-200 text-slate-700">
             <TabsTrigger
               value="registrations"
@@ -1192,19 +1258,46 @@ export default function AdminDashboard() {
                                   <div className="space-y-3">
                                     <div>
                                       <p className="text-sm font-semibold text-slate-900">
-                                        #{registrationANumber} {registrationA?.name || "Unknown"} and #{registrationBNumber} {registrationB?.name || "Unknown"}
+                                        <button type="button" className="hover:underline" onClick={() => registrationA && openProfile(registrationA._id)}>
+                                          #{registrationANumber} {registrationA?.name || "Unknown"}
+                                        </button>
+                                        {" "}and{" "}
+                                        <button type="button" className="hover:underline" onClick={() => registrationB && openProfile(registrationB._id)}>
+                                          #{registrationBNumber} {registrationB?.name || "Unknown"}
+                                        </button>
                                       </p>
                                       <p className="text-xs text-slate-500">
                                         {registrationA?.email || "-"} • {registrationB?.email || "-"}
                                       </p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                      <Badge variant="outline">{directionLabel}</Badge>
+                                      <Badge variant="outline">{pair.isMutual ? "Mutual interest" : directionLabel}</Badge>
                                       <Badge variant="outline">{pair.interests.length} {pair.interests.length === 1 ? "interest" : "interests"}</Badge>
                                       <Badge variant={pair.derivedStatus === "declined" ? "destructive" : "outline"}>
                                         {titleizeValue(pair.derivedStatus)}
                                       </Badge>
+                                      <Button variant="outline" size="sm" onClick={() => registrationA && openProfile(registrationA._id)}>
+                                        Open #{registrationANumber}
+                                      </Button>
+                                      <Button variant="outline" size="sm" onClick={() => registrationB && openProfile(registrationB._id)}>
+                                        Open #{registrationBNumber}
+                                      </Button>
                                     </div>
+                                    {pair.activityAlerts.some((alert) => alert.items.length > 0) ? (
+                                      <div className="flex flex-col gap-2">
+                                        {pair.activityAlerts.map((alert) =>
+                                          alert.items.length ? (
+                                            <div key={alert.registrationId} className="flex flex-wrap gap-2 text-xs">
+                                              {alert.items.map((item, index) => (
+                                                <Badge key={`${alert.registrationId}-${item.status}-${item.otherRegistrationNumber}-${index}`} className={getPriorityBadgeClass(item.status)}>
+                                                  #{alert.registrationNumber} {alert.registrationName} already {item.status} with #{item.otherRegistrationNumber} {item.otherRegistrationName}
+                                                </Badge>
+                                              ))}
+                                            </div>
+                                          ) : null
+                                        )}
+                                      </div>
+                                    ) : null}
                                   </div>
                                   <div className="text-xs text-slate-500">
                                     Last updated {new Date(pair.latestUpdatedAt).toLocaleString()}
@@ -1217,7 +1310,13 @@ export default function AdminDashboard() {
                                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                         <div className="space-y-2">
                                           <div className="font-medium text-slate-900">
-                                            #{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"} → #{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}
+                                            <button type="button" className="hover:underline" onClick={() => interest.fromRegistration && openProfile(interest.fromRegistration._id)}>
+                                              #{registrationNumberMap.get(interest.fromRegistrationId)} {interest.fromRegistration?.name || "Unknown"}
+                                            </button>
+                                            {" "}→{" "}
+                                            <button type="button" className="hover:underline" onClick={() => interest.toRegistration && openProfile(interest.toRegistration._id)}>
+                                              #{registrationNumberMap.get(interest.toRegistrationId)} {interest.toRegistration?.name || "Unknown"}
+                                            </button>
                                           </div>
                                           <div className="flex flex-wrap gap-2 text-xs">
                                             <Badge variant="outline">Status: {titleizeValue(interest.adminStatus || "pending")}</Badge>

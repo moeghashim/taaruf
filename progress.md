@@ -443,3 +443,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/components/profile-completion-form.tsx
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-23T02:42:41.000Z
+- Trigger: commit
+- Learning: The interests queue works better when admins can reason about a pair once, jump straight into either profile, and immediately see if either applicant is already requested or matched elsewhere.
+- Context: feat(admin): improve interest queue triage
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin-dashboard.tsx
+  - progress.md
