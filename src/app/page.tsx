@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { SlotCounter } from "@/components/slot-counter";
 
 export default function Home() {
   return (
@@ -32,6 +33,8 @@ export default function Home() {
               </Button>
             </Link>
           </div>
+
+          <SlotCounter />
 
           {/* About Us */}
           <div className="max-w-3xl mx-auto mt-16 text-left space-y-6">

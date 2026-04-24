@@ -29,6 +29,7 @@ interface RegistrationFormData {
   describeYourself: string;
   lookingFor: string;
   backgroundCheckConsent: boolean;
+  promoCode: string;
 }
 
 export function RegistrationForm() {
@@ -48,6 +49,7 @@ export function RegistrationForm() {
       describeYourself: "",
       lookingFor: "",
       backgroundCheckConsent: false,
+      promoCode: "",
     } as RegistrationFormData,
     onSubmit: async ({ value }) => {
       setIsSubmitting(true);
@@ -66,6 +68,8 @@ export function RegistrationForm() {
             phone: value.phone,
             describeYourself: value.describeYourself || undefined,
             lookingFor: value.lookingFor || undefined,
+            backgroundCheckConsent: value.backgroundCheckConsent,
+            promoCode: value.promoCode || undefined,
           }),
         });
 
@@ -453,6 +457,24 @@ export function RegistrationForm() {
           )}
         </form.Field>
 
+        {/* Promo Code */}
+        <form.Field name="promoCode">
+          {(field) => (
+            <div className="space-y-2">
+              <Label htmlFor={field.name}>Promo Code</Label>
+              <Input
+                id={field.name}
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="Enter promo code"
+                className="h-10"
+              />
+            </div>
+          )}
+        </form.Field>
+
         {/* Waitlist Info */}
         {(isMaleFull || isFemaleFull) && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -473,13 +495,16 @@ export function RegistrationForm() {
             className="w-full h-11 text-base"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Redirecting to payment..." : "Proceed to Payment ($10)"}
+            {isSubmitting
+              ? "Submitting..."
+              : form.state.values.promoCode.trim().toLowerCase() === "moesmoes"
+                ? "Register for Free"
+                : "Proceed to Payment ($10)"}
           </Button>
         </div>
 
         <p className="text-xs text-slate-500 text-center">
-          You will be redirected to Stripe to complete your $10 registration payment.
-          Have a promo code? You can enter it at checkout.
+          You will be redirected to Stripe to complete your $10 registration payment unless a valid promo code covers the full registration.
         </p>
       </form>
     </Card>

@@ -1,6 +1,10 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const REGISTRATION_LIST_LIMIT = 500;
+const STATS_READ_LIMIT = 1000;
+const ACTIVE_STATUSES = ["pending", "approved", "waitlisted"] as const;
+
 export const create = mutation({
   args: {
     name: v.string(),
@@ -15,6 +19,8 @@ export const create = mutation({
     lookingFor: v.optional(v.string()),
     backgroundCheck: v.optional(v.string()),
     stripeSessionId: v.optional(v.string()),
+    amountPaid: v.optional(v.number()),
+    promoCode: v.optional(v.string()),
     paymentStatus: v.optional(
       v.union(v.literal("pending"), v.literal("paid"), v.literal("failed"))
     ),
@@ -39,6 +45,8 @@ export const create = mutation({
       lookingFor: args.lookingFor,
       backgroundCheck: args.backgroundCheck,
       stripeSessionId: args.stripeSessionId,
+      amountPaid: args.amountPaid,
+      promoCode: args.promoCode,
       paymentStatus: args.paymentStatus ?? "pending",
       status: args.status ?? "pending",
       createdAt: Date.now(),
@@ -51,19 +59,32 @@ export const create = mutation({
 export const getAll = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("registrations").collect();
+    return await ctx.db.query("registrations").order("desc").take(REGISTRATION_LIST_LIMIT);
   },
 });
 
 export const getStats = query({
   args: {},
   handler: async (ctx) => {
-    // Count all non-rejected registrations per gender (determines slot capacity)
-    const allRegistrations = await ctx.db.query("registrations").collect();
-    const nonRejected = allRegistrations.filter((r) => r.status !== "rejected");
+    const countForGender = async (gender: "male" | "female") => {
+      const batches = await Promise.all(
+        ACTIVE_STATUSES.map((status) =>
+          ctx.db
+            .query("registrations")
+            .withIndex("by_status_gender", (q) =>
+              q.eq("status", status).eq("gender", gender)
+            )
+            .take(STATS_READ_LIMIT)
+        )
+      );
 
-    const maleCount = nonRejected.filter((r) => r.gender === "male").length;
-    const femaleCount = nonRejected.filter((r) => r.gender === "female").length;
+      return batches.reduce((count, registrations) => count + registrations.length, 0);
+    };
+
+    const [maleCount, femaleCount] = await Promise.all([
+      countForGender("male"),
+      countForGender("female"),
+    ]);
 
     // Get slot limits from settings
     const maleSetting = await ctx.db

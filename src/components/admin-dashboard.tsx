@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { Id } from "../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,7 @@ function formatDate(timestamp: number): string {
 
 export default function AdminDashboard() {
   type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
+  type RegistrationId = Id<"registrations">;
 
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [maleSlots, setMaleSlots] = useState<number | string>("");
@@ -31,9 +33,10 @@ export default function AdminDashboard() {
   const [filterGender, setFilterGender] = useState<"all" | "male" | "female">("all");
   const [fixingPayments, setFixingPayments] = useState(false);
   const [fixResult, setFixResult] = useState<string | null>(null);
-  const [editingNotes, setEditingNotes] = useState<{ id: string; notes: string } | null>(null);
+  const [editingNotes, setEditingNotes] = useState<{ id: RegistrationId; notes: string } | null>(null);
 
-  const allRegistrations = useQuery(api.registrations.getAll) || [];
+  const registrations = useQuery(api.registrations.getAll);
+  const allRegistrations = useMemo(() => registrations ?? [], [registrations]);
   const slotLimits = useQuery(api.settings.getSlotLimits);
 
   const deleteRegistration = useMutation(api.registrations.deleteRegistration);
@@ -41,20 +44,30 @@ export default function AdminDashboard() {
   const updateStatus = useMutation(api.registrations.updateStatus);
   const updateAdminNotes = useMutation(api.registrations.updateAdminNotes);
 
-  if (slotLimits && !maleSlots && !femaleSlots) {
-    setMaleSlots(slotLimits.maleSlots || 40);
-    setFemaleSlots(slotLimits.femaleSlots || 40);
-  }
+  useEffect(() => {
+    if (slotLimits && maleSlots === "" && femaleSlots === "") {
+      setMaleSlots(slotLimits.maleSlots || 40);
+      setFemaleSlots(slotLimits.femaleSlots || 40);
+    }
+  }, [femaleSlots, maleSlots, slotLimits]);
 
   const maleLimit = slotLimits?.maleSlots || 40;
   const femaleLimit = slotLimits?.femaleSlots || 40;
 
-  const nonRejectedMales = [...allRegistrations]
-    .filter((r) => r.gender === "male" && r.status !== "rejected")
-    .sort((a, b) => a._creationTime - b._creationTime);
-  const nonRejectedFemales = [...allRegistrations]
-    .filter((r) => r.gender === "female" && r.status !== "rejected")
-    .sort((a, b) => a._creationTime - b._creationTime);
+  const nonRejectedMales = useMemo(
+    () =>
+      [...allRegistrations]
+        .filter((r) => r.gender === "male" && r.status !== "rejected")
+        .sort((a, b) => a._creationTime - b._creationTime),
+    [allRegistrations]
+  );
+  const nonRejectedFemales = useMemo(
+    () =>
+      [...allRegistrations]
+        .filter((r) => r.gender === "female" && r.status !== "rejected")
+        .sort((a, b) => a._creationTime - b._creationTime),
+    [allRegistrations]
+  );
 
   const waitlistIds = useMemo(() => {
     const ids = new Set<string>();
@@ -104,11 +117,10 @@ export default function AdminDashboard() {
   const maleCount = allRegistrations.filter((r) => r.gender === "male").length;
   const femaleCount = allRegistrations.filter((r) => r.gender === "female").length;
 
-  const handleDeleteRegistration = async (registrationId: string) => {
+  const handleDeleteRegistration = async (registrationId: RegistrationId) => {
     if (window.confirm("Are you sure you want to delete this registration?")) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await deleteRegistration({ id: registrationId as any });
+        await deleteRegistration({ id: registrationId });
       } catch (error) {
         console.error("Error deleting registration:", error);
         alert("Failed to delete registration");
@@ -116,11 +128,10 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleStatusUpdate = async (registrationId: string, newStatus: "approved" | "rejected") => {
+  const handleStatusUpdate = async (registrationId: RegistrationId, newStatus: "approved" | "rejected") => {
     setUpdatingStatus(registrationId);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await updateStatus({ id: registrationId as any, status: newStatus });
+      await updateStatus({ id: registrationId, status: newStatus });
     } catch (error) {
       console.error("Error updating status:", error);
       alert("Failed to update status");
@@ -130,11 +141,24 @@ export default function AdminDashboard() {
   };
 
   const handleSaveSlots = async () => {
+    const nextMaleSlots = Number(maleSlots);
+    const nextFemaleSlots = Number(femaleSlots);
+
+    if (
+      !Number.isInteger(nextMaleSlots) ||
+      !Number.isInteger(nextFemaleSlots) ||
+      nextMaleSlots < 1 ||
+      nextFemaleSlots < 1
+    ) {
+      alert("Slot limits must be positive whole numbers");
+      return;
+    }
+
     setSavingSlots(true);
     try {
       await updateSlotLimits({
-        maleSlots: Number(maleSlots),
-        femaleSlots: Number(femaleSlots),
+        maleSlots: nextMaleSlots,
+        femaleSlots: nextFemaleSlots,
       });
       alert("Slot limits updated successfully");
     } catch (error) {
@@ -160,6 +184,7 @@ export default function AdminDashboard() {
       "Describe Yourself",
       "Looking For",
       "Payment Status",
+      "Promo Code",
       "Date",
     ];
     const rows = filteredRegistrations.map((r) => [
@@ -176,6 +201,7 @@ export default function AdminDashboard() {
       (r.describeYourself || "").replace(/"/g, '""'),
       (r.lookingFor || "").replace(/"/g, '""'),
       r.paymentStatus || "",
+      r.promoCode || "",
       r._creationTime ? new Date(r._creationTime).toLocaleDateString() : "",
     ]);
     const csv = [
@@ -194,8 +220,7 @@ export default function AdminDashboard() {
   const handleSaveNotes = async () => {
     if (!editingNotes) return;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await updateAdminNotes({ id: editingNotes.id as any, adminNotes: editingNotes.notes });
+      await updateAdminNotes({ id: editingNotes.id, adminNotes: editingNotes.notes });
       setEditingNotes(null);
     } catch (error) {
       console.error("Failed to save notes:", error);
@@ -544,18 +569,25 @@ export default function AdminDashboard() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-xs">
-                          <Badge
-                            variant="outline"
-                            className={
-                              registration.paymentStatus === "paid"
-                                ? "bg-green-100 text-green-800"
-                                : registration.paymentStatus === "failed"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                            }
-                          >
-                            {registration.paymentStatus || "-"}
-                          </Badge>
+                          <div className="flex gap-1 flex-wrap">
+                            <Badge
+                              variant="outline"
+                              className={
+                                registration.paymentStatus === "paid"
+                                  ? "bg-green-100 text-green-800"
+                                  : registration.paymentStatus === "failed"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }
+                            >
+                              {registration.paymentStatus || "-"}
+                            </Badge>
+                            {registration.promoCode && (
+                              <Badge variant="outline" className="bg-emerald-50 text-emerald-800">
+                                {registration.promoCode}
+                              </Badge>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-4 text-xs">
                           {registration._creationTime ? formatDate(registration._creationTime) : "-"}

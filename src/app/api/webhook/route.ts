@@ -26,10 +26,8 @@ export async function POST(request: NextRequest) {
       const stripe = getStripe();
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err) {
-      // If signature fails, it may be the other webhook payload type (snapshot vs thin).
-      // Return 200 to prevent Stripe from retrying endlessly.
       console.error("Webhook signature verification failed:", err instanceof Error ? err.message : err);
-      return NextResponse.json({ received: true, skipped: "signature_mismatch" });
+      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
     // Only process checkout session events

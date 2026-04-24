@@ -36,6 +36,8 @@ STRIPE_SECRET_KEY=            # From Stripe Dashboard > API Keys
 STRIPE_WEBHOOK_SECRET=        # From Stripe Dashboard > Webhooks
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=  # From Stripe Dashboard
 ADMIN_PASSWORD=               # Password for /admin dashboard
+RESEND_API_KEY=               # From Resend, for confirmation emails
+NEXT_PUBLIC_APP_URL=          # Public app URL, e.g. http://localhost:3000
 ```
 
 ### 4. Run development server

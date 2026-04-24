@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { api } from "../../../../convex/_generated/api";
 
+const FREE_PROMO_CODE = "moesmoes";
+
+function isGender(value: unknown): value is "male" | "female" {
+  return value === "male" || value === "female";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -17,19 +23,96 @@ export async function POST(request: NextRequest) {
       phone,
       describeYourself,
       lookingFor,
+      backgroundCheckConsent,
+      promoCode,
     } = body;
 
-    // Validate required fields
-    if (!name || !age || !gender || !maritalStatus || !education || !job || !email || !phone) {
+    const parsedAge = Number(age);
+    const normalizedPromoCode =
+      typeof promoCode === "string" ? promoCode.trim().toLowerCase() : "";
+
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      !Number.isInteger(parsedAge) ||
+      parsedAge < 18 ||
+      parsedAge > 99 ||
+      !isGender(gender) ||
+      typeof maritalStatus !== "string" ||
+      !maritalStatus.trim() ||
+      typeof education !== "string" ||
+      !education.trim() ||
+      typeof job !== "string" ||
+      !job.trim() ||
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof phone !== "string" ||
+      !phone.trim() ||
+      backgroundCheckConsent !== true
+    ) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing or invalid required fields" },
         { status: 400 }
       );
     }
 
+    if (normalizedPromoCode && normalizedPromoCode !== FREE_PROMO_CODE) {
+      return NextResponse.json(
+        { error: "Invalid promo code" },
+        { status: 400 }
+      );
+    }
+
+    const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
+    if (!convexUrl) {
+      return NextResponse.json(
+        { error: "Convex URL not configured" },
+        { status: 500 }
+      );
+    }
+    const { ConvexHttpClient } = await import("convex/browser");
+    const convexClient = new ConvexHttpClient(convexUrl);
+
+    const stats = await convexClient.query(api.registrations.getStats);
+    const isFull = gender === "male"
+      ? stats.maleCount >= stats.maleLimit
+      : stats.femaleCount >= stats.femaleLimit;
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
       || "http://localhost:3000";
+
+    const registrationArgs = {
+      name: name.trim(),
+      age: parsedAge,
+      gender,
+      maritalStatus,
+      education,
+      job: job.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      describeYourself: typeof describeYourself === "string" && describeYourself.trim()
+        ? describeYourself.trim()
+        : undefined,
+      lookingFor: typeof lookingFor === "string" && lookingFor.trim()
+        ? lookingFor.trim()
+        : undefined,
+      backgroundCheck: "consented",
+      status: isFull ? "waitlisted" as const : "pending" as const,
+    };
+
+    if (normalizedPromoCode === FREE_PROMO_CODE) {
+      const registrationId = await convexClient.mutation(api.registrations.create, {
+        ...registrationArgs,
+        paymentStatus: "paid",
+        amountPaid: 0,
+        promoCode: FREE_PROMO_CODE,
+      });
+
+      return NextResponse.json({
+        url: `${appUrl}/success?registration_id=${registrationId}`,
+      });
+    }
 
     // Create Stripe Checkout session
     const stripe = getStripe();
@@ -52,40 +135,14 @@ export async function POST(request: NextRequest) {
         },
       ],
       success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/register?canceled=true`,
+      cancel_url: `${appUrl}/cancelled`,
     });
-
-    // Check slot capacity to determine if waitlisted
-    const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
-    if (!convexUrl) {
-      return NextResponse.json(
-        { error: "Convex URL not configured" },
-        { status: 500 }
-      );
-    }
-    const { ConvexHttpClient } = await import("convex/browser");
-    const convexClient = new ConvexHttpClient(convexUrl);
-
-    const stats = await convexClient.query(api.registrations.getStats);
-    const isFull = gender === "male"
-      ? stats.maleCount >= stats.maleLimit
-      : stats.femaleCount >= stats.femaleLimit;
 
     // Save registration to Convex
     await convexClient.mutation(api.registrations.create, {
-      name,
-      age: Number(age),
-      gender: gender as "male" | "female",
-      maritalStatus,
-      education,
-      job,
-      email,
-      phone,
-      describeYourself: describeYourself || undefined,
-      lookingFor: lookingFor || undefined,
+      ...registrationArgs,
       stripeSessionId: session.id,
       paymentStatus: "pending",
-      status: isFull ? "waitlisted" : "pending",
     });
 
     return NextResponse.json({ url: session.url });

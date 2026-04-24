@@ -8,18 +8,26 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CheckCircle, Loader2 } from "lucide-react";
 import { Suspense } from "react";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
+  const registrationId = searchParams.get("registration_id");
 
-  const registration = useQuery(
+  const registrationBySession = useQuery(
     api.registrations.getByStripeSession,
     sessionId ? { stripeSessionId: sessionId } : "skip"
   );
+  const registrationById = useQuery(
+    api.registrations.getById,
+    registrationId ? { id: registrationId as Id<"registrations"> } : "skip"
+  );
+
+  const registration = registrationId ? registrationById : registrationBySession;
 
   // No session_id — generic success
-  if (!sessionId) {
+  if (!sessionId && !registrationId) {
     return (
       <Card className="w-full max-w-md p-8 shadow-lg text-center">
         <div className="mb-6 flex justify-center">
@@ -34,8 +42,24 @@ function SuccessContent() {
     );
   }
 
+  if (registration === null) {
+    return (
+      <Card className="w-full max-w-md p-8 shadow-lg text-center">
+        <h1 className="text-2xl font-bold text-slate-900 mb-3">
+          Registration Not Found
+        </h1>
+        <p className="text-slate-600 mb-6">
+          We could not find a registration for this checkout session. Please contact the 1Plus1 team if your payment completed.
+        </p>
+        <Link href="/register">
+          <Button className="w-full">Return to Registration</Button>
+        </Link>
+      </Card>
+    );
+  }
+
   // Payment still being verified
-  if (!registration || registration.paymentStatus === "pending") {
+  if (registration === undefined || registration.paymentStatus === "pending") {
     return (
       <Card className="w-full max-w-md p-8 shadow-lg text-center">
         <div className="mb-6 flex justify-center">

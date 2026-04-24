@@ -19,6 +19,7 @@ export default defineSchema({
     ),
     stripeSessionId: v.optional(v.string()),
     amountPaid: v.optional(v.number()),
+    promoCode: v.optional(v.string()),
     confirmationEmailSent: v.optional(v.boolean()),
     adminNotes: v.optional(v.string()),
     status: v.union(
@@ -31,6 +32,7 @@ export default defineSchema({
   })
     .index("by_gender", ["gender"])
     .index("by_status", ["status"])
+    .index("by_status_gender", ["status", "gender"])
     .index("by_stripeSessionId", ["stripeSessionId"]),
 
   settings: defineTable({
