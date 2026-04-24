@@ -1,0 +1,1180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Taaruf · Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F7F4EC;
+      --panel: #FFFFFF;
+      --ink: #14201A;
+      --ink-2: #35453C;
+      --mute: #6B7A72;
+      --line: #E1DBCB;
+      --line-2: #EFEAD9;
+      --accent: #2E4A3E;
+      --accent-2: #406556;
+      --gold: #B08A3E;
+      --rose: #9C3E3A;
+      --amber: #C78A2D;
+      --green: #3B7A54;
+      --blue: #3B5F7A;
+      --bg-tint: #F0ECE0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: "Inter Tight", sans-serif; font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    .serif { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 500; letter-spacing: -0.01em; }
+    .mono { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.04em; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    h1,h2,h3,h4 { margin: 0; font-weight: 500; }
+    a { color: inherit; text-decoration: none; }
+    p { margin: 0; }
+    input, select, textarea { font: inherit; color: inherit; }
+
+    /* App shell */
+    .shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+
+    /* Sidebar */
+    .side {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      position: sticky; top: 0; height: 100vh;
+    }
+    .brand { padding: 6px 20px 24px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line-2); margin-bottom: 16px; }
+    .brand svg { width: 24px; height: 24px; }
+    .brand-name { font-family: "Cormorant Garamond"; font-size: 22px; letter-spacing: -0.01em; }
+    .brand-tag { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--mute); margin-top: 2px; }
+
+    .nav-section { padding: 8px 12px; }
+    .nav-section h5 { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--mute); padding: 12px 8px 8px; font-weight: 500; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--ink-2);
+      cursor: pointer;
+      transition: background 120ms;
+      position: relative;
+    }
+    .nav-item:hover { background: var(--bg-tint); }
+    .nav-item.active { background: var(--accent); color: #F7F4EC; }
+    .nav-item.active .count { background: rgba(255,255,255,0.15); color: #F7F4EC; }
+    .nav-item .icon { width: 16px; height: 16px; opacity: 0.7; }
+    .nav-item.active .icon { opacity: 1; }
+    .nav-item .count {
+      margin-left: auto;
+      background: var(--bg-tint);
+      color: var(--ink-2);
+      padding: 2px 7px;
+      border-radius: 99px;
+      font-size: 10px;
+      font-weight: 500;
+      font-family: "JetBrains Mono";
+    }
+    .nav-item .count.urgent { background: var(--rose); color: white; }
+
+    .side-foot { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--line-2); font-size: 11px; color: var(--mute); display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: white; display: grid; place-items: center; font-size: 11px; font-weight: 500; }
+
+    /* Main */
+    .main { display: flex; flex-direction: column; min-width: 0; }
+
+    /* Topbar */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 28px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .crumb { display: flex; align-items: center; gap: 8px; color: var(--mute); font-size: 12px; }
+    .crumb .now { color: var(--ink); }
+    .search {
+      flex: 1;
+      max-width: 420px;
+      margin-left: 20px;
+      position: relative;
+    }
+    .search input {
+      width: 100%;
+      padding: 8px 14px 8px 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg);
+      font-size: 13px;
+    }
+    .search input:focus { outline: none; border-color: var(--accent); background: white; }
+    .search .glass { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--mute); }
+    .topbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .ibtn { width: 32px; height: 32px; border-radius: 6px; display: grid; place-items: center; color: var(--ink-2); cursor: pointer; position: relative; }
+    .ibtn:hover { background: var(--bg-tint); }
+    .ibtn .dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--rose); border: 2px solid var(--panel); }
+
+    /* Content */
+    .content { padding: 28px; flex: 1; }
+    .page-head { display: flex; align-items: end; justify-content: space-between; margin-bottom: 28px; gap: 20px; flex-wrap: wrap; }
+    .page-head h1 { font-family: "Cormorant Garamond"; font-size: 42px; line-height: 1; margin-bottom: 6px; }
+    .page-head h1 em { font-style: italic; color: var(--accent); }
+    .page-head p { color: var(--mute); font-size: 14px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      cursor: pointer;
+      transition: all 140ms;
+    }
+    .btn:hover { background: var(--bg-tint); }
+    .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+    .btn-primary:hover { background: #24392F; border-color: #24392F; }
+    .btn-ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+    .btn-ghost:hover { background: var(--bg-tint); }
+    .btn-sm { padding: 5px 10px; font-size: 11px; }
+
+    /* Stat cards */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat h4 { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mute); margin-bottom: 12px; font-weight: 500; }
+    .stat .big { font-family: "Cormorant Garamond"; font-size: 40px; line-height: 1; letter-spacing: -0.02em; }
+    .stat .sub { margin-top: 8px; font-size: 11px; color: var(--mute); display: flex; gap: 10px; align-items: center; }
+    .stat .trend { font-family: "JetBrains Mono"; color: var(--green); font-size: 11px; }
+    .stat .trend.down { color: var(--rose); }
+    .stat .spark { position: absolute; right: 16px; top: 16px; width: 60px; height: 24px; opacity: 0.6; }
+
+    /* Panels */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .panel-head {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line-2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-head h3 { font-family: "Cormorant Garamond"; font-size: 22px; font-weight: 500; }
+    .panel-head .tools { display: flex; gap: 8px; align-items: center; }
+    .panel-body { padding: 0; }
+
+    /* Two col */
+    .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--mute);
+      font-weight: 500;
+      padding: 12px 16px;
+      background: var(--bg-tint);
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    td { padding: 12px 16px; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
+    tr.row-click { cursor: pointer; }
+    tr.row-click:hover td { background: var(--bg-tint); }
+    td .name { font-weight: 500; color: var(--ink); }
+    td .sub { color: var(--mute); font-size: 11px; margin-top: 2px; }
+    .who { display: flex; align-items: center; gap: 10px; }
+    .who .av { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-tint); display: grid; place-items: center; font-size: 12px; font-weight: 500; color: var(--ink-2); border: 1px solid var(--line); overflow: hidden; flex-shrink: 0; }
+    .who.f .av { background: #F4E7E6; color: #8A3B37; }
+    .who.m .av { background: #E5EBE7; color: #2E4A3E; }
+
+    /* Pills */
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 9px;
+      border-radius: 99px;
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      background: var(--bg-tint);
+      color: var(--ink-2);
+      border: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--mute); }
+    .pill.green { background: #E8F1EB; color: var(--green); border-color: #C5DCCD; }
+    .pill.green::before { background: var(--green); }
+    .pill.amber { background: #FBF0DA; color: #8A5E1B; border-color: #EEDAAA; }
+    .pill.amber::before { background: var(--amber); }
+    .pill.rose { background: #F7E5E4; color: var(--rose); border-color: #EACAC8; }
+    .pill.rose::before { background: var(--rose); }
+    .pill.blue { background: #E5EEF5; color: var(--blue); border-color: #C6D6E3; }
+    .pill.blue::before { background: var(--blue); }
+    .pill.gold { background: #F5EBD0; color: #7A5E25; border-color: #E3D3A3; }
+    .pill.gold::before { background: var(--gold); }
+    .pill.plain { background: var(--bg-tint); border-color: var(--line); }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 20px; }
+    .tab { padding: 10px 14px; font-size: 13px; color: var(--mute); border-bottom: 2px solid transparent; cursor: pointer; margin-bottom: -1px; }
+    .tab:hover { color: var(--ink-2); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab .cnt { margin-left: 6px; font-size: 10px; padding: 1px 6px; border-radius: 99px; background: var(--bg-tint); color: var(--mute); font-family: "JetBrains Mono"; }
+    .tab.active .cnt { background: #E5EBE7; color: var(--accent); }
+
+    /* Filter row */
+    .filters { display: flex; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--line-2); align-items: center; flex-wrap: wrap; }
+    .filt {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--ink-2);
+    }
+    .filt.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+    .filt:hover:not(.active) { background: var(--bg-tint); }
+    .chevron { color: var(--mute); font-size: 10px; }
+
+    /* Match workbench / compose view */
+    .bench { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line-2); border-top: 1px solid var(--line-2); }
+    .bench-col { background: var(--panel); padding: 24px; }
+    .bench-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line-2); }
+    .bench-head .lbl { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); }
+    .prof {
+      display: grid; grid-template-columns: 80px 1fr; gap: 16px; margin-bottom: 20px;
+    }
+    .prof-photo {
+      aspect-ratio: 1;
+      border-radius: 6px;
+      background: var(--bg-tint);
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+    .prof-photo .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--mute); font-family: "Cormorant Garamond"; font-size: 28px; }
+    .prof .name { font-family: "Cormorant Garamond"; font-size: 24px; margin-bottom: 2px; line-height: 1; }
+    .prof .meta { font-size: 12px; color: var(--mute); }
+    .prof .chips { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+    .fact-list { display: flex; flex-direction: column; }
+    .fact { display: grid; grid-template-columns: 110px 1fr; padding: 8px 0; border-bottom: 1px solid var(--line-2); font-size: 13px; }
+    .fact .k { color: var(--mute); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .fact .v { color: var(--ink); }
+    .fact:last-child { border: 0; }
+
+    .compat {
+      background: var(--bg-tint);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 12px;
+    }
+    .compat h4 { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); margin-bottom: 14px; font-weight: 500; }
+    .score-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 12px; }
+    .score-row .lbl { width: 110px; color: var(--ink-2); }
+    .score-row .bar { flex: 1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+    .score-row .bar div { height: 100%; background: var(--accent); }
+    .score-row .bar div.low { background: var(--amber); }
+    .score-row .bar div.vlow { background: var(--rose); }
+    .score-row .v { width: 40px; text-align: right; font-family: "JetBrains Mono"; color: var(--ink); font-size: 11px; }
+
+    /* Queue cards */
+    .qcard {
+      display: grid;
+      grid-template-columns: 48px 1fr auto auto auto;
+      gap: 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line-2);
+      align-items: center;
+      cursor: pointer;
+      transition: background 120ms;
+    }
+    .qcard:hover { background: var(--bg-tint); }
+    .qcard .rank { font-family: "Cormorant Garamond"; font-style: italic; font-size: 28px; color: var(--accent); line-height: 1; text-align: center; }
+    .qcard .pair { display: flex; gap: 16px; }
+    .qcard .pair .person { display: flex; gap: 10px; align-items: center; }
+    .qcard .mid { font-size: 16px; color: var(--mute); align-self: center; }
+    .qcard .actions { display: flex; gap: 6px; }
+
+    /* Donut/progress */
+    .donut { position: relative; width: 140px; height: 140px; margin: 0 auto; }
+    .donut-lbl { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+    .donut-lbl .big { font-family: "Cormorant Garamond"; font-size: 32px; line-height: 1; }
+    .donut-lbl .sm { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); margin-top: 4px; }
+
+    /* Activity */
+    .act { padding: 14px 20px; border-bottom: 1px solid var(--line-2); display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: start; }
+    .act:last-child { border: 0; }
+    .act .icon { width: 28px; height: 28px; border-radius: 50%; background: var(--bg-tint); display: grid; place-items: center; color: var(--ink-2); }
+    .act .icon.green { background: #E8F1EB; color: var(--green); }
+    .act .icon.rose { background: #F7E5E4; color: var(--rose); }
+    .act .icon.amber { background: #FBF0DA; color: #8A5E1B; }
+    .act .icon.blue { background: #E5EEF5; color: var(--blue); }
+    .act .msg { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+    .act .msg strong { color: var(--ink); font-weight: 500; }
+    .act .time { color: var(--mute); font-size: 11px; white-space: nowrap; font-family: "JetBrains Mono"; }
+
+    /* Segmented */
+    .seg { display: inline-flex; background: var(--bg-tint); border: 1px solid var(--line); border-radius: 6px; padding: 2px; }
+    .seg button { padding: 4px 12px; font-size: 11px; border-radius: 4px; color: var(--mute); }
+    .seg button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+
+    /* Kanban / pipeline */
+    .pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+    .lane {
+      background: var(--bg-tint);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 400px;
+    }
+    .lane-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 2px 4px; }
+    .lane-head h4 { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); font-weight: 500; }
+    .lane-head .cnt { font-size: 10px; color: var(--mute); font-family: "JetBrains Mono"; background: var(--panel); padding: 2px 7px; border-radius: 99px; border: 1px solid var(--line); }
+    .lane-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+      cursor: grab;
+      transition: all 140ms;
+    }
+    .lane-card:hover { transform: translateY(-1px); box-shadow: 0 3px 8px -4px rgba(0,0,0,0.12); }
+    .lane-card .pair-mini { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 500; margin-bottom: 8px; }
+    .lane-card .pair-mini .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .lane-card .meta { font-size: 11px; color: var(--mute); display: flex; gap: 8px; }
+
+    /* Modal-like detail pane */
+    .detail-pane {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: 520px;
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+      box-shadow: -20px 0 40px -20px rgba(0,0,0,0.15);
+      z-index: 100;
+      transform: translateX(100%);
+      transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+    }
+    .detail-pane.open { transform: none; }
+    .dp-head { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+    .dp-body { flex: 1; overflow-y: auto; }
+
+    .backdrop {
+      position: fixed; inset: 0; background: rgba(20, 32, 26, 0.3); z-index: 99;
+      opacity: 0; pointer-events: none; transition: opacity 200ms;
+    }
+    .backdrop.open { opacity: 1; pointer-events: auto; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; border: 2px solid var(--bg); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--mute); }
+
+    /* Small responsive */
+    @media (max-width: 1100px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .pipeline { grid-template-columns: repeat(3, 1fr); overflow-x: auto; }
+      .two-col { grid-template-columns: 1fr; }
+      .bench { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel">
+    // ———————————————————————————
+    // MOCK DATA — mirrors Convex schema
+    // ———————————————————————————
+    const PROFILES = [
+      { id: "r_ar", name: "Aisha Rahman", gender: "female", age: 27, city: "Brooklyn, NY", ethnicity: "Bangladeshi-American", education: "MA, Counseling", job: "Therapist", prayer: "always_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-12", reqs: ["Prays five daily", "Educated", "Wants children within 2 years"], bio: "Grew up in Queens. Found my way to counseling through a desire to serve Muslim women. Looking for a partner who prays, laughs easily, and values slow mornings." },
+      { id: "r_yi", name: "Yusuf Ibrahim", gender: "male", age: 30, city: "Jersey City, NJ", ethnicity: "Egyptian-American", education: "BS, Mechanical Engineering", job: "Engineer at Con Edison", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-02-28", reqs: ["Practicing", "Kind", "Family-oriented"], bio: "Born in Alexandria. Studies classical texts on weekends. Quietly competitive at chess. Looking for a serious companion for the long road." },
+      { id: "r_la", name: "Layla Adam", gender: "female", age: 34, city: "Brooklyn, NY", ethnicity: "Somali-American", education: "JD, Columbia", job: "Attorney", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-01-08", reqs: ["Supportive of career", "Practicing", "Over 32"] },
+      { id: "r_om", name: "Omar Malik", gender: "male", age: 33, city: "Brooklyn, NY", ethnicity: "Pakistani-American", education: "MBA, NYU", job: "Product Manager", prayer: "strive_five", hijab: null, maritalStatus: "Divorced, no children", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 95, createdAt: "2026-02-11", reqs: ["Practicing", "Family-minded", "Open to blended family"] },
+      { id: "r_ha", name: "Hana Al-Khatib", gender: "female", age: 29, city: "Astoria, NY", ethnicity: "Lebanese-American", education: "MA, Public Policy", job: "Policy analyst", prayer: "strive_five", hijab: "open", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-02", reqs: ["Educated", "Emotionally available", "Open to children soon"] },
+      { id: "r_ks", name: "Khalil Sharif", gender: "male", age: 28, city: "Brooklyn, NY", ethnicity: "Sudanese-American", education: "MD, 2nd year resident", job: "Resident physician", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 90, createdAt: "2026-03-14", reqs: ["Practicing", "Understanding of long hours", "Future-minded"] },
+      { id: "r_fa", name: "Fatima Ali", gender: "female", age: 31, city: "Queens, NY", ethnicity: "Iraqi-American", education: "MS, Data Science", job: "Data scientist", prayer: "always_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "paused", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-01-20", reqs: ["Consistent in prayer", "Educated", "Quiet and steady"] },
+      { id: "r_bk", name: "Bilal Khan", gender: "male", age: 35, city: "Paterson, NJ", ethnicity: "Indian-American", education: "PhD, Chemistry", job: "Research scientist", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "pending", search: "active", paid: false, payment: 0, profileCompletion: 40, createdAt: "2026-04-20", reqs: [] },
+      { id: "r_zm", name: "Zainab Mohamed", gender: "female", age: 26, city: "Brooklyn, NY", ethnicity: "Egyptian-American", education: "BA, Education", job: "Teacher", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-28", reqs: ["Patient", "Practicing", "Enjoys nature"] },
+      { id: "r_tj", name: "Tariq Jabari", gender: "male", age: 32, city: "Newark, NJ", ethnicity: "Palestinian-American", education: "BS, Finance", job: "Financial planner", prayer: "strive_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 85, createdAt: "2026-04-03", reqs: ["Kind", "Family-focused", "Practicing"] },
+      { id: "r_nm", name: "Noor Mansoor", gender: "female", age: 28, city: "Brooklyn, NY", ethnicity: "Yemeni-American", education: "MA, English Lit", job: "Writer / editor", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 95, createdAt: "2026-04-10", reqs: ["Reads", "Thoughtful", "Practicing"] },
+      { id: "r_ih", name: "Ibrahim Hassan", gender: "male", age: 29, city: "Brooklyn, NY", ethnicity: "Somali-American", education: "BS, CS", job: "Software engineer", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "pending", search: "active", paid: false, payment: 0, profileCompletion: 30, createdAt: "2026-04-22", reqs: [] },
+    ];
+
+    const p = (id) => PROFILES.find(x => x.id === id);
+
+    const MATCHES = [
+      { id: "m1", male: "r_yi", female: "r_ar", status: "reviewing", initiatedBy: "admin_recommendation", createdAt: "2026-04-18", score: 92, notes: "Both Brooklyn-area. Shared vision on children timeline.", followUp: true },
+      { id: "m2", male: "r_ks", female: "r_ha", status: "contact_shared", initiatedBy: "interest_signal", createdAt: "2026-04-15", score: 84, notes: "Sister expressed interest after the Oct brunch. Contact shared Apr 19.", followUp: false },
+      { id: "m3", male: "r_om", female: "r_la", status: "new", initiatedBy: "admin_recommendation", createdAt: "2026-04-21", score: 78, notes: "Both 32+. Omar open to blended family — Layla has no children.", followUp: false },
+      { id: "m4", male: "r_tj", female: "r_nm", status: "reviewing", initiatedBy: "interest_signal", createdAt: "2026-04-20", score: 81, notes: "Noor submitted interest. Pending Tariq's review.", followUp: true },
+      { id: "m5", male: "r_yi", female: "r_zm", status: "closed", initiatedBy: "admin_recommendation", createdAt: "2026-03-28", score: 71, notes: "Closed — Yusuf felt not quite the right fit. Mutual respect.", followUp: false },
+      { id: "m6", male: "r_ks", female: "r_fa", status: "paused", initiatedBy: "admin_recommendation", createdAt: "2026-04-01", score: 76, notes: "Fatima paused her search. Revisit in May.", followUp: false },
+    ];
+
+    const INTERESTS = [
+      { id: "i1", from: "r_nm", to: "r_tj", source: "platform_submission", status: "converted_to_match", createdAt: "2026-04-20" },
+      { id: "i2", from: "r_ha", to: "r_ks", source: "email", status: "active", createdAt: "2026-04-11" },
+      { id: "i3", from: "r_ar", to: "r_ih", source: "admin_entered", status: "queued", createdAt: "2026-04-22" },
+      { id: "i4", from: "r_zm", to: "r_om", source: "platform_submission", status: "new", createdAt: "2026-04-23" },
+    ];
+
+    const ACTIVITY = [
+      { type: "match", icon: "✓", color: "green", who: "Layla Adam", what: "matched with", target: "Omar Malik", by: "Danielle", time: "2h ago" },
+      { type: "register", icon: "+", color: "blue", who: "Ibrahim Hassan", what: "registered and paid. Awaiting review.", time: "4h ago" },
+      { type: "interest", icon: "♡", color: "amber", who: "Zainab Mohamed", what: "expressed interest in", target: "Omar Malik", time: "6h ago" },
+      { type: "contact", icon: "→", color: "green", who: "Khalil Sharif", what: "contact shared with Hana Al-Khatib", time: "yesterday" },
+      { type: "declined", icon: "×", color: "rose", who: "Yusuf Ibrahim", what: "politely declined a recommended match", time: "yesterday" },
+      { type: "paused", icon: "⏸", color: "amber", who: "Fatima Ali", what: "paused her search for 30 days", time: "2d ago" },
+    ];
+
+    // ———————————————————————————
+    // Small helpers
+    // ———————————————————————————
+    const initials = (name) => name.split(" ").map(s=>s[0]).slice(0,2).join("");
+    const prayerLabel = { always_five: "All five, daily", strive_five: "Striving for five", sometimes: "Sometimes", five_and_sunnah: "Five + sunnah" };
+
+    const Sparkline = ({ data, color = "var(--accent)" }) => {
+      const max = Math.max(...data), min = Math.min(...data);
+      const points = data.map((v, i) => `${(i / (data.length - 1)) * 60},${24 - ((v - min) / (max - min || 1)) * 20 - 2}`).join(" ");
+      return <svg className="spark" viewBox="0 0 60 24"><polyline fill="none" stroke={color} strokeWidth="1.2" points={points}/></svg>;
+    };
+
+    const Donut = ({ value, max, label }) => {
+      const pct = value / max;
+      const r = 58, c = 2 * Math.PI * r;
+      return (
+        <div className="donut">
+          <svg width="140" height="140">
+            <circle cx="70" cy="70" r={r} fill="none" stroke="var(--line-2)" strokeWidth="10"/>
+            <circle cx="70" cy="70" r={r} fill="none" stroke="var(--accent)" strokeWidth="10" strokeDasharray={`${c * pct} ${c}`} strokeDashoffset={c * 0.25} transform="rotate(-90 70 70)" strokeLinecap="round"/>
+          </svg>
+          <div className="donut-lbl">
+            <div>
+              <div className="big">{value}<span style={{color:"var(--mute)",fontSize:20}}>/{max}</span></div>
+              <div className="sm">{label}</div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const LogoMark = () => (
+      <svg viewBox="0 0 40 40">
+        <g stroke="var(--accent)" strokeWidth="1.4" fill="none">
+          <polygon points="20,4 26,14 36,16 28,24 30,36 20,30 10,36 12,24 4,16 14,14"/>
+          <circle cx="20" cy="20" r="4" fill="var(--accent)" stroke="none"/>
+        </g>
+      </svg>
+    );
+
+    // Tiny inline icons
+    const Ico = {
+      dash: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>,
+      people: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="5" r="2.5"/><path d="M2.5 13.5 C 3 11 5 10 8 10 S 13 11 13.5 13.5"/></svg>,
+      match: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 5 L8 8 L4 11 M12 5 L8 8 L12 11"/></svg>,
+      heart: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 13 L2.5 7.5 A 3 3 0 0 1 8 4 A 3 3 0 0 1 13.5 7.5 Z"/></svg>,
+      calendar: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6 H 14 M5 2 V 4 M11 2 V 4"/></svg>,
+      inbox: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 3 H 14 V 11 H 2 Z M2 9 H 6 L 7 10 H 9 L 10 9 H 14"/></svg>,
+      settings: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1 V 3 M8 13 V 15 M1 8 H 3 M13 8 H 15 M2.8 2.8 L 4.2 4.2 M11.8 11.8 L 13.2 13.2 M13.2 2.8 L 11.8 4.2 M4.2 11.8 L 2.8 13.2"/></svg>,
+      bell: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 11 V 7 A 4 4 0 0 1 12 7 V 11 L 13 12 H 3 Z M7 13 H 9"/></svg>,
+      search: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="6" r="4"/><path d="M9 9 L 12 12"/></svg>,
+      plus: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 2 V 12 M2 7 H 12"/></svg>,
+      close: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3 L 11 11 M11 3 L 3 11"/></svg>,
+      more: <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="13" cy="8" r="1.3"/></svg>,
+    };
+
+    // ———————————————————————————
+    // Sidebar
+    // ———————————————————————————
+    const Sidebar = ({ page, setPage }) => {
+      const items = [
+        { g: "Overview", items: [
+          { id: "dashboard", label: "Dashboard", icon: Ico.dash },
+          { id: "inbox", label: "Inbox", icon: Ico.inbox, count: 7, urgent: true },
+        ]},
+        { g: "People", items: [
+          { id: "profiles", label: "Profiles", icon: Ico.people, count: PROFILES.length },
+          { id: "pending", label: "Pending review", icon: Ico.people, count: PROFILES.filter(x=>x.status==="pending").length },
+        ]},
+        { g: "Matching", items: [
+          { id: "workbench", label: "Match workbench", icon: Ico.match },
+          { id: "pipeline", label: "Pipeline", icon: Ico.match, count: MATCHES.filter(m=>!["closed","paused"].includes(m.status)).length },
+          { id: "interests", label: "Interests", icon: Ico.heart, count: INTERESTS.filter(i=>i.status==="new"||i.status==="active").length },
+        ]},
+        { g: "System", items: [
+          { id: "events", label: "Events", icon: Ico.calendar },
+          { id: "settings", label: "Settings", icon: Ico.settings },
+        ]},
+      ];
+      return (
+        <aside className="side">
+          <div className="brand">
+            <LogoMark/>
+            <div>
+              <div className="brand-name">Taaruf</div>
+              <div className="brand-tag">Admin · v2</div>
+            </div>
+          </div>
+          {items.map((g) => (
+            <div className="nav-section" key={g.g}>
+              <h5>{g.g}</h5>
+              {g.items.map(i => (
+                <div key={i.id} className={`nav-item ${page===i.id?"active":""}`} onClick={()=>setPage(i.id)}>
+                  <span className="icon">{i.icon}</span>
+                  <span>{i.label}</span>
+                  {typeof i.count === "number" && <span className={`count ${i.urgent?"urgent":""}`}>{i.count}</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+          <div className="side-foot">
+            <div className="avatar">DG</div>
+            <div>
+              <div style={{color:"var(--ink)",fontWeight:500,fontSize:12}}>Danielle Gore</div>
+              <div style={{fontSize:10,color:"var(--mute)"}}>Admin · matchmaker</div>
+            </div>
+          </div>
+        </aside>
+      );
+    };
+
+    // ———————————————————————————
+    // Topbar
+    // ———————————————————————————
+    const Topbar = ({ crumb }) => (
+      <div className="topbar">
+        <div className="crumb">
+          <span>Taaruf</span>
+          <span style={{color:"var(--line)"}}>›</span>
+          <span>Admin</span>
+          <span style={{color:"var(--line)"}}>›</span>
+          <span className="now">{crumb}</span>
+        </div>
+        <div className="search">
+          <span className="glass">{Ico.search}</span>
+          <input placeholder="Search profiles, matches, emails…"/>
+        </div>
+        <div className="topbar-actions">
+          <button className="ibtn">{Ico.bell}<span className="dot"/></button>
+          <button className="btn btn-primary">{Ico.plus} New match</button>
+        </div>
+      </div>
+    );
+
+    // ———————————————————————————
+    // Pages
+    // ———————————————————————————
+    const WhoCell = ({ id }) => {
+      const prof = p(id); if (!prof) return null;
+      return (
+        <div className={`who ${prof.gender==="female"?"f":"m"}`}>
+          <div className="av">{initials(prof.name)}</div>
+          <div>
+            <div className="name">{prof.name}</div>
+            <div className="sub">{prof.age} · {prof.city}</div>
+          </div>
+        </div>
+      );
+    };
+
+    const StatusPill = ({ status }) => {
+      const map = {
+        new: ["plain","New"],
+        reviewing: ["amber","Reviewing"],
+        contact_shared: ["green","Contact shared"],
+        declined: ["rose","Declined"],
+        paused: ["plain","Paused"],
+        closed: ["plain","Closed"],
+        active: ["green","Active"],
+        queued: ["blue","Queued"],
+        converted_to_match: ["green","Converted"],
+        approved: ["green","Approved"],
+        pending: ["amber","Pending"],
+      };
+      const [cls, label] = map[status] || ["plain", status];
+      return <span className={`pill ${cls}`}>{label}</span>;
+    };
+
+    // --- Dashboard home ---
+    const Dashboard = ({ setPage, openMatch }) => (
+      <>
+        <div className="page-head">
+          <div>
+            <h1>Assalāmu <em>ʿalaykum</em>, Danielle.</h1>
+            <p>Tuesday, April 23 · You have 3 matches awaiting review and 7 new interests today.</p>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <div className="seg">
+              <button>7d</button>
+              <button className="on">30d</button>
+              <button>Qtr</button>
+            </div>
+            <button className="btn">Export</button>
+            <button className="btn btn-primary">{Ico.plus} Recommend a match</button>
+          </div>
+        </div>
+
+        <div className="stats">
+          <div className="stat">
+            <h4>Active members</h4>
+            <div className="big">128</div>
+            <div className="sub"><span className="trend">▲ 12</span> <span>this month</span></div>
+            <Sparkline data={[90,94,98,101,108,115,119,128]}/>
+          </div>
+          <div className="stat">
+            <h4>Paid registrations</h4>
+            <div className="big">$1,280</div>
+            <div className="sub"><span className="trend">▲ 18%</span> <span>vs. last month</span></div>
+            <Sparkline data={[4,7,9,11,10,14,16,18]} color="var(--gold)"/>
+          </div>
+          <div className="stat">
+            <h4>Matches in flight</h4>
+            <div className="big">24</div>
+            <div className="sub"><span className="trend down">▼ 2</span> <span>vs. last week</span></div>
+            <Sparkline data={[20,22,26,28,27,26,25,24]} color="var(--accent-2)"/>
+          </div>
+          <div className="stat">
+            <h4>Marriages confirmed</h4>
+            <div className="big">38</div>
+            <div className="sub"><span className="trend">▲ 3</span> <span>this quarter</span></div>
+            <Sparkline data={[32,33,34,35,36,37,37,38]} color="var(--rose)"/>
+          </div>
+        </div>
+
+        <div className="two-col">
+          <div className="panel">
+            <div className="panel-head">
+              <h3>Needs your attention</h3>
+              <div className="tools">
+                <button className="btn btn-sm btn-ghost">Filter</button>
+                <button className="btn btn-sm">View all</button>
+              </div>
+            </div>
+            <div className="tabs">
+              <div className="tab active">Awaiting review <span className="cnt">3</span></div>
+              <div className="tab">New interests <span className="cnt">7</span></div>
+              <div className="tab">Follow-ups <span className="cnt">5</span></div>
+              <div className="tab">Pending profiles <span className="cnt">2</span></div>
+            </div>
+            <div>
+              {[
+                { m: "m3", reason: "New recommendation · no response in 36h" },
+                { m: "m1", reason: "Review request · requires your nod" },
+                { m: "m4", reason: "Interest signal pending Tariq's review" },
+              ].map(x => {
+                const m = MATCHES.find(mm => mm.id === x.m);
+                return (
+                  <div className="qcard" key={x.m} onClick={() => openMatch(x.m)}>
+                    <div className="rank">{Math.round(m.score/10)}</div>
+                    <div>
+                      <div style={{display:"flex",gap:16,alignItems:"center",marginBottom:6}}>
+                        <WhoCell id={m.female}/>
+                        <span style={{color:"var(--mute)",fontFamily:"Cormorant Garamond",fontStyle:"italic",fontSize:20}}>×</span>
+                        <WhoCell id={m.male}/>
+                      </div>
+                      <div style={{fontSize:11,color:"var(--mute)",marginLeft:2}}>{x.reason}</div>
+                    </div>
+                    <StatusPill status={m.status}/>
+                    <div className="mono" style={{color:"var(--mute)"}}>score {m.score}</div>
+                    <div className="actions">
+                      <button className="btn btn-sm btn-ghost">Open</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{display:"flex",flexDirection:"column",gap:20}}>
+            <div className="panel">
+              <div className="panel-head">
+                <h3>Registration pool</h3>
+                <button className="btn btn-sm btn-ghost" onClick={()=>setPage("profiles")}>View</button>
+              </div>
+              <div style={{padding:"24px 20px 28px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,alignItems:"center"}}>
+                <div>
+                  <Donut value={38} max={40} label="Sisters"/>
+                </div>
+                <div>
+                  <Donut value={31} max={40} label="Brothers"/>
+                </div>
+              </div>
+              <div style={{padding:"0 20px 20px",display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--mute)"}}>
+                <span>Cap: 40 per side</span>
+                <span className="mono">2 sister seats left · 9 brother seats</span>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-head">
+                <h3>Activity</h3>
+                <button className="btn btn-sm btn-ghost">All</button>
+              </div>
+              <div>
+                {ACTIVITY.map((a, i) => (
+                  <div className="act" key={i}>
+                    <div className={`icon ${a.color}`}>{a.icon}</div>
+                    <div className="msg"><strong>{a.who}</strong> {a.what} {a.target && <strong>{a.target}</strong>}.</div>
+                    <div className="time">{a.time}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+
+    // --- Profiles ---
+    const Profiles = ({ openProfile }) => {
+      const [tab, setTab] = React.useState("all");
+      const [gender, setGender] = React.useState("all");
+      const filtered = PROFILES.filter(x => {
+        if (tab === "approved" && x.status !== "approved") return false;
+        if (tab === "pending" && x.status !== "pending") return false;
+        if (tab === "paused" && x.search !== "paused") return false;
+        if (gender !== "all" && x.gender !== gender) return false;
+        return true;
+      });
+      return (
+        <>
+          <div className="page-head">
+            <div>
+              <h1><em>Profiles</em> &amp; registrations</h1>
+              <p>{PROFILES.length} total · {PROFILES.filter(x=>x.status==="approved").length} approved · {PROFILES.filter(x=>x.status==="pending").length} pending</p>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn">Export CSV</button>
+              <button className="btn btn-primary">{Ico.plus} Add profile</button>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="tabs">
+              {[["all","All",PROFILES.length],["approved","Approved",PROFILES.filter(x=>x.status==="approved").length],["pending","Pending",PROFILES.filter(x=>x.status==="pending").length],["paused","Paused",PROFILES.filter(x=>x.search==="paused").length]].map(([id,l,c])=>(
+                <div key={id} className={`tab ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{l} <span className="cnt">{c}</span></div>
+              ))}
+            </div>
+            <div className="filters">
+              <div className={`filt ${gender==="all"?"active":""}`} onClick={()=>setGender("all")}>All members</div>
+              <div className={`filt ${gender==="female"?"active":""}`} onClick={()=>setGender("female")}>Sisters</div>
+              <div className={`filt ${gender==="male"?"active":""}`} onClick={()=>setGender("male")}>Brothers</div>
+              <div className="filt">Age <span className="chevron">▾</span></div>
+              <div className="filt">Location <span className="chevron">▾</span></div>
+              <div className="filt">Practice <span className="chevron">▾</span></div>
+              <div style={{marginLeft:"auto",fontSize:11,color:"var(--mute)"}} className="mono">{filtered.length} shown</div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Member</th><th>Age</th><th>Location</th><th>Background</th><th>Prayer</th><th>Status</th><th>Payment</th><th>Profile</th><th>Joined</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(x => (
+                  <tr key={x.id} className="row-click" onClick={()=>openProfile(x.id)}>
+                    <td><WhoCell id={x.id}/></td>
+                    <td>{x.age}</td>
+                    <td>{x.city}</td>
+                    <td>{x.ethnicity}</td>
+                    <td style={{fontSize:12}}>{prayerLabel[x.prayer]}</td>
+                    <td><StatusPill status={x.status}/>{x.search==="paused" && <span style={{marginLeft:4}}><StatusPill status="paused"/></span>}</td>
+                    <td>{x.paid ? <span className="pill green">Paid ${x.payment}</span> : <span className="pill rose">Unpaid</span>}</td>
+                    <td>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:60,height:4,background:"var(--line-2)",borderRadius:2,overflow:"hidden"}}>
+                          <div style={{width:`${x.profileCompletion}%`,height:"100%",background:x.profileCompletion===100?"var(--green)":"var(--amber)"}}/>
+                        </div>
+                        <span style={{fontSize:11,color:"var(--mute)",fontFamily:"JetBrains Mono"}}>{x.profileCompletion}%</span>
+                      </div>
+                    </td>
+                    <td className="mono" style={{color:"var(--mute)"}}>{x.createdAt}</td>
+                    <td><button className="ibtn">{Ico.more}</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      );
+    };
+
+    // --- Match workbench ---
+    const Workbench = ({ openMatch }) => {
+      const [mid, setMid] = React.useState("m1");
+      const m = MATCHES.find(x => x.id === mid);
+      const male = p(m.male), female = p(m.female);
+
+      const scores = [
+        ["Practice & prayer", 94],
+        ["Timeline alignment", 88],
+        ["Life stage", 82],
+        ["Location", 96],
+        ["Family vision", 86],
+        ["Character match", 90],
+      ];
+
+      const Profile = ({ person, label }) => (
+        <div className="bench-col">
+          <div className="bench-head">
+            <span className="lbl">{label}</span>
+            <div style={{display:"flex",gap:6}}>
+              <button className="btn btn-sm btn-ghost">Swap</button>
+              <button className="btn btn-sm btn-ghost">View full</button>
+            </div>
+          </div>
+          <div className="prof">
+            <div className="prof-photo"><div className="ph">{initials(person.name)}</div></div>
+            <div>
+              <div className="name">{person.name}</div>
+              <div className="meta">{person.age} · {person.city} · {person.ethnicity}</div>
+              <div className="chips">
+                <span className="pill plain">{person.maritalStatus}</span>
+                <span className="pill green">{prayerLabel[person.prayer]}</span>
+                {person.hijab==="yes" && <span className="pill plain">Wears hijab</span>}
+              </div>
+            </div>
+          </div>
+          <div className="fact-list">
+            <div className="fact"><span className="k">Education</span><span className="v">{person.education}</span></div>
+            <div className="fact"><span className="k">Occupation</span><span className="v">{person.job}</span></div>
+            <div className="fact"><span className="k">Timeline</span><span className="v">Within 1 year</span></div>
+            <div className="fact"><span className="k">Children</span><span className="v">Wants, within 2 years</span></div>
+            <div className="fact"><span className="k">Looking for</span><span className="v">{person.reqs.join(" · ")}</span></div>
+          </div>
+          {person.bio && (
+            <div style={{marginTop:16,padding:14,background:"var(--bg-tint)",borderRadius:6,fontStyle:"italic",fontFamily:"Cormorant Garamond",fontSize:15,color:"var(--ink-2)",lineHeight:1.45}}>
+              "{person.bio}"
+            </div>
+          )}
+        </div>
+      );
+
+      return (
+        <>
+          <div className="page-head">
+            <div>
+              <h1>Match <em>workbench</em></h1>
+              <p>Compose, review, and advance introductions between members.</p>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn btn-ghost">← Previous</button>
+              <button className="btn btn-ghost">Next →</button>
+              <button className="btn">Save draft</button>
+              <button className="btn btn-primary">Share with both</button>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-head">
+              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                <h3>Recommendation #{mid.slice(1)}</h3>
+                <StatusPill status={m.status}/>
+                <span className="pill gold">Score {m.score}</span>
+                <span className="mono" style={{color:"var(--mute)"}}>Initiated {m.initiatedBy.replace("_"," ")} · {m.createdAt}</span>
+              </div>
+              <div className="tools">
+                <div className="seg">
+                  {["m1","m3","m4"].map(x => (
+                    <button key={x} className={mid===x?"on":""} onClick={()=>setMid(x)}>#{x.slice(1)}</button>
+                  ))}
+                </div>
+                <button className="btn btn-sm">{Ico.more}</button>
+              </div>
+            </div>
+            <div className="bench">
+              <Profile person={female} label="Sister"/>
+              <Profile person={male} label="Brother"/>
+            </div>
+
+            <div style={{padding:24,borderTop:"1px solid var(--line-2)",background:"var(--bg)"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:24}}>
+                <div className="compat" style={{margin:0}}>
+                  <h4>Compatibility</h4>
+                  {scores.map(([l,v]) => (
+                    <div className="score-row" key={l}>
+                      <div className="lbl">{l}</div>
+                      <div className="bar"><div style={{width:`${v}%`}} className={v<70?"low":""}/></div>
+                      <div className="v">{v}</div>
+                    </div>
+                  ))}
+                  <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--line)",fontSize:12,color:"var(--ink-2)",display:"flex",justifyContent:"space-between"}}>
+                    <span>Composite score</span>
+                    <span className="mono" style={{fontSize:13,color:"var(--accent)",fontWeight:500}}>{m.score}/100</span>
+                  </div>
+                </div>
+                <div>
+                  <h4 style={{fontSize:11,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:12,fontWeight:500}}>Internal notes</h4>
+                  <textarea rows="5" style={{width:"100%",padding:12,border:"1px solid var(--line)",borderRadius:6,background:"var(--panel)",font:"inherit",fontSize:13,resize:"vertical"}} defaultValue={m.notes}/>
+                  <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                    <button className="btn btn-sm">Share profile cards</button>
+                    <button className="btn btn-sm">Schedule call</button>
+                    <button className="btn btn-sm">Propose meeting</button>
+                    <button className="btn btn-sm" style={{color:"var(--rose)"}}>Close match</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    };
+
+    // --- Pipeline (kanban) ---
+    const Pipeline = ({ openMatch }) => {
+      const lanes = [
+        { id: "new", title: "New" },
+        { id: "reviewing", title: "Reviewing" },
+        { id: "contact_shared", title: "Contact shared" },
+        { id: "paused", title: "Paused" },
+        { id: "closed", title: "Closed" },
+      ];
+      return (
+        <>
+          <div className="page-head">
+            <div>
+              <h1>Matching <em>pipeline</em></h1>
+              <p>Drag matches across stages. Six in flight.</p>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <div className="seg"><button className="on">Kanban</button><button>Table</button><button>Timeline</button></div>
+              <button className="btn btn-primary">{Ico.plus} New</button>
+            </div>
+          </div>
+
+          <div className="pipeline">
+            {lanes.map(lane => {
+              const items = MATCHES.filter(m => m.status === lane.id);
+              return (
+                <div className="lane" key={lane.id}>
+                  <div className="lane-head"><h4>{lane.title}</h4><span className="cnt">{items.length}</span></div>
+                  {items.map(m => {
+                    const f = p(m.female), male = p(m.male);
+                    return (
+                      <div className="lane-card" key={m.id} onClick={()=>openMatch(m.id)}>
+                        <div className="pair-mini">
+                          <span className="dot"/>
+                          <span>{f.name.split(" ")[0]} &amp; {male.name.split(" ")[0]}</span>
+                          <span style={{marginLeft:"auto",fontFamily:"JetBrains Mono",fontSize:10,color:"var(--mute)"}}>{m.score}</span>
+                        </div>
+                        <div className="meta">
+                          <span className="pill plain" style={{fontSize:9}}>{m.initiatedBy.split("_")[0]}</span>
+                          {m.followUp && <span className="pill amber" style={{fontSize:9}}>Follow up</span>}
+                        </div>
+                        <div style={{marginTop:10,fontSize:11,color:"var(--mute)",lineHeight:1.4}}>{m.notes.split(".")[0]}.</div>
+                      </div>
+                    );
+                  })}
+                  {items.length === 0 && <div style={{padding:"20px 8px",fontSize:11,color:"var(--mute)",textAlign:"center"}}>No matches here.</div>}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      );
+    };
+
+    // --- Interests ---
+    const Interests = () => (
+      <>
+        <div className="page-head">
+          <div>
+            <h1>Interest <em>signals</em></h1>
+            <p>Expressions of interest — from members and from our team. Convert promising ones into matches.</p>
+          </div>
+          <button className="btn btn-primary">{Ico.plus} Log an interest</button>
+        </div>
+        <div className="panel">
+          <div className="filters" style={{borderBottom:"1px solid var(--line)"}}>
+            <div className="filt active">All sources</div>
+            <div className="filt">Platform</div>
+            <div className="filt">Email</div>
+            <div className="filt">WhatsApp</div>
+            <div className="filt">Admin-entered</div>
+            <div style={{marginLeft:"auto"}} className="mono">{INTERESTS.length} signals</div>
+          </div>
+          <table>
+            <thead><tr><th>From</th><th></th><th>Toward</th><th>Source</th><th>Status</th><th>Logged</th><th></th></tr></thead>
+            <tbody>
+              {INTERESTS.map(i => (
+                <tr key={i.id} className="row-click">
+                  <td><WhoCell id={i.from}/></td>
+                  <td style={{color:"var(--mute)",fontFamily:"Cormorant Garamond",fontStyle:"italic"}}>expressed interest in</td>
+                  <td><WhoCell id={i.to}/></td>
+                  <td><span className="pill plain">{i.source.replace("_"," ")}</span></td>
+                  <td><StatusPill status={i.status}/></td>
+                  <td className="mono" style={{color:"var(--mute)"}}>{i.createdAt}</td>
+                  <td style={{textAlign:"right"}}>
+                    {i.status!=="converted_to_match" && <button className="btn btn-sm btn-primary">Create match</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
+
+    // --- Detail pane ---
+    const DetailPane = ({ open, onClose, profileId }) => {
+      const prof = profileId ? p(profileId) : null;
+      if (!prof) return <><div className={`backdrop ${open?"open":""}`} onClick={onClose}/><div className={`detail-pane ${open?"open":""}`}/></>;
+      return (
+        <>
+          <div className={`backdrop ${open?"open":""}`} onClick={onClose}/>
+          <aside className={`detail-pane ${open?"open":""}`}>
+            <div className="dp-head">
+              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                <div className={`who ${prof.gender==="female"?"f":"m"}`}>
+                  <div className="av">{initials(prof.name)}</div>
+                </div>
+                <div>
+                  <div style={{fontFamily:"Cormorant Garamond",fontSize:22,lineHeight:1}}>{prof.name}</div>
+                  <div style={{fontSize:12,color:"var(--mute)"}}>{prof.age} · {prof.city} · {prof.ethnicity}</div>
+                </div>
+              </div>
+              <button className="ibtn" onClick={onClose}>{Ico.close}</button>
+            </div>
+            <div className="dp-body">
+              <div style={{padding:20}}>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:20}}>
+                  <StatusPill status={prof.status}/>
+                  {prof.paid ? <span className="pill green">Paid ${prof.payment}</span> : <span className="pill rose">Unpaid</span>}
+                  <span className="pill plain">Profile {prof.profileCompletion}%</span>
+                  <span className="pill plain">Search {prof.search}</span>
+                </div>
+                <h4 style={{fontSize:10,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:10,fontWeight:500}}>Profile facts</h4>
+                <div className="fact-list" style={{marginBottom:24}}>
+                  <div className="fact"><span className="k">Marital status</span><span className="v">{prof.maritalStatus}</span></div>
+                  <div className="fact"><span className="k">Education</span><span className="v">{prof.education}</span></div>
+                  <div className="fact"><span className="k">Occupation</span><span className="v">{prof.job}</span></div>
+                  <div className="fact"><span className="k">Prayer</span><span className="v">{prayerLabel[prof.prayer]}</span></div>
+                  {prof.hijab && <div className="fact"><span className="k">Hijab</span><span className="v" style={{textTransform:"capitalize"}}>{prof.hijab}</span></div>}
+                  <div className="fact"><span className="k">Registered</span><span className="v">{prof.createdAt}</span></div>
+                </div>
+
+                <h4 style={{fontSize:10,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:10,fontWeight:500}}>Looking for</h4>
+                <div style={{marginBottom:24}}>
+                  {prof.reqs.length ? prof.reqs.map((r,i) => (
+                    <div key={i} style={{padding:"10px 0",borderBottom:"1px solid var(--line-2)",fontSize:13,display:"flex",gap:10}}>
+                      <span style={{color:"var(--gold)",fontFamily:"Cormorant Garamond",fontStyle:"italic"}}>{i+1}.</span>
+                      <span>{r}</span>
+                    </div>
+                  )) : <p style={{fontSize:12,color:"var(--mute)"}}>Not yet submitted.</p>}
+                </div>
+
+                {prof.bio && (<>
+                  <h4 style={{fontSize:10,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:10,fontWeight:500}}>Shareable bio</h4>
+                  <div style={{padding:14,background:"var(--bg-tint)",borderRadius:6,fontFamily:"Cormorant Garamond",fontStyle:"italic",fontSize:15,color:"var(--ink-2)",lineHeight:1.5,marginBottom:24}}>"{prof.bio}"</div>
+                </>)}
+
+                <h4 style={{fontSize:10,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:10,fontWeight:500}}>Admin notes</h4>
+                <textarea rows="4" style={{width:"100%",padding:12,border:"1px solid var(--line)",borderRadius:6,font:"inherit",fontSize:13,resize:"vertical",marginBottom:16}} placeholder="Private notes about this member…"/>
+
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingTop:16,borderTop:"1px solid var(--line-2)"}}>
+                  <button className="btn btn-primary">Suggest a match</button>
+                  <button className="btn">Send profile link</button>
+                  <button className="btn">Email</button>
+                  <button className="btn btn-ghost" style={{color:"var(--rose)"}}>Pause search</button>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </>
+      );
+    };
+
+    // --- Placeholder pages ---
+    const Simple = ({ title, desc, children }) => (
+      <>
+        <div className="page-head">
+          <div>
+            <h1 dangerouslySetInnerHTML={{__html: title}}/>
+            <p>{desc}</p>
+          </div>
+        </div>
+        {children || (
+          <div className="panel">
+            <div style={{padding:"80px 20px",textAlign:"center",color:"var(--mute)"}}>
+              <div style={{fontFamily:"Cormorant Garamond",fontStyle:"italic",fontSize:28,color:"var(--ink-2)",marginBottom:8}}>Coming soon.</div>
+              <p>This surface will ship after matching pipeline is stable.</p>
+            </div>
+          </div>
+        )}
+      </>
+    );
+
+    // ———————————————————————————
+    // App
+    // ———————————————————————————
+    const CRUMBS = {
+      dashboard: "Dashboard", inbox: "Inbox", profiles: "Profiles", pending: "Pending",
+      workbench: "Match workbench", pipeline: "Pipeline", interests: "Interests",
+      events: "Events", settings: "Settings",
+    };
+
+    const App = () => {
+      const [page, setPage] = React.useState("dashboard");
+      const [openProfileId, setOpenProfileId] = React.useState(null);
+      const openProfile = (id) => setOpenProfileId(id);
+      const openMatch = (id) => { setPage("workbench"); };
+
+      return (
+        <div className="shell">
+          <Sidebar page={page} setPage={setPage}/>
+          <div className="main">
+            <Topbar crumb={CRUMBS[page] || "Dashboard"}/>
+            <div className="content">
+              {page === "dashboard" && <Dashboard setPage={setPage} openMatch={openMatch}/>}
+              {page === "profiles" && <Profiles openProfile={openProfile}/>}
+              {page === "pending" && <Profiles openProfile={openProfile}/>}
+              {page === "workbench" && <Workbench openMatch={openMatch}/>}
+              {page === "pipeline" && <Pipeline openMatch={openMatch}/>}
+              {page === "interests" && <Interests/>}
+              {page === "inbox" && <Simple title="<em>Inbox</em>" desc="Emails, interests, and member questions in one place."/>}
+              {page === "events" && <Simple title="<em>Events</em>" desc="Brunches, halaqas, retreats."/>}
+              {page === "settings" && <Simple title="<em>Settings</em>" desc="Slot caps, payment keys, admin users."/>}
+            </div>
+          </div>
+          <DetailPane open={!!openProfileId} onClose={()=>setOpenProfileId(null)} profileId={openProfileId}/>
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  </script>
+</body>
+</html>
