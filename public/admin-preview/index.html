@@ -405,6 +405,107 @@
       .two-col { grid-template-columns: 1fr; }
       .bench { grid-template-columns: 1fr; }
     }
+
+    /* Hamburger — shown only on mobile */
+    .hamburger {
+      display: none;
+      width: 36px; height: 36px;
+      border-radius: 6px;
+      place-items: center;
+      cursor: pointer;
+      color: var(--ink-2);
+      flex-shrink: 0;
+    }
+    .hamburger:hover { background: var(--bg-tint); }
+
+    /* Profile photos — img fills .av/.prof-photo, initials sit behind as fallback */
+    .who .av img, .dp-av img, .prof-photo img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .who .av { position: relative; }
+    .dp-av { width: 44px; height: 44px; border-radius: 50%; position: relative; overflow: hidden; display: grid; place-items: center; font-size: 14px; font-weight: 500; flex-shrink: 0; background: var(--bg-tint); color: var(--ink-2); border: 1px solid var(--line); }
+    .dp-av.f { background: #F4E7E6; color: #8A3B37; }
+    .dp-av.m { background: #E5EBE7; color: #2E4A3E; }
+
+    /* History rows in profile detail pane */
+    .history-list { display: flex; flex-direction: column; margin-bottom: 24px; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
+    .history-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line-2); align-items: center; font-size: 12px; }
+    .history-row:last-child { border-bottom: 0; }
+    .history-row .who-mini { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .history-row .who-mini .av-mini { width: 24px; height: 24px; border-radius: 50%; overflow: hidden; position: relative; flex-shrink: 0; background: var(--bg-tint); display: grid; place-items: center; font-size: 10px; color: var(--ink-2); }
+    .history-row .who-mini .av-mini img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .history-row .who-mini .lbl { font-size: 10px; color: var(--mute); letter-spacing: 0.06em; text-transform: uppercase; }
+    .history-row .who-mini .name { font-weight: 500; color: var(--ink); }
+    .history-row .meta { display: flex; gap: 8px; align-items: center; font-family: "JetBrains Mono"; font-size: 10px; color: var(--mute); }
+    .history-empty { padding: 14px; text-align: center; color: var(--mute); font-size: 12px; }
+
+    /* Mobile layout */
+    @media (max-width: 768px) {
+      html, body { font-size: 14px; }
+      .shell { grid-template-columns: 1fr; }
+      .side {
+        position: fixed; top: 0; left: 0; bottom: 0;
+        width: 280px; height: 100vh;
+        z-index: 200;
+        transform: translateX(-100%);
+        transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        box-shadow: 0 0 40px -10px rgba(0,0,0,0.25);
+      }
+      .side.open { transform: none; }
+      .side-backdrop { position: fixed; inset: 0; background: rgba(20,32,26,0.4); z-index: 150; opacity: 0; pointer-events: none; transition: opacity 200ms; }
+      .side-backdrop.open { opacity: 1; pointer-events: auto; }
+      .hamburger { display: grid; }
+
+      .topbar { padding: 10px 14px; gap: 8px; }
+      .crumb { display: none; }
+      .search { margin-left: 0; max-width: none; }
+      .topbar-actions .btn-primary .btn-label { display: none; }
+
+      .content { padding: 16px; }
+      .page-head { flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 20px; }
+      .page-head h1 { font-size: 30px; }
+      .page-head p { font-size: 13px; }
+      .page-head > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
+
+      .stats { grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
+      .stat { padding: 14px 16px; }
+      .stat .big { font-size: 32px; }
+
+      .panel-head { padding: 12px 14px; flex-wrap: wrap; gap: 10px; }
+      .panel-head h3 { font-size: 20px; }
+      .tabs { padding: 0 8px; overflow-x: auto; white-space: nowrap; flex-wrap: nowrap; }
+      .tab { flex-shrink: 0; }
+      .filters { padding: 10px 12px; gap: 6px; }
+      .filters > div[style*="margin-left:auto"] { margin-left: 0 !important; width: 100%; }
+
+      /* Horizontally scroll wide tables */
+      .panel > table, .panel > div > table { display: block; overflow-x: auto; }
+      table { min-width: 640px; }
+
+      .pipeline { grid-template-columns: 1fr; gap: 10px; }
+      .lane { min-height: auto; }
+
+      .qcard { grid-template-columns: 40px 1fr; gap: 10px; padding: 12px 14px; }
+      .qcard .rank { font-size: 22px; }
+      .qcard .pair { flex-direction: column; gap: 4px; }
+      .qcard > *:nth-child(3),
+      .qcard > *:nth-child(4),
+      .qcard > *:nth-child(5) { grid-column: 1 / -1; justify-self: start; }
+
+      .bench-col { padding: 18px; }
+      .bench-head { flex-wrap: wrap; gap: 8px; }
+      .prof { grid-template-columns: 64px 1fr; gap: 12px; }
+
+      .detail-pane { width: 100vw; }
+
+      /* Two-col inside workbench compat section */
+      .bench + div > div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; gap: 18px !important; }
+
+      .two-col > div:last-child { gap: 14px; }
+    }
   </style>
 </head>
 <body>
@@ -419,18 +520,18 @@
     // MOCK DATA — mirrors Convex schema
     // ———————————————————————————
     const PROFILES = [
-      { id: "r_ar", name: "Aisha Rahman", gender: "female", age: 27, city: "Brooklyn, NY", ethnicity: "Bangladeshi-American", education: "MA, Counseling", job: "Therapist", prayer: "always_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-12", reqs: ["Prays five daily", "Educated", "Wants children within 2 years"], bio: "Grew up in Queens. Found my way to counseling through a desire to serve Muslim women. Looking for a partner who prays, laughs easily, and values slow mornings." },
-      { id: "r_yi", name: "Yusuf Ibrahim", gender: "male", age: 30, city: "Jersey City, NJ", ethnicity: "Egyptian-American", education: "BS, Mechanical Engineering", job: "Engineer at Con Edison", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-02-28", reqs: ["Practicing", "Kind", "Family-oriented"], bio: "Born in Alexandria. Studies classical texts on weekends. Quietly competitive at chess. Looking for a serious companion for the long road." },
-      { id: "r_la", name: "Layla Adam", gender: "female", age: 34, city: "Brooklyn, NY", ethnicity: "Somali-American", education: "JD, Columbia", job: "Attorney", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-01-08", reqs: ["Supportive of career", "Practicing", "Over 32"] },
-      { id: "r_om", name: "Omar Malik", gender: "male", age: 33, city: "Brooklyn, NY", ethnicity: "Pakistani-American", education: "MBA, NYU", job: "Product Manager", prayer: "strive_five", hijab: null, maritalStatus: "Divorced, no children", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 95, createdAt: "2026-02-11", reqs: ["Practicing", "Family-minded", "Open to blended family"] },
-      { id: "r_ha", name: "Hana Al-Khatib", gender: "female", age: 29, city: "Astoria, NY", ethnicity: "Lebanese-American", education: "MA, Public Policy", job: "Policy analyst", prayer: "strive_five", hijab: "open", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-02", reqs: ["Educated", "Emotionally available", "Open to children soon"] },
-      { id: "r_ks", name: "Khalil Sharif", gender: "male", age: 28, city: "Brooklyn, NY", ethnicity: "Sudanese-American", education: "MD, 2nd year resident", job: "Resident physician", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 90, createdAt: "2026-03-14", reqs: ["Practicing", "Understanding of long hours", "Future-minded"] },
-      { id: "r_fa", name: "Fatima Ali", gender: "female", age: 31, city: "Queens, NY", ethnicity: "Iraqi-American", education: "MS, Data Science", job: "Data scientist", prayer: "always_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "paused", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-01-20", reqs: ["Consistent in prayer", "Educated", "Quiet and steady"] },
-      { id: "r_bk", name: "Bilal Khan", gender: "male", age: 35, city: "Paterson, NJ", ethnicity: "Indian-American", education: "PhD, Chemistry", job: "Research scientist", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "pending", search: "active", paid: false, payment: 0, profileCompletion: 40, createdAt: "2026-04-20", reqs: [] },
-      { id: "r_zm", name: "Zainab Mohamed", gender: "female", age: 26, city: "Brooklyn, NY", ethnicity: "Egyptian-American", education: "BA, Education", job: "Teacher", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-28", reqs: ["Patient", "Practicing", "Enjoys nature"] },
-      { id: "r_tj", name: "Tariq Jabari", gender: "male", age: 32, city: "Newark, NJ", ethnicity: "Palestinian-American", education: "BS, Finance", job: "Financial planner", prayer: "strive_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 85, createdAt: "2026-04-03", reqs: ["Kind", "Family-focused", "Practicing"] },
-      { id: "r_nm", name: "Noor Mansoor", gender: "female", age: 28, city: "Brooklyn, NY", ethnicity: "Yemeni-American", education: "MA, English Lit", job: "Writer / editor", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 95, createdAt: "2026-04-10", reqs: ["Reads", "Thoughtful", "Practicing"] },
-      { id: "r_ih", name: "Ibrahim Hassan", gender: "male", age: 29, city: "Brooklyn, NY", ethnicity: "Somali-American", education: "BS, CS", job: "Software engineer", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "pending", search: "active", paid: false, payment: 0, profileCompletion: 30, createdAt: "2026-04-22", reqs: [] },
+      { id: "r_ar", name: "Aisha Rahman", gender: "female", age: 27, city: "Brooklyn, NY", ethnicity: "Bangladeshi-American", education: "MA, Counseling", job: "Therapist", prayer: "always_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-12", reqs: ["Prays five daily", "Educated", "Wants children within 2 years"], bio: "Grew up in Queens. Found my way to counseling through a desire to serve Muslim women. Looking for a partner who prays, laughs easily, and values slow mornings.", photo: "https://i.pravatar.cc/160?img=47" },
+      { id: "r_yi", name: "Yusuf Ibrahim", gender: "male", age: 30, city: "Jersey City, NJ", ethnicity: "Egyptian-American", education: "BS, Mechanical Engineering", job: "Engineer at Con Edison", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-02-28", reqs: ["Practicing", "Kind", "Family-oriented"], bio: "Born in Alexandria. Studies classical texts on weekends. Quietly competitive at chess. Looking for a serious companion for the long road.", photo: "https://i.pravatar.cc/160?img=12" },
+      { id: "r_la", name: "Layla Adam", gender: "female", age: 34, city: "Brooklyn, NY", ethnicity: "Somali-American", education: "JD, Columbia", job: "Attorney", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-01-08", reqs: ["Supportive of career", "Practicing", "Over 32"], photo: "https://i.pravatar.cc/160?img=5" },
+      { id: "r_om", name: "Omar Malik", gender: "male", age: 33, city: "Brooklyn, NY", ethnicity: "Pakistani-American", education: "MBA, NYU", job: "Product Manager", prayer: "strive_five", hijab: null, maritalStatus: "Divorced, no children", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 95, createdAt: "2026-02-11", reqs: ["Practicing", "Family-minded", "Open to blended family"], photo: "https://i.pravatar.cc/160?img=13" },
+      { id: "r_ha", name: "Hana Al-Khatib", gender: "female", age: 29, city: "Astoria, NY", ethnicity: "Lebanese-American", education: "MA, Public Policy", job: "Policy analyst", prayer: "strive_five", hijab: "open", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-02", reqs: ["Educated", "Emotionally available", "Open to children soon"], photo: "https://i.pravatar.cc/160?img=16" },
+      { id: "r_ks", name: "Khalil Sharif", gender: "male", age: 28, city: "Brooklyn, NY", ethnicity: "Sudanese-American", education: "MD, 2nd year resident", job: "Resident physician", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 90, createdAt: "2026-03-14", reqs: ["Practicing", "Understanding of long hours", "Future-minded"], photo: "https://i.pravatar.cc/160?img=11" },
+      { id: "r_fa", name: "Fatima Ali", gender: "female", age: 31, city: "Queens, NY", ethnicity: "Iraqi-American", education: "MS, Data Science", job: "Data scientist", prayer: "always_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "paused", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-01-20", reqs: ["Consistent in prayer", "Educated", "Quiet and steady"], photo: "https://i.pravatar.cc/160?img=45" },
+      { id: "r_bk", name: "Bilal Khan", gender: "male", age: 35, city: "Paterson, NJ", ethnicity: "Indian-American", education: "PhD, Chemistry", job: "Research scientist", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "pending", search: "active", paid: false, payment: 0, profileCompletion: 40, createdAt: "2026-04-20", reqs: [], photo: "https://i.pravatar.cc/160?img=14" },
+      { id: "r_zm", name: "Zainab Mohamed", gender: "female", age: 26, city: "Brooklyn, NY", ethnicity: "Egyptian-American", education: "BA, Education", job: "Teacher", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 100, createdAt: "2026-03-28", reqs: ["Patient", "Practicing", "Enjoys nature"], photo: "https://i.pravatar.cc/160?img=9" },
+      { id: "r_tj", name: "Tariq Jabari", gender: "male", age: 32, city: "Newark, NJ", ethnicity: "Palestinian-American", education: "BS, Finance", job: "Financial planner", prayer: "strive_five", hijab: null, maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 85, createdAt: "2026-04-03", reqs: ["Kind", "Family-focused", "Practicing"], photo: "https://i.pravatar.cc/160?img=15" },
+      { id: "r_nm", name: "Noor Mansoor", gender: "female", age: 28, city: "Brooklyn, NY", ethnicity: "Yemeni-American", education: "MA, English Lit", job: "Writer / editor", prayer: "strive_five", hijab: "yes", maritalStatus: "Never married", status: "approved", search: "active", paid: true, payment: 10, profileCompletion: 95, createdAt: "2026-04-10", reqs: ["Reads", "Thoughtful", "Practicing"], photo: "https://i.pravatar.cc/160?img=32" },
+      { id: "r_ih", name: "Ibrahim Hassan", gender: "male", age: 29, city: "Brooklyn, NY", ethnicity: "Somali-American", education: "BS, CS", job: "Software engineer", prayer: "always_five", hijab: null, maritalStatus: "Never married", status: "pending", search: "active", paid: false, payment: 0, profileCompletion: 30, createdAt: "2026-04-22", reqs: [], photo: "https://i.pravatar.cc/160?img=33" },
     ];
 
     const p = (id) => PROFILES.find(x => x.id === id);
@@ -519,7 +620,7 @@
     // ———————————————————————————
     // Sidebar
     // ———————————————————————————
-    const Sidebar = ({ page, setPage }) => {
+    const Sidebar = ({ page, setPage, open, onClose }) => {
       const items = [
         { g: "Overview", items: [
           { id: "dashboard", label: "Dashboard", icon: Ico.dash },
@@ -539,43 +640,50 @@
           { id: "settings", label: "Settings", icon: Ico.settings },
         ]},
       ];
+      const go = (id) => { setPage(id); if (onClose) onClose(); };
       return (
-        <aside className="side">
-          <div className="brand">
-            <LogoMark/>
-            <div>
-              <div className="brand-name">Taaruf</div>
-              <div className="brand-tag">Admin · v2</div>
+        <>
+          <div className={`side-backdrop ${open?"open":""}`} onClick={onClose}/>
+          <aside className={`side ${open?"open":""}`}>
+            <div className="brand">
+              <LogoMark/>
+              <div>
+                <div className="brand-name">Taaruf</div>
+                <div className="brand-tag">Admin · v2</div>
+              </div>
             </div>
-          </div>
-          {items.map((g) => (
-            <div className="nav-section" key={g.g}>
-              <h5>{g.g}</h5>
-              {g.items.map(i => (
-                <div key={i.id} className={`nav-item ${page===i.id?"active":""}`} onClick={()=>setPage(i.id)}>
-                  <span className="icon">{i.icon}</span>
-                  <span>{i.label}</span>
-                  {typeof i.count === "number" && <span className={`count ${i.urgent?"urgent":""}`}>{i.count}</span>}
-                </div>
-              ))}
+            {items.map((g) => (
+              <div className="nav-section" key={g.g}>
+                <h5>{g.g}</h5>
+                {g.items.map(i => (
+                  <div key={i.id} className={`nav-item ${page===i.id?"active":""}`} onClick={()=>go(i.id)}>
+                    <span className="icon">{i.icon}</span>
+                    <span>{i.label}</span>
+                    {typeof i.count === "number" && <span className={`count ${i.urgent?"urgent":""}`}>{i.count}</span>}
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div className="side-foot">
+              <div className="avatar">DG</div>
+              <div>
+                <div style={{color:"var(--ink)",fontWeight:500,fontSize:12}}>Danielle Gore</div>
+                <div style={{fontSize:10,color:"var(--mute)"}}>Admin · matchmaker</div>
+              </div>
             </div>
-          ))}
-          <div className="side-foot">
-            <div className="avatar">DG</div>
-            <div>
-              <div style={{color:"var(--ink)",fontWeight:500,fontSize:12}}>Danielle Gore</div>
-              <div style={{fontSize:10,color:"var(--mute)"}}>Admin · matchmaker</div>
-            </div>
-          </div>
-        </aside>
+          </aside>
+        </>
       );
     };
 
     // ———————————————————————————
     // Topbar
     // ———————————————————————————
-    const Topbar = ({ crumb }) => (
+    const Topbar = ({ crumb, onMenu }) => (
       <div className="topbar">
+        <button className="hamburger" onClick={onMenu} aria-label="Open menu">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 5 H 16 M2 9 H 16 M2 13 H 16"/></svg>
+        </button>
         <div className="crumb">
           <span>Taaruf</span>
           <span style={{color:"var(--line)"}}>›</span>
@@ -589,7 +697,7 @@
         </div>
         <div className="topbar-actions">
           <button className="ibtn">{Ico.bell}<span className="dot"/></button>
-          <button className="btn btn-primary">{Ico.plus} New match</button>
+          <button className="btn btn-primary">{Ico.plus} <span className="btn-label">New match</span></button>
         </div>
       </div>
     );
@@ -601,7 +709,10 @@
       const prof = p(id); if (!prof) return null;
       return (
         <div className={`who ${prof.gender==="female"?"f":"m"}`}>
-          <div className="av">{initials(prof.name)}</div>
+          <div className="av">
+            <span>{initials(prof.name)}</span>
+            {prof.photo && <img src={prof.photo} alt={prof.name} onError={(e)=>{e.currentTarget.style.display="none";}}/>}
+          </div>
           <div>
             <div className="name">{prof.name}</div>
             <div className="sub">{prof.age} · {prof.city}</div>
@@ -655,10 +766,10 @@
             <Sparkline data={[90,94,98,101,108,115,119,128]}/>
           </div>
           <div className="stat">
-            <h4>Paid registrations</h4>
-            <div className="big">$1,280</div>
-            <div className="sub"><span className="trend">▲ 18%</span> <span>vs. last month</span></div>
-            <Sparkline data={[4,7,9,11,10,14,16,18]} color="var(--gold)"/>
+            <h4>Pending interests</h4>
+            <div className="big">11</div>
+            <div className="sub"><span className="trend">▲ 4</span> <span>awaiting review</span></div>
+            <Sparkline data={[2,3,5,6,8,9,10,11]} color="var(--amber)"/>
           </div>
           <div className="stat">
             <h4>Matches in flight</h4>
@@ -857,7 +968,10 @@
             </div>
           </div>
           <div className="prof">
-            <div className="prof-photo"><div className="ph">{initials(person.name)}</div></div>
+            <div className="prof-photo">
+              <div className="ph">{initials(person.name)}</div>
+              {person.photo && <img src={person.photo} alt={person.name} onError={(e)=>{e.currentTarget.style.display="none";}}/>}
+            </div>
             <div>
               <div className="name">{person.name}</div>
               <div className="meta">{person.age} · {person.city} · {person.ethnicity}</div>
@@ -1058,8 +1172,9 @@
           <aside className={`detail-pane ${open?"open":""}`}>
             <div className="dp-head">
               <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                <div className={`who ${prof.gender==="female"?"f":"m"}`}>
-                  <div className="av">{initials(prof.name)}</div>
+                <div className={`dp-av ${prof.gender==="female"?"f":"m"}`}>
+                  <span>{initials(prof.name)}</span>
+                  {prof.photo && <img src={prof.photo} alt={prof.name} onError={(e)=>{e.currentTarget.style.display="none";}}/>}
                 </div>
                 <div>
                   <div style={{fontFamily:"Cormorant Garamond",fontSize:22,lineHeight:1}}>{prof.name}</div>
@@ -1100,6 +1215,93 @@
                   <h4 style={{fontSize:10,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:10,fontWeight:500}}>Shareable bio</h4>
                   <div style={{padding:14,background:"var(--bg-tint)",borderRadius:6,fontFamily:"Cormorant Garamond",fontStyle:"italic",fontSize:15,color:"var(--ink-2)",lineHeight:1.5,marginBottom:24}}>"{prof.bio}"</div>
                 </>)}
+
+                {(() => {
+                  const related = MATCHES.filter(m => m.male === prof.id || m.female === prof.id)
+                    .sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+                  return (
+                    <>
+                      <h4 style={{fontSize:10,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:10,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span>Match history</span>
+                        <span className="mono" style={{fontSize:10,color:"var(--mute)",letterSpacing:"0.04em",textTransform:"none"}}>{related.length} total</span>
+                      </h4>
+                      {related.length ? (
+                        <div className="history-list">
+                          {related.map(m => {
+                            const otherId = m.male === prof.id ? m.female : m.male;
+                            const other = p(otherId);
+                            return (
+                              <div className="history-row" key={m.id}>
+                                <div className="who-mini">
+                                  <div className="av-mini">
+                                    <span>{initials(other.name)}</span>
+                                    {other.photo && <img src={other.photo} alt={other.name} onError={(e)=>{e.currentTarget.style.display="none";}}/>}
+                                  </div>
+                                  <div>
+                                    <div className="lbl">With</div>
+                                    <div className="name">{other.name}</div>
+                                  </div>
+                                </div>
+                                <div className="meta">
+                                  <StatusPill status={m.status}/>
+                                  <span>· score {m.score}</span>
+                                  <span>· {m.createdAt}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="history-empty" style={{marginBottom:24,border:"1px solid var(--line-2)",borderRadius:6}}>No matches yet.</div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {(() => {
+                  const sent = INTERESTS.filter(i => i.from === prof.id).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+                  const received = INTERESTS.filter(i => i.to === prof.id).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+                  const total = sent.length + received.length;
+                  const renderRow = (i, direction) => {
+                    const otherId = direction === "sent" ? i.to : i.from;
+                    const other = p(otherId);
+                    return (
+                      <div className="history-row" key={i.id}>
+                        <div className="who-mini">
+                          <div className="av-mini">
+                            <span>{initials(other.name)}</span>
+                            {other.photo && <img src={other.photo} alt={other.name} onError={(e)=>{e.currentTarget.style.display="none";}}/>}
+                          </div>
+                          <div>
+                            <div className="lbl">{direction === "sent" ? "Toward" : "From"}</div>
+                            <div className="name">{other.name}</div>
+                          </div>
+                        </div>
+                        <div className="meta">
+                          <span className="pill plain" style={{fontSize:10}}>{i.source.replace("_"," ")}</span>
+                          <StatusPill status={i.status}/>
+                          <span>· {i.createdAt}</span>
+                        </div>
+                      </div>
+                    );
+                  };
+                  return (
+                    <>
+                      <h4 style={{fontSize:10,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:10,fontWeight:500,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span>Interest signals</span>
+                        <span className="mono" style={{fontSize:10,color:"var(--mute)",letterSpacing:"0.04em",textTransform:"none"}}>{total} total · {sent.length} sent · {received.length} received</span>
+                      </h4>
+                      {total ? (
+                        <div className="history-list">
+                          {sent.map(i => renderRow(i, "sent"))}
+                          {received.map(i => renderRow(i, "received"))}
+                        </div>
+                      ) : (
+                        <div className="history-empty" style={{marginBottom:24,border:"1px solid var(--line-2)",borderRadius:6}}>No interest signals yet.</div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 <h4 style={{fontSize:10,letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--mute)",marginBottom:10,fontWeight:500}}>Admin notes</h4>
                 <textarea rows="4" style={{width:"100%",padding:12,border:"1px solid var(--line)",borderRadius:6,font:"inherit",fontSize:13,resize:"vertical",marginBottom:16}} placeholder="Private notes about this member…"/>
@@ -1149,14 +1351,15 @@
     const App = () => {
       const [page, setPage] = React.useState("dashboard");
       const [openProfileId, setOpenProfileId] = React.useState(null);
+      const [sideOpen, setSideOpen] = React.useState(false);
       const openProfile = (id) => setOpenProfileId(id);
-      const openMatch = (id) => { setPage("workbench"); };
+      const openMatch = (id) => { setPage("workbench"); setSideOpen(false); };
 
       return (
         <div className="shell">
-          <Sidebar page={page} setPage={setPage}/>
+          <Sidebar page={page} setPage={setPage} open={sideOpen} onClose={()=>setSideOpen(false)}/>
           <div className="main">
-            <Topbar crumb={CRUMBS[page] || "Dashboard"}/>
+            <Topbar crumb={CRUMBS[page] || "Dashboard"} onMenu={()=>setSideOpen(true)}/>
             <div className="content">
               {page === "dashboard" && <Dashboard setPage={setPage} openMatch={openMatch}/>}
               {page === "profiles" && <Profiles openProfile={openProfile}/>}
