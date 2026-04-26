@@ -1,23 +1,12 @@
-import { cookies } from "next/headers";
-import crypto from "crypto";
-import AdminLogin from "@/components/admin-login";
-import AdminDashboard from "@/components/admin-dashboard";
+import { redirect } from "next/navigation";
 
-export default async function AdminPage() {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get("admin_token")?.value;
-
-  // Verify the token
-  const expectedToken = crypto
-    .createHash("sha256")
-    .update(process.env.ADMIN_PASSWORD + (process.env.ADMIN_TOKEN_SALT || "taaruf-admin-salt"))
-    .digest("hex");
-
-  const isAuthenticated = adminToken === expectedToken;
-
-  if (!isAuthenticated) {
-    return <AdminLogin />;
-  }
-
-  return <AdminDashboard />;
+/**
+ * /admin now redirects to the new dashboard. The legacy single-page
+ * dashboard lived here historically; all of its functionality has
+ * been split across /admin/dashboard, /admin/profiles, and
+ * /admin/settings. The cookie auth check happens inside the (shell)
+ * layout that wraps every admin route.
+ */
+export default function AdminRoot() {
+  redirect("/admin/dashboard");
 }
