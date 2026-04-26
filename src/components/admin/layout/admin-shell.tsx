@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { useAdminName } from "@/components/admin/hooks/use-admin-name";
 
 const CRUMBS: Record<string, string> = {
   "/admin/dashboard": "Dashboard",
@@ -19,16 +20,17 @@ const CRUMBS: Record<string, string> = {
 
 type Props = {
   children: ReactNode;
-  adminName?: string;
 };
 
 /**
  * Client-side shell that owns the sidebar / topbar interaction state
  * (mobile drawer + desktop collapse). Wraps every page rendered under
- * the admin (shell) route group.
+ * the admin (shell) route group. Reads the admin display name from
+ * the settings table so it flows into the sidebar footer.
  */
-export function AdminShell({ children, adminName }: Props) {
+export function AdminShell({ children }: Props) {
   const pathname = usePathname();
+  const adminName = useAdminName();
   const [sideOpen, setSideOpen] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(false);
 
@@ -53,7 +55,7 @@ export function AdminShell({ children, adminName }: Props) {
           open={sideOpen}
           collapsed={sideCollapsed}
           onClose={() => setSideOpen(false)}
-          adminName={adminName}
+          adminName={adminName ?? undefined}
         />
         <div className="main">
           <Topbar crumb={CRUMBS[crumb] || "Dashboard"} onMenu={toggleSide} />
