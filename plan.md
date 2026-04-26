@@ -138,6 +138,28 @@ The current admin-mediated model works for small scale. If attendee self-service
 4. `/portal/request/[id]` — accept/decline incoming interest
 5. The token-based `/profile/[token]` and `/share/[token]` pages remain for unauthenticated flows (e.g., admins still email shared profiles to attendees who haven't logged in)
 
+### Phase D: Remove the Legacy Dashboard (Final Step)
+
+The legacy single-page admin dashboard is currently kept reachable at `/admin/legacy` because the new shell at `/admin/(shell)/...` did not yet re-skin every feature (interests queue, profile shares, match notifications, image thumbnails, applicant numbers, profile status filter).
+
+**Once Phases A and B are complete and every legacy-only feature has a working equivalent in the new shell**, do this as the final cleanup step:
+
+1. Confirm feature parity:
+   - Interests queue → in `/admin/(shell)/interests` and/or `inbox`
+   - Profile shares → admin can create + track from the new shell
+   - Match notifications → triggerable from the new shell
+   - Image thumbnails → visible in profile detail panes
+   - Applicant numbers → shown in registration list and profile detail
+   - Profile completion status filter → present in the new profiles list
+   - All actions in `admin-dashboard.tsx` (approve/reject/delete, slot caps, payment reconciliation, CSV export, admin notes) → available in the new shell
+2. Delete `src/app/admin/legacy/page.tsx`
+3. Delete `src/components/admin-dashboard.tsx` (the monolithic legacy component)
+4. Remove the "viewing the legacy admin" banner / cross-link
+5. Verify no other code imports the removed files (`grep -r "admin-dashboard\|admin/legacy" src/`)
+6. Update any docs that still reference `/admin/legacy`
+
+**Verification:** Visit `/admin/legacy` → should 404. Confirm every workflow in the legacy dashboard's checklist still works in the new shell before deleting.
+
 ---
 
 ## Files That Need Changes (Phase A)
