@@ -103,9 +103,9 @@ The matchmaking system is being built incrementally. A parallel work stream has 
 Before touching feature code, do this housekeeping so the working tree is clean and Phase A doesn't regress lint.
 
 **Track these as durable project files** (commit them):
-- `AGENTS.md` — durable repo instructions for Convex work
+- `AGENTS.md` — durable repo instructions for Convex work (canonical)
 - `convex/tsconfig.json` — Convex project config, useful for typechecking
-- `CLAUDE.md` — duplicates `AGENTS.md` but worth tracking since Claude is used in this repo
+- `CLAUDE.md` — **shrink to a one-line pointer** like `See AGENTS.md.` Do not maintain duplicate content; the two files will drift. Keeping a tiny stub satisfies Claude Code's filename convention without duplicate-source-of-truth risk.
 
 **Ignore these local agent/tooling artifacts** (add to `.gitignore`):
 ```
@@ -122,7 +122,12 @@ skills-lock.json
 - `convex/registrations.ts`
 - The two scripts under `scripts/`
 
-Phase A modifies the first two files, so clean their lint issues as part of Phase A's diff. The scripts can be cleaned in a separate small commit. **Do not** do a sweeping codebase-wide lint cleanup — keep changes scoped.
+**Goal: leave the repo with `npm run lint` passing on `main`.** That's a hard requirement, not a stretch goal — once we add CI (likely soon), a permanently-failing lint baseline blocks every PR.
+
+Specifically:
+- Phase A modifies `convex/interests.ts` and `convex/registrations.ts`, so clean their lint issues as part of Phase A's diff.
+- For `scripts/`: either fix the lint issues in a separate small commit, **or** add `scripts/` to `.eslintignore` if the agent confirms those files are operational/throwaway. Pick one — do not leave them broken.
+- **Do not** do a sweeping codebase-wide lint cleanup beyond the above. Keep changes scoped.
 
 ### Phase A: Enforce Management's Rules
 
@@ -133,6 +138,40 @@ Phase A modifies the first two files, so clean their lint issues as part of Phas
 - Active-match queuing behavior (`new` vs `queued` based on either party's `activeMatchId`)
 
 Recommended structure: a new internal module (e.g., `convex/interestRules.ts`) exporting helpers like `assertCanCreateInterest(ctx, fromId, toId)` and `decideInitialStatus(ctx, fromId, toId)`. Both call sites import these. This prevents drift between manual-entry and auto-entry paths.
+
+**Production rollout — backfill existing registrations (do this BEFORE flipping any gate)**
+
+The April event has dozens of registrations from before the extended profile fields existed. Most do not have `ethnicity`, `prayerCommitment`, `hijabResponse`, `spouseRequirement1/2/3`, `shareableBio`, or `photoSharingPermission` filled in. If the profile-completion gate ships without addressing them, **every existing registrant gets locked out of matching the moment Phase A deploys**.
+
+The implementing agent must pick **one** rollout strategy and document the choice in the PR description:
+
+1. **Backfill script** — a one-shot Convex action that iterates registrations and sets `profileCompletionStatus: "completed"` if the registrant has all required fields, otherwise leaves them `not_started` and triggers a profile-completion email. Safest for an in-flight cohort.
+2. **Email-then-enforce** — send a profile-completion email to every active registrant first, wait a chosen window (e.g. 7 days), then flip the gate. Better for fresh consent but slower.
+3. **Grandfather existing pending interests** — Phase A enforcement only applies to NEW interests created after deploy. Existing rows continue to flow through the old admin paths. Lowest disruption, but now we maintain two regimes — only acceptable as a short-term bridge.
+
+Default recommendation: **strategy 1 (backfill)** combined with admin spot-check. Add the backfill action under `convex/migrations/` (or a clearly named folder) so it's discoverable and re-runnable.
+
+**`activeMatchId` denormalization — pick one, do not half-do both**
+
+The schema already has `registrations.activeMatchId` as a denormalized pointer. Two options for Phase A:
+
+1. **Keep the pointer, enforce the invariant.** Every code path that creates/closes a match also updates both registrations' `activeMatchId`. Add a Convex query `verifyActiveMatchInvariant()` that scans for drift (registrations pointing to non-active matches, or matches in `contact_shared` whose participants don't both point back). Run it as a periodic check or expose it on the admin settings page.
+2. **Drop the denormalization.** Compute "is this person in an active match?" from the `matches` table on demand, using an index like `matches.by_status_and_male` / `by_status_and_female`. Slightly more reads per query but no drift risk. Requires removing `activeMatchId` from the schema and any code that reads it.
+
+The current code already sets `activeMatchId` in some places, so option 1 is the lower-disruption path. **Phase A should pick option 1 explicitly** and add the invariant check. Do not start writing to `activeMatchId` in some new paths while leaving others untouched — that's how the drift starts.
+
+**Tests — Phase A is a state machine, ship tests with it**
+
+Phase A's helpers govern queue, dequeue, mutual-interest auto-pair, and decline cascading. This is exactly the kind of code that breaks silently. The implementing agent must add Convex unit tests covering at minimum:
+
+- Profile-completion gate: `from` incomplete, `to` incomplete, both incomplete (each should reject with a clear error)
+- 3-cap: at boundary 3, decline frees a slot, withdrawn frees a slot, `closed` frees a slot, `converted_to_match` frees a slot
+- Duplicate check: two open interests for the same `from→to` pair are rejected; a previously declined pair can be re-attempted only if business rules allow (cross-reference open question #1)
+- Active-match queuing: target has `activeMatchId` → new interest lands as `queued`; closing the match promotes the oldest queued to `active`
+- FIFO progression in `progressFirst`: ensure deterministic order by `createdAt`
+- Mutual-interest auto-pair: A creates interest in B; B creates interest in A → both convert to a match in one transaction; both registrations get `activeMatchId` set; any other queued interests for either party stay queued
+
+Tests live under `convex/__tests__/` (or whichever convention the existing tests use). If no Convex test infra exists yet, add it — Convex supports `@convex-test/dev` for in-memory testing.
 
 1. **Profile-completion gate**
    - Block `interests.create` if either side's `profileCompletionStatus !== "completed"`
