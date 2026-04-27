@@ -3,6 +3,8 @@ type Props = {
   gender: "male" | "female";
   /** Sub-text under the name. Typically "{age} · {city}" or an email. */
   sub?: string;
+  /** Optional profile thumbnail URL from Convex storage. */
+  imageUrl?: string | null;
 };
 
 function initials(name: string) {
@@ -17,13 +19,22 @@ function initials(name: string) {
 
 /**
  * Avatar + name + sub-text used in admin tables and queue cards.
- * Avatar tints by gender (rose-tinted for sisters, emerald for brothers)
- * and shows initials. Photo support lands later when storage IDs ship.
+ * Avatar tints by gender and falls back to initials when no image is available.
  */
-export function WhoCell({ name, gender, sub }: Props) {
+export function WhoCell({ name, gender, sub, imageUrl }: Props) {
   return (
     <div className={`who ${gender === "female" ? "f" : "m"}`}>
-      <div className="av">{initials(name)}</div>
+      <div className="av">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={`${name} profile thumbnail`}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          initials(name)
+        )}
+      </div>
       <div>
         <div className="name">{name}</div>
         {sub && <div className="sub">{sub}</div>}

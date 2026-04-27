@@ -23,6 +23,21 @@ export const Ico = {
       <path d="M4 5 L8 8 L4 11 M12 5 L8 8 L12 11" />
     </svg>
   ),
+  workbench: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <rect x="2.5" y="3" width="4.5" height="6" rx="1" />
+      <rect x="9" y="7" width="4.5" height="6" rx="1" />
+      <path d="M7 6 H 9 M7 9 H 8.2 M8.8 10 L 7.5 12 M8.8 10 L 10.2 12" />
+    </svg>
+  ),
+  pipeline: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <path d="M3 4 H 6.5 M9.5 4 H 13 M3 8 H 7.5 M10.5 8 H 13 M3 12 H 5.5 M8.5 12 H 13" />
+      <circle cx="8" cy="4" r="1.4" />
+      <circle cx="9" cy="8" r="1.4" />
+      <circle cx="7" cy="12" r="1.4" />
+    </svg>
+  ),
   heart: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
       <path d="M8 13 L2.5 7.5 A 3 3 0 0 1 8 4 A 3 3 0 0 1 13.5 7.5 Z" />
