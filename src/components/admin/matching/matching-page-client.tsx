@@ -13,26 +13,27 @@ import { Ico } from "@/components/admin/primitives/icons";
 import { useRegistrations } from "@/components/admin/hooks/use-registrations";
 
 type Registration = Doc<"registrations">;
+type RegistrationWithImages = Registration & { imageUrls?: string[] };
 type InterestStatus = Doc<"interests">["status"];
 type InterestAdminStatus = NonNullable<Doc<"interests">["adminStatus"]>;
 type MatchStatus = Doc<"matches">["status"];
 type ShareStatus = Doc<"profileShares">["status"];
 
 type InterestRecord = Doc<"interests"> & {
-  fromRegistration: Registration | null;
-  toRegistration: Registration | null;
+  fromRegistration: RegistrationWithImages | null;
+  toRegistration: RegistrationWithImages | null;
   match: Doc<"matches"> | null;
 };
 
 type MatchRecord = Doc<"matches"> & {
-  maleRegistration: Registration | null;
-  femaleRegistration: Registration | null;
+  maleRegistration: RegistrationWithImages | null;
+  femaleRegistration: RegistrationWithImages | null;
   interest: Doc<"interests"> | null;
 };
 
 type ProfileShareRecord = Doc<"profileShares"> & {
-  owner: Registration | null;
-  recipient: Registration | null;
+  owner: RegistrationWithImages | null;
+  recipient: RegistrationWithImages | null;
 };
 
 const INTEREST_STATUSES: InterestStatus[] = [
@@ -213,7 +214,7 @@ function ApplicantLink({
   number,
   muted = false,
 }: {
-  registration: Registration | null;
+  registration: RegistrationWithImages | null;
   number?: number;
   muted?: boolean;
 }) {
@@ -236,7 +237,7 @@ function ApplicantMini({
   registration,
   number,
 }: {
-  registration: Registration | null;
+  registration: RegistrationWithImages | null;
   number?: number;
 }) {
   if (!registration) return <Pill tone="plain">Unknown</Pill>;
@@ -304,12 +305,12 @@ function ProfileComparison({
   leftNumber,
   rightNumber,
 }: {
-  left: Registration | null;
-  right: Registration | null;
+  left: RegistrationWithImages | null;
+  right: RegistrationWithImages | null;
   leftNumber?: number;
   rightNumber?: number;
 }) {
-  const renderProfile = (registration: Registration | null, number?: number, label?: string) => (
+  const renderProfile = (registration: RegistrationWithImages | null, number?: number, label?: string) => (
     <section
       style={{
         border: "1px solid var(--line)",
@@ -325,6 +326,31 @@ function ProfileComparison({
         <ApplicantLink registration={registration} number={number} />
         {registration ? (
           <>
+            {registration.imageUrls?.length ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))",
+                  gap: 8,
+                }}
+              >
+                {registration.imageUrls.map((imageUrl, index) => (
+                  <img
+                    key={`${registration._id}-comparison-photo-${index}`}
+                    src={imageUrl}
+                    alt={`${registration.name} photo ${index + 1}`}
+                    style={{
+                      width: "100%",
+                      aspectRatio: "4 / 5",
+                      objectFit: "cover",
+                      borderRadius: 8,
+                      border: "1px solid var(--line)",
+                      background: "var(--bg-tint)",
+                    }}
+                  />
+                ))}
+              </div>
+            ) : null}
             <div className="fact-list">
               <div className="fact">
                 <div className="k">Status</div>

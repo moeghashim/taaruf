@@ -8,6 +8,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 export type RegistrationDoc = NonNullable<ReturnType<typeof useAllRegistrations>>[number];
 export type FilterStatus = "all" | "approved" | "pending" | "rejected" | "waitlisted";
 export type FilterGender = "all" | "male" | "female";
+export type FilterProfileCompletionStatus = "all" | "completed" | "in_progress" | "not_started";
 
 function useAllRegistrations() {
   return useQuery(api.registrations.getAll);
@@ -68,7 +69,12 @@ export function useRegistrations() {
     [registrations, waitlistIds]
   );
 
-  const filterRegistrations = (status: FilterStatus, gender: FilterGender, search: string) =>
+  const filterRegistrations = (
+    status: FilterStatus,
+    gender: FilterGender,
+    search: string,
+    profileCompletionStatus: FilterProfileCompletionStatus = "all"
+  ) =>
     registrations.filter((reg) => {
       if (status === "waitlisted") {
         if (!waitlistIds.has(reg._id)) return false;
@@ -76,6 +82,12 @@ export function useRegistrations() {
         return false;
       }
       if (gender !== "all" && reg.gender !== gender) return false;
+      if (
+        profileCompletionStatus !== "all" &&
+        (reg.profileCompletionStatus ?? "not_started") !== profileCompletionStatus
+      ) {
+        return false;
+      }
       if (search.trim()) {
         const q = search.toLowerCase();
         return (
