@@ -228,7 +228,7 @@ export function ProfilesPageClient({
                     {data.registrationNumbers.get(r._id)}
                   </td>
                   <td>
-                    <WhoCell name={r.name} gender={r.gender} sub={r.email} />
+                    <WhoCell name={r.name} gender={r.gender} sub={r.email} imageUrl={r.imageUrls?.[0]} />
                   </td>
                   <td>{r.age}</td>
                   <td style={{ fontSize: 12 }}>
@@ -270,6 +270,7 @@ export function ProfilesPageClient({
                 name={openProfile.name}
                 gender={openProfile.gender}
                 sub={`${openProfile.age} · ${openProfile.gender === "female" ? "Sister" : "Brother"}`}
+                imageUrl={openProfile.imageUrls?.[0]}
               />
             </>
           ) : null

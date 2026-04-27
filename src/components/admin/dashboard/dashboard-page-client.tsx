@@ -161,7 +161,7 @@ export function DashboardPageClient() {
                 <div className="qcard" key={r._id} onClick={() => setOpenProfileId(r._id)}>
                   <div className="rank">{idx + 1}</div>
                   <div>
-                    <WhoCell name={r.name} gender={r.gender} sub={r.email} />
+                    <WhoCell name={r.name} gender={r.gender} sub={r.email} imageUrl={r.imageUrls?.[0]} />
                     <div style={{ fontSize: 11, color: "var(--mute)", marginTop: 6 }}>
                       Registered {formatDate(r._creationTime)}
                       {r.paymentStatus === "paid" ? " · payment confirmed" : " · payment " + (r.paymentStatus ?? "unknown")}
@@ -237,6 +237,7 @@ export function DashboardPageClient() {
               name={openProfile.name}
               gender={openProfile.gender}
               sub={`${openProfile.age} · ${openProfile.gender === "female" ? "Sister" : "Brother"}`}
+              imageUrl={openProfile.imageUrls?.[0]}
             />
           ) : null
         }

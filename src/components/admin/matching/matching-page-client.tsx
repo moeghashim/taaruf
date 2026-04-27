@@ -228,6 +228,7 @@ function ApplicantLink({
         name={`#${number ?? "-"} ${registration.name}`}
         gender={registration.gender}
         sub={`${registration.age} · ${registration.email}${muted ? " · linked profile" : ""}`}
+        imageUrl={registration.imageUrls?.[0]}
       />
     </Link>
   );

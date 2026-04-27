@@ -36,8 +36,8 @@ const NAV: NavGroup[] = [
   {
     heading: "Matching",
     items: [
-      { href: "/admin/workbench", label: "Match workbench", icon: Ico.match },
-      { href: "/admin/pipeline", label: "Pipeline", icon: Ico.match },
+      { href: "/admin/workbench", label: "Match workbench", icon: Ico.workbench },
+      { href: "/admin/pipeline", label: "Pipeline", icon: Ico.pipeline },
       { href: "/admin/interests", label: "Interests", icon: Ico.heart },
     ],
   },
