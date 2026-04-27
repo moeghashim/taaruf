@@ -207,6 +207,67 @@ Tests live under `convex/__tests__/` (or whichever convention the existing tests
    - **On `interests.create`** (via the shared helper): if either party has `activeMatchId` set, the new interest lands as `queued` (not `new`).
    - **On match close** (status moves to `closed`, `declined`, or `paused` from `contact_shared`): clear `activeMatchId` for both participants and call `interests.progressFirst` for each to promote the oldest queued interest to `active`.
 
+### Phase A.5: Port Interests + Matches into the New Admin Shell
+
+Phase A wired up all the rules but the new admin shell at `/admin/(shell)/...` still renders "Coming soon" stubs for the matching-related pages. The actual working interests + matches UI only exists in the legacy dashboard at `/admin/legacy` (`src/components/admin-dashboard.tsx`). Without parity, admins must keep using legacy for daily matching work, and Phase D cannot run.
+
+**Scope:** rebuild the matching surfaces in the new shell using the existing Convex queries + mutations. No new backend work — all the data layer landed in Phase A.
+
+**Pages to build out** (replace each `<ComingSoon />` stub):
+
+1. **`/admin/interests`** — Interest signals queue
+   - Read from `api.interests.getAll`
+   - Filter tabs: `new`, `queued`, `active`, `deferred`, `declined`, `closed`, `converted_to_match`
+   - Filter by visibility (`internal_only` vs `admin_actionable`) and admin status (`pending` / `requested` / `declined` / `matched`)
+   - Per-row actions: change status, change admin status, edit notes, delete (only if no `matchId`), convert to match, send decline notification (auto-fires on transition to `declined`, but show send/retry status)
+   - Show requester + target with applicant numbers, gender pills, and a quick link into each profile detail
+   - Surface `declineNotificationError` if a notification failed (admin can retry)
+
+2. **`/admin/pipeline`** — Matches pipeline (read-only kanban or grouped list)
+   - Read from `api.interests.getAll` joined data (already returns `interest.match`) plus a direct matches query (add a thin `api.matches.getAll` if needed — the data layer otherwise exists)
+   - Group by status: `new` → `reviewing` → `contact_shared` → `paused` → `closed` / `declined`
+   - Per-card: both registrations with applicant numbers, age, gender, current admin notes, last-updated timestamp, links into both profiles
+   - Per-card actions: change status (calls `api.matches.updateStatus` — already wired with the activeMatchId + queue side effects), edit admin notes, send match-confirmed email (`/api/admin/notify-match`), reset pair (admin escape hatch — `api.matches.resetPair`)
+   - Drag-and-drop is **explicitly out of scope for v1** of Phase A.5 (deferred to a v2 if/when needed) — start with select-status dropdowns or click-to-advance buttons
+
+3. **`/admin/workbench`** (or fold into `/admin/pipeline`)
+   - Side-by-side profile comparison for a pending match — pulls both registrations, renders the same fields the `/share/[token]` page exposes, plus admin-only fields (notes, payment status, applicant number)
+   - Action bar: convert interest → match, decline interest, mark contact shared, share profile (creates a `profileShares` row + emails the share link via `/api/admin/create-profile-share`)
+   - Either ship this as a separate page, or as a side panel that opens from a pipeline card. Side panel is preferred — fewer routes to maintain.
+
+4. **`/admin/inbox`** — Aggregated incoming signals
+   - Combine: pending interests with `adminStatus: "pending"`, declined-but-not-notified interests, profile shares awaiting follow-up, match notifications that failed to send (`matchNotificationError` set)
+   - This is the "what needs my attention right now" feed
+   - Each row deep-links to the right action surface
+
+**Visual + copy parity**
+
+- Reuse `/admin/(shell)/profiles` patterns: `<DetailPane>`, `<StatusPill>`, `<WhoCell>`, the cream/emerald palette in `docs/admin/design.md`
+- No new design tokens. If something is missing, extend `design.md` first, then use it.
+
+**Existing Convex API surface (no changes needed beyond what was added)**
+
+| Page | Queries | Mutations |
+|------|---------|-----------|
+| Interests | `api.interests.getAll`, `api.interests.getByRegistration` | `api.interests.updateStatus`, `updateAdminStatus`, `updateNotes`, `updateRank`, `remove`, `convertToMatch`, `progressFirst`, `claimDeclineNotification` (via API route) |
+| Pipeline | `api.interests.getAll` (joined with `match`); add `api.matches.getAll` if needed | `api.matches.updateStatus`, `markNotificationSent`, `resetPair` |
+| Workbench | `api.registrations.getById` (×2), `api.interests.getByRegistration` | All of the above + `api.profileShares.create` (via `/api/admin/create-profile-share`) |
+| Inbox | All of the above | All of the above |
+
+**Tests**
+
+- Component tests are not required (the new shell does not currently have any component tests).
+- Add at least one Playwright/integration smoke test or one detailed manual QA checklist in the PR description that covers: create interest → admin convert to match → promote to contact_shared → verify queued interests appear → close match → verify queued promotes.
+
+**Definition of done**
+
+- Every workflow currently performed in `/admin/legacy` is reachable from `/admin/(shell)/...` with the same outcomes
+- No `<ComingSoon />` stubs remain on `/admin/interests`, `/admin/pipeline`, `/admin/workbench`, `/admin/inbox`
+- The Phase D feature-parity checklist (interests queue, profile shares, match notifications, image thumbnails, applicant numbers, profile completion status filter) is fully met by the new shell
+- Admin can spend a full work session in the new shell without falling back to legacy
+
+Once Phase A.5 is complete, Phase D becomes safe to run.
+
 ### Phase B: Events (Deferred but Recommended)
 
 1. Add `events` table: `name`, `date`, `description`, `status`, `maleSlots`, `femaleSlots`

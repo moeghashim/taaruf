@@ -2,6 +2,26 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { assertProfileCompleted, getRegistrationOrThrow } from "./interestRules";
 
+export const getAll = query({
+  args: {},
+  handler: async (ctx) => {
+    const shares = await ctx.db.query("profileShares").take(1000);
+
+    return await Promise.all(
+      shares.map(async (share) => {
+        const owner = await ctx.db.get(share.ownerRegistrationId);
+        const recipient = await ctx.db.get(share.recipientRegistrationId);
+
+        return {
+          ...share,
+          owner,
+          recipient,
+        };
+      })
+    );
+  },
+});
+
 export const create = mutation({
   args: {
     ownerRegistrationId: v.id("registrations"),

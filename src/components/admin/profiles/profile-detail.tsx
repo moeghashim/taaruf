@@ -109,6 +109,36 @@ export function ProfileDetail({
         {profile.paymentStatus && <StatusPill status={profile.paymentStatus} />}
       </div>
 
+      {profile.imageUrls?.length ? (
+        <>
+          {sectionHeading("Photos")}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              gap: 10,
+              marginBottom: 24,
+            }}
+          >
+            {profile.imageUrls.map((imageUrl, index) => (
+              <img
+                key={`${profile._id}-photo-${index}`}
+                src={imageUrl}
+                alt={`${profile.name} photo ${index + 1}`}
+                style={{
+                  width: "100%",
+                  aspectRatio: "4 / 5",
+                  objectFit: "cover",
+                  borderRadius: 8,
+                  border: "1px solid var(--line)",
+                  background: "var(--bg-tint)",
+                }}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+
       {sectionHeading("Profile facts")}
       <div style={{ marginBottom: 24 }}>
         <FactList facts={facts} />

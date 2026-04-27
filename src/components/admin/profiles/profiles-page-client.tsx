@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
@@ -10,6 +10,7 @@ import { ProfileDetail } from "./profile-detail";
 import {
   useRegistrations,
   type FilterGender,
+  type FilterProfileCompletionStatus,
   type FilterStatus,
 } from "@/components/admin/hooks/use-registrations";
 
@@ -39,6 +40,13 @@ const TAB_DEFS: Array<{ id: FilterStatus; label: string }> = [
   { id: "waitlisted", label: "Waitlisted" },
 ];
 
+const PROFILE_STATUS_DEFS: Array<{ id: FilterProfileCompletionStatus; label: string }> = [
+  { id: "all", label: "All profiles" },
+  { id: "completed", label: "Completed" },
+  { id: "in_progress", label: "In progress" },
+  { id: "not_started", label: "Not started" },
+];
+
 export function ProfilesPageClient({
   initialStatus = "all",
   lockStatus = false,
@@ -48,14 +56,23 @@ export function ProfilesPageClient({
   const data = useRegistrations();
   const [tab, setTab] = useState<FilterStatus>(initialStatus);
   const [gender, setGender] = useState<FilterGender>("all");
+  const [profileStatus, setProfileStatus] = useState<FilterProfileCompletionStatus>("all");
   const [search, setSearch] = useState("");
   const [openProfileId, setOpenProfileId] = useState<string | null>(null);
 
   const effectiveTab = lockStatus ? initialStatus : tab;
   const filtered = useMemo(
-    () => data.filterRegistrations(effectiveTab, gender, search),
-    [data, effectiveTab, gender, search]
+    () => data.filterRegistrations(effectiveTab, gender, search, profileStatus),
+    [data, effectiveTab, gender, profileStatus, search]
   );
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const profileId = params.get("profile");
+    if (profileId) {
+      setOpenProfileId(profileId);
+    }
+  }, []);
 
   const openProfile = openProfileId ? data.registrations.find((r) => r._id === openProfileId) : null;
 
@@ -167,6 +184,16 @@ export function ProfilesPageClient({
           >
             Brothers
           </button>
+          {PROFILE_STATUS_DEFS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              className={`filt ${profileStatus === id ? "active" : ""}`}
+              onClick={() => setProfileStatus(id)}
+            >
+              {label}
+            </button>
+          ))}
           <div style={{ marginLeft: "auto", fontSize: 11, color: "var(--mute)" }} className="mono">
             {filtered.length} shown
           </div>
