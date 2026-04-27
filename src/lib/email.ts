@@ -190,3 +190,49 @@ export async function sendMatchNotificationEmail({
     return { success: false, error: message };
   }
 }
+
+export async function sendInterestClosedEmail({
+  requesterEmail,
+  requesterName,
+  targetNumber,
+}: {
+  requesterEmail: string;
+  requesterName: string;
+  targetNumber: number | null;
+}): Promise<{ success: boolean; error?: string; id?: string }> {
+  const targetLabel = targetNumber ? `#${targetNumber}` : "that profile";
+
+  try {
+    const resend = getResend();
+
+    const result = await resend.emails.send({
+      from: defaultFrom,
+      to: requesterEmail,
+      subject: "A 1 Plus 1 Interest Update",
+      text: `Assalamu Alaikum ${requesterName},\n\nYour interest in ${targetLabel} has been closed. You may now express interest in someone else.\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
+          <h2 style="color: #1f2937;">Assalamu Alaikum ${requesterName},</h2>
+          <p style="line-height: 1.6;">
+            Your interest in ${targetLabel} has been closed. You may now express interest in someone else.
+          </p>
+          <p style="line-height: 1.6; margin-top: 24px;">
+            Warmly,<br />
+            <strong>Bader & Danielle</strong><br />
+            <strong>1 Plus 1 Leads</strong>
+          </p>
+        </div>
+      `,
+    });
+
+    if (result.error) {
+      return { success: false, error: result.error.message };
+    }
+
+    return { success: true, id: result.data?.id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to send interest closed email:", message);
+    return { success: false, error: message };
+  }
+}

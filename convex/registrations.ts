@@ -1,5 +1,8 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
+import { createInterestWithRules } from "./interestRules";
 
 const prayerCommitment = v.union(
   v.literal("sometimes"),
@@ -14,29 +17,25 @@ const photoSharingPermission = v.union(
   v.literal("ask_me_first")
 );
 const searchStatus = v.union(v.literal("active"), v.literal("paused"), v.literal("inactive"));
-const openInterestStatuses = new Set(["new", "queued", "active", "deferred"]);
 
 function normalizeInterestSubmissionNumbers(values?: number[]) {
   return [...new Set((values || []).filter((value) => Number.isInteger(value) && value > 0))].slice(0, 3);
 }
 
-function deriveInterestVisibility(fromGender: "male" | "female", toGender: "male" | "female") {
-  if (fromGender === toGender) {
-    throw new Error("Interest must be between opposite-gender applicants");
-  }
-
-  if (fromGender === "female" && toGender === "male") {
-    return "internal_only" as const;
-  }
-
-  return "admin_actionable" as const;
-}
-
-async function syncSubmittedInterestNumbers(ctx: any, registration: any, interestSubmissionNumbers?: number[]) {
+async function syncSubmittedInterestNumbers(
+  ctx: MutationCtx,
+  registrationId: Id<"registrations">,
+  interestSubmissionNumbers?: number[]
+) {
   const normalizedNumbers = normalizeInterestSubmissionNumbers(interestSubmissionNumbers);
   if (!normalizedNumbers.length) return;
 
-  const registrations = [...(await ctx.db.query("registrations").collect())].sort(
+  const registration = await ctx.db.get(registrationId);
+  if (!registration) {
+    throw new Error("Registration not found");
+  }
+
+  const registrations = [...(await ctx.db.query("registrations").take(1000))].sort(
     (a, b) => a._creationTime - b._creationTime
   );
   const registrationNumberMap = new Map(registrations.map((item, index) => [String(index + 1), item] as const));
@@ -52,12 +51,6 @@ async function syncSubmittedInterestNumbers(ctx: any, registration: any, interes
 
   if (!targetIds.size) return;
 
-  const existingInterests = await ctx.db
-    .query("interests")
-    .withIndex("by_fromRegistrationId", (q: any) => q.eq("fromRegistrationId", registration._id))
-    .collect();
-
-  const now = Date.now();
   for (const targetId of targetIds) {
     if (String(registration._id) === targetId) continue;
 
@@ -65,36 +58,34 @@ async function syncSubmittedInterestNumbers(ctx: any, registration: any, interes
     if (!targetRegistration) continue;
     if (registration.gender === targetRegistration.gender) continue;
 
-    const duplicateOpenInterest = existingInterests.find(
-      (interest: any) => String(interest.toRegistrationId) === targetId && openInterestStatuses.has(interest.status)
-    );
-    if (duplicateOpenInterest) continue;
-
-    await ctx.db.insert("interests", {
-      fromRegistrationId: registration._id,
-      toRegistrationId: targetRegistration._id,
-      source: "platform_submission",
-      status: "new",
-      visibility: deriveInterestVisibility(registration.gender, targetRegistration.gender),
-      adminStatus: "pending",
-      notes: `Submitted via profile update: ${normalizedNumbers.join(", ")}`,
-      createdAt: now,
-      updatedAt: now,
-    });
+    try {
+      await createInterestWithRules(ctx, {
+        fromRegistrationId: registration._id,
+        toRegistrationId: targetRegistration._id,
+        source: "platform_submission",
+        notes: `Submitted via profile update: ${normalizedNumbers.join(", ")}`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message !== "An open interest already exists for this applicant pair") {
+        throw error;
+      }
+    }
   }
 }
 
-function hasCompletedProfile(args: {
-  ethnicity?: string;
-  imageStorageIds?: Array<unknown>;
-  prayerCommitment?: string;
-  hijabResponse?: string;
-  spouseRequirement1?: string;
-  spouseRequirement2?: string;
-  spouseRequirement3?: string;
-  shareableBio?: string;
-  photoSharingPermission?: string;
-}) {
+function hasCompletedProfile(args: Pick<
+  Doc<"registrations">,
+  | "ethnicity"
+  | "imageStorageIds"
+  | "prayerCommitment"
+  | "hijabResponse"
+  | "spouseRequirement1"
+  | "spouseRequirement2"
+  | "spouseRequirement3"
+  | "shareableBio"
+  | "photoSharingPermission"
+>) {
   return Boolean(
     args.ethnicity?.trim() &&
     args.imageStorageIds?.length &&
@@ -389,7 +380,7 @@ export const updateProfile = mutation({
       profileLastUpdatedAt: now,
     });
 
-    await syncSubmittedInterestNumbers(ctx, registration, normalizedInterestSubmissionNumbers);
+    await syncSubmittedInterestNumbers(ctx, registration._id, normalizedInterestSubmissionNumbers);
 
     return registration._id;
   },

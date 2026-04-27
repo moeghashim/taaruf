@@ -23,6 +23,11 @@
 # misc
 .DS_Store
 *.pem
+.agents/
+.claude/
+skills/
+skills-lock.json
+setup.sh
 
 # debug
 npm-debug.log*

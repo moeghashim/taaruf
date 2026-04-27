@@ -231,6 +231,12 @@ export function ProfileCompletionForm({ token }: { token: string }) {
           <p className="text-sm text-slate-600">{profile.email}</p>
         </div>
 
+        {profile.profileCompletionStatus !== "completed" && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Complete your profile to start matching.
+          </div>
+        )}
+
         <div className="grid gap-6 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="ethnicity">Ethnicity *</Label>
