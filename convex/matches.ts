@@ -25,6 +25,28 @@ export const getById = query({
   },
 });
 
+export const getAll = query({
+  args: {},
+  handler: async (ctx) => {
+    const matches = await ctx.db.query("matches").take(1000);
+
+    return await Promise.all(
+      matches.map(async (match) => {
+        const maleRegistration = await ctx.db.get(match.maleRegistrationId);
+        const femaleRegistration = await ctx.db.get(match.femaleRegistrationId);
+        const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
+
+        return {
+          ...match,
+          maleRegistration,
+          femaleRegistration,
+          interest,
+        };
+      })
+    );
+  },
+});
+
 export const resetPair = mutation({
   args: {
     registrationAId: v.id("registrations"),

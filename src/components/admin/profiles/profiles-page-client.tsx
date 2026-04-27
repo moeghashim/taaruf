@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
@@ -56,6 +56,14 @@ export function ProfilesPageClient({
     () => data.filterRegistrations(effectiveTab, gender, search),
     [data, effectiveTab, gender, search]
   );
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const profileId = params.get("profile");
+    if (profileId) {
+      setOpenProfileId(profileId);
+    }
+  }, []);
 
   const openProfile = openProfileId ? data.registrations.find((r) => r._id === openProfileId) : null;
 
