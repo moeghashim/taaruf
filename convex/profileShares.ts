@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { assertProfileCompleted, getRegistrationOrThrow } from "./interestRules";
 
 export const create = mutation({
   args: {
@@ -11,6 +12,9 @@ export const create = mutation({
     matchId: v.optional(v.id("matches")),
   },
   handler: async (ctx, args) => {
+    const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
+    assertProfileCompleted(ownerRegistration, "Profile owner");
+
     const now = Date.now();
     return await ctx.db.insert("profileShares", {
       ownerRegistrationId: args.ownerRegistrationId,

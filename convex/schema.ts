@@ -133,11 +133,16 @@ export default defineSchema({
     adminStatus: v.optional(interestAdminStatus),
     notes: v.optional(v.string()),
     matchId: v.optional(v.id("matches")),
+    declineNotificationSentAt: v.optional(v.number()),
+    declineNotificationError: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_fromRegistrationId", ["fromRegistrationId"])
     .index("by_toRegistrationId", ["toRegistrationId"])
+    .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
+    .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])
+    .index("by_toRegistrationId_and_status", ["toRegistrationId", "status"])
     .index("by_status", ["status"])
     .index("by_matchId", ["matchId"]),
 

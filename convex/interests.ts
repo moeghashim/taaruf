@@ -1,5 +1,10 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  activateInterestAndQueueCompetitors,
+  createInterestWithRules,
+  createMatchFromInterest,
+} from "./interestRules";
 
 const interestSource = v.union(
   v.literal("admin_entered"),
@@ -17,42 +22,12 @@ const interestStatus = v.union(
   v.literal("declined"),
   v.literal("closed")
 );
-const interestVisibility = v.union(
-  v.literal("internal_only"),
-  v.literal("admin_actionable")
-);
 const interestAdminStatus = v.union(
   v.literal("pending"),
   v.literal("requested"),
   v.literal("declined"),
   v.literal("matched")
 );
-
-const openInterestStatuses = new Set(["new", "queued", "active", "deferred"]);
-
-async function getRegistrationOrThrow(ctx: any, id: any) {
-  const registration = await ctx.db.get(id);
-  if (!registration) {
-    throw new Error("Registration not found");
-  }
-  return registration;
-}
-
-function deriveVisibility(fromGender: "male" | "female", toGender: "male" | "female") {
-  if (fromGender === toGender) {
-    throw new Error("Interest must be between opposite-gender applicants");
-  }
-
-  if (fromGender === "female" && toGender === "male") {
-    return "internal_only" as const;
-  }
-
-  return "admin_actionable" as const;
-}
-
-function deriveInterestType(fromGender: "male" | "female") {
-  return fromGender === "male" ? "man_interested" : "woman_interested";
-}
 
 export const getAll = query({
   args: {},
@@ -85,41 +60,8 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    if (args.fromRegistrationId === args.toRegistrationId) {
-      throw new Error("Applicant cannot express interest in themselves");
-    }
-
-    const fromRegistration = await getRegistrationOrThrow(ctx, args.fromRegistrationId);
-    const toRegistration = await getRegistrationOrThrow(ctx, args.toRegistrationId);
-    const visibility = deriveVisibility(fromRegistration.gender, toRegistration.gender);
-
-    const existingInterests = await ctx.db
-      .query("interests")
-      .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", args.fromRegistrationId))
-      .collect();
-
-    const duplicateOpenInterest = existingInterests.find(
-      (interest) =>
-        interest.toRegistrationId === args.toRegistrationId && openInterestStatuses.has(interest.status)
-    );
-
-    if (duplicateOpenInterest) {
-      throw new Error("An open interest already exists for this applicant pair");
-    }
-
-    const now = Date.now();
-    return await ctx.db.insert("interests", {
-      fromRegistrationId: args.fromRegistrationId,
-      toRegistrationId: args.toRegistrationId,
-      rank: args.rank,
-      source: args.source,
-      status: "new",
-      visibility,
-      adminStatus: "pending",
-      notes: args.notes,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const result = await createInterestWithRules(ctx, args);
+    return result.interestId;
   },
 });
 
@@ -136,6 +78,78 @@ export const updateAdminStatus = mutation({
 
     await ctx.db.patch(args.id, {
       adminStatus: args.adminStatus,
+      status: args.adminStatus === "declined" ? "declined" : interest.status,
+      updatedAt: Date.now(),
+    });
+
+    return args.id;
+  },
+});
+
+export const claimDeclineNotification = mutation({
+  args: {
+    id: v.id("interests"),
+  },
+  handler: async (ctx, args) => {
+    const interest = await ctx.db.get(args.id);
+    if (!interest) {
+      throw new Error("Interest not found");
+    }
+
+    if (interest.status !== "declined" && interest.adminStatus !== "declined") {
+      throw new Error("Interest must be declined before sending a close notification");
+    }
+
+    if (interest.declineNotificationSentAt) {
+      return {
+        claimed: false,
+        alreadySent: true,
+        interestId: args.id,
+      };
+    }
+
+    const requester = await ctx.db.get(interest.fromRegistrationId);
+    const target = await ctx.db.get(interest.toRegistrationId);
+    if (!requester || !target) {
+      throw new Error("Interest registration not found");
+    }
+
+    const registrations = await ctx.db.query("registrations").take(1000);
+    const sortedRegistrations = [...registrations].sort((a, b) => a._creationTime - b._creationTime);
+    const targetIndex = sortedRegistrations.findIndex((registration) => registration._id === target._id);
+    const targetNumber = targetIndex >= 0 ? targetIndex + 1 : null;
+
+    await ctx.db.patch(args.id, {
+      declineNotificationSentAt: Date.now(),
+      declineNotificationError: undefined,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      claimed: true,
+      alreadySent: false,
+      interestId: args.id,
+      requesterEmail: requester.email,
+      requesterName: requester.name,
+      targetNumber,
+    };
+  },
+});
+
+export const recordDeclineNotificationFailure = mutation({
+  args: {
+    id: v.id("interests"),
+    error: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const interest = await ctx.db.get(args.id);
+    if (!interest) {
+      throw new Error("Interest not found");
+    }
+
+    await ctx.db.patch(args.id, {
+      declineNotificationSentAt: undefined,
+      declineNotificationError: args.error,
       updatedAt: Date.now(),
     });
 
@@ -177,6 +191,7 @@ export const updateStatus = mutation({
 
     await ctx.db.patch(args.id, {
       status: args.status,
+      adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,
       notes: args.notes ?? interest.notes,
       updatedAt: Date.now(),
     });
@@ -229,45 +244,7 @@ export const progressFirst = mutation({
     interestId: v.id("interests"),
   },
   handler: async (ctx, args) => {
-    const interest = await ctx.db.get(args.interestId);
-    if (!interest) {
-      throw new Error("Interest not found");
-    }
-
-    const now = Date.now();
-    const inboundCompetitors = await ctx.db
-      .query("interests")
-      .withIndex("by_toRegistrationId", (q) => q.eq("toRegistrationId", interest.toRegistrationId))
-      .collect();
-    const outboundAlternatives = await ctx.db
-      .query("interests")
-      .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", interest.fromRegistrationId))
-      .collect();
-
-    for (const competitor of inboundCompetitors) {
-      if (competitor._id === interest._id) continue;
-      if (!openInterestStatuses.has(competitor.status)) continue;
-      await ctx.db.patch(competitor._id, {
-        status: "queued",
-        updatedAt: now,
-      });
-    }
-
-    for (const alternative of outboundAlternatives) {
-      if (alternative._id === interest._id) continue;
-      if (!openInterestStatuses.has(alternative.status)) continue;
-      await ctx.db.patch(alternative._id, {
-        status: "queued",
-        updatedAt: now,
-      });
-    }
-
-    await ctx.db.patch(args.interestId, {
-      status: "active",
-      updatedAt: now,
-    });
-
-    return args.interestId;
+    return await activateInterestAndQueueCompetitors(ctx, args.interestId);
   },
 });
 
@@ -282,47 +259,7 @@ export const convertToMatch = mutation({
       throw new Error("Interest not found");
     }
 
-    if (interest.matchId) {
-      throw new Error("Interest already linked to a match");
-    }
-
-    const fromRegistration = await getRegistrationOrThrow(ctx, interest.fromRegistrationId);
-    const toRegistration = await getRegistrationOrThrow(ctx, interest.toRegistrationId);
-    deriveVisibility(fromRegistration.gender, toRegistration.gender);
-
-    const maleRegistrationId =
-      fromRegistration.gender === "male" ? interest.fromRegistrationId : interest.toRegistrationId;
-    const femaleRegistrationId =
-      fromRegistration.gender === "female" ? interest.fromRegistrationId : interest.toRegistrationId;
-    const now = Date.now();
-
-    const matchId = await ctx.db.insert("matches", {
-      maleRegistrationId,
-      femaleRegistrationId,
-      interestType: deriveInterestType(fromRegistration.gender),
-      status: "new",
-      adminNotes: args.adminNotes ?? interest.notes,
-      interestId: args.interestId,
-      initiatedBy: "interest_signal",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await ctx.db.patch(args.interestId, {
-      matchId,
-      status: "converted_to_match",
-      adminStatus: "matched",
-      updatedAt: now,
-    });
-
-    await ctx.db.patch(interest.fromRegistrationId, {
-      activeMatchId: matchId,
-    });
-    await ctx.db.patch(interest.toRegistrationId, {
-      activeMatchId: matchId,
-    });
-
-    return matchId;
+    return await createMatchFromInterest(ctx, interest, args.adminNotes);
   },
 });
 

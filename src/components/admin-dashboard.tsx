@@ -515,6 +515,9 @@ export default function AdminDashboard() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await updateInterestStatus({ id: interestId as any, status });
+      if (status === "declined") {
+        await notifyDeclinedInterest(interestId);
+      }
     } catch (error) {
       setInterestResult(error instanceof Error ? error.message : String(error));
     }
@@ -524,9 +527,27 @@ export default function AdminDashboard() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await updateInterestAdminStatus({ id: interestId as any, adminStatus });
+      if (adminStatus === "declined") {
+        await notifyDeclinedInterest(interestId);
+      }
     } catch (error) {
       setInterestResult(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  async function notifyDeclinedInterest(interestId: string) {
+    const response = await fetch("/api/admin/notify-decline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interestId }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to send decline notification");
+    }
+
+    setInterestResult(data.skipped ? "Decline notification already sent." : "Decline notification sent.");
   }
 
   async function handleSaveInterestNotes() {
