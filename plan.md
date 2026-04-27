@@ -98,7 +98,41 @@ The matchmaking system is being built incrementally. A parallel work stream has 
 
 ## What Still Needs to Be Built
 
+### Phase 0: Pre-Implementation Setup
+
+Before touching feature code, do this housekeeping so the working tree is clean and Phase A doesn't regress lint.
+
+**Track these as durable project files** (commit them):
+- `AGENTS.md` — durable repo instructions for Convex work
+- `convex/tsconfig.json` — Convex project config, useful for typechecking
+- `CLAUDE.md` — duplicates `AGENTS.md` but worth tracking since Claude is used in this repo
+
+**Ignore these local agent/tooling artifacts** (add to `.gitignore`):
+```
+.claude/
+.agents/
+skills/
+skills-lock.json
+```
+
+**Stage only the durable files** in the first cleanup commit. Do not commit anything from `.claude/worktrees/` (those are scratch worktrees from prior sessions).
+
+**Lint baseline:** `npm run lint` currently fails. Some failures come from `.claude/worktrees` (resolved by the gitignore above). Real project code also has pre-existing lint issues in:
+- `convex/interests.ts`
+- `convex/registrations.ts`
+- The two scripts under `scripts/`
+
+Phase A modifies the first two files, so clean their lint issues as part of Phase A's diff. The scripts can be cleaned in a separate small commit. **Do not** do a sweeping codebase-wide lint cleanup — keep changes scoped.
+
 ### Phase A: Enforce Management's Rules
+
+**Architectural requirement:** All interest creation paths — including manual admin-created interests (`convex/interests.ts:create`) and profile-update auto-created interests (`convex/registrations.ts:syncSubmittedInterestNumbers`) — **must route through shared Convex helpers** so they obey the same:
+- Profile-completion gate
+- 3-active-interest cap
+- Duplicate check (no second open interest for the same from→to pair)
+- Active-match queuing behavior (`new` vs `queued` based on either party's `activeMatchId`)
+
+Recommended structure: a new internal module (e.g., `convex/interestRules.ts`) exporting helpers like `assertCanCreateInterest(ctx, fromId, toId)` and `decideInitialStatus(ctx, fromId, toId)`. Both call sites import these. This prevents drift between manual-entry and auto-entry paths.
 
 1. **Profile-completion gate**
    - Block `interests.create` if either side's `profileCompletionStatus !== "completed"`
