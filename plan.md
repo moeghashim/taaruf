@@ -169,7 +169,10 @@ Phase A's helpers govern queue, dequeue, mutual-interest auto-pair, and decline 
 - Duplicate check: two open interests for the same `from→to` pair are rejected; a previously declined pair can be re-attempted only if business rules allow (cross-reference open question #1)
 - Active-match queuing: target has `activeMatchId` → new interest lands as `queued`; closing the match promotes the oldest queued to `active`
 - FIFO progression in `progressFirst`: ensure deterministic order by `createdAt`
-- Mutual-interest auto-pair: A creates interest in B; B creates interest in A → both convert to a match in one transaction; both registrations get `activeMatchId` set; any other queued interests for either party stay queued
+- Mutual-interest auto-pair: A creates interest in B; B creates interest in A → both convert to a match in `new` status in one transaction; **`activeMatchId` is NOT set yet** (only set on `contact_shared`); any other open interests for either party remain unchanged
+- `contact_shared` promotion side effects: when a match transitions to `contact_shared`, both participants get `activeMatchId` set AND any open `new`/`active` interests targeting either participant are demoted to `queued` in the same transaction
+- Match close releases the queue: when a `contact_shared` match closes, `activeMatchId` is cleared on both, and `progressFirst` promotes the oldest queued interest for each to `active`
+- Decline notification idempotency: calling the decline-notify path twice for the same interest sends one email; on send failure, `declineNotificationError` is set and `declineNotificationSentAt` is cleared so retry works
 
 Tests live under `convex/__tests__/` (or whichever convention the existing tests use). If no Convex test infra exists yet, add it — Convex supports `@convex-test/dev` for in-memory testing.
 
@@ -187,11 +190,22 @@ Tests live under `convex/__tests__/` (or whichever convention the existing tests
    - When `interests.updateAdminStatus` or `interests.updateStatus` transitions to `declined`, trigger an email to the requester
    - Email copy: "Your interest in #{N} has been closed. You may now express interest in someone else." — no "rejected", no reason, no exposure of the other side's response
    - Mirror in attendee-facing UI when one is built
+   - **Idempotency**: add two fields to `interests` (mirroring the existing `matches.matchNotificationSentAt` / `matchNotificationError` pattern):
+     - `declineNotificationSentAt: v.optional(v.number())`
+     - `declineNotificationError: v.optional(v.string())`
+   - The send guard must live **inside the Convex mutation/action that triggers the email**, not at the API-route layer:
+     1. If `declineNotificationSentAt` is already set, return early (no-op).
+     2. Patch `declineNotificationSentAt = Date.now()` **before** awaiting the email send. This claims the slot and prevents two simultaneous admin clicks from both passing the check.
+     3. If the email send throws, write the error to `declineNotificationError` and clear `declineNotificationSentAt` so a manual retry is possible.
 
 4. **One-active-match enforcement**
-   - When a match enters `contact_shared` status, set `registrations.activeMatchId` for both parties
-   - When `interests.create` runs, set status to `queued` (instead of `new`) if either party has an `activeMatchId`
-   - When a match closes, run `progressFirst` to promote the oldest queued interest
+   - **Definition**: an applicant is considered "in an active match" only when they are part of a match in status `contact_shared`. Matches in `new` or `reviewing` do **not** block new interest activity — those statuses can fall through (admin rejects them) and freezing applicants prematurely is wasteful.
+   - **On `contact_shared` promotion** (the same handler that moves a match into `contact_shared`):
+     1. Set `registrations.activeMatchId` for both participants.
+     2. Scan for **already-open interests** targeting either participant — any interest with status `new` or `active` whose `toRegistrationId` is one of the two participants must be **demoted to `queued`** in the same transaction. This handles the edge case where C's interest in A landed before A's match with B was promoted.
+     3. Mutual-interest auto-pair creates a match in `new` (or whatever the lifecycle's initial status is) and does **not** set `activeMatchId`. The two participants are not blocked from new interests until admin moves the match to `contact_shared`.
+   - **On `interests.create`** (via the shared helper): if either party has `activeMatchId` set, the new interest lands as `queued` (not `new`).
+   - **On match close** (status moves to `closed`, `declined`, or `paused` from `contact_shared`): clear `activeMatchId` for both participants and call `interests.progressFirst` for each to promote the oldest queued interest to `active`.
 
 ### Phase B: Events (Deferred but Recommended)
 
