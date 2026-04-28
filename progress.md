@@ -452,3 +452,33 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-28T17:18:04.000Z
+- Trigger: commit
+- Learning: Starting the applicant-facing interest flow from the existing number-submission and interest-rule foundation should reduce conflict with the admin-mediated setup while still adding login, status visibility, and gender-specific privacy.
+- Context: implementation start: applicant interest management flow
+- Branch: codex/admin-icons-profile-photos
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - progress.md
+## 2026-04-28T17:27:58.000Z
+- Trigger: commit
+- Learning: The applicant portal can ship incrementally by using hashed magic-link sessions and the existing interest records, while a separate `interestFlows` table carries applicant-facing decisions without disrupting the current admin queue.
+- Context: feat(applicant): add interest portal foundation
+- Branch: codex/admin-icons-profile-photos
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/schema.ts
+  - convex/applicantAuth.ts
+  - convex/applicantInterests.ts
+  - convex/interestRules.ts
+  - convex/interests.test.ts
+  - src/app/api/applicant/login/route.ts
+  - src/app/api/applicant/login/verify/route.ts
+  - src/app/api/applicant/logout/route.ts
+  - src/app/api/applicant/me/route.ts
+  - src/app/api/applicant/interests/route.ts
+  - src/app/login/page.tsx
+  - src/app/me/page.tsx
+  - src/lib/applicant-session.ts
+  - src/lib/email.ts
+  - progress.md

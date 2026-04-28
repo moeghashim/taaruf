@@ -64,6 +64,40 @@ const interestAdminStatus = v.union(
   v.literal("declined"),
   v.literal("matched")
 );
+const interestFlowStatus = v.union(
+  v.literal("private_documented"),
+  v.literal("awaiting_inbound_response"),
+  v.literal("kept_open"),
+  v.literal("bio_review"),
+  v.literal("awaiting_final_approvals"),
+  v.literal("awaiting_photo_request"),
+  v.literal("awaiting_photo_response"),
+  v.literal("photos_visible"),
+  v.literal("contact_shared"),
+  v.literal("declined"),
+  v.literal("closed")
+);
+const interestDecision = v.union(
+  v.literal("pending"),
+  v.literal("accepted"),
+  v.literal("declined"),
+  v.literal("kept_open")
+);
+const approvalDecision = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("declined")
+);
+const photoDecision = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("declined")
+);
+const interestFlowEventActor = v.union(
+  v.literal("applicant"),
+  v.literal("admin"),
+  v.literal("system")
+);
 
 export default defineSchema({
   registrations: defineTable({
@@ -120,6 +154,7 @@ export default defineSchema({
   })
     .index("by_gender", ["gender"])
     .index("by_status", ["status"])
+    .index("by_email", ["email"])
     .index("by_stripeSessionId", ["stripeSessionId"])
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
@@ -186,6 +221,66 @@ export default defineSchema({
     .index("by_recipientRegistrationId", ["recipientRegistrationId"])
     .index("by_shareToken", ["shareToken"])
     .index("by_status", ["status"]),
+
+  applicantLoginTokens: defineTable({
+    registrationId: v.id("registrations"),
+    tokenHash: v.string(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_registrationId", ["registrationId"]),
+
+  applicantSessions: defineTable({
+    registrationId: v.id("registrations"),
+    sessionHash: v.string(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_sessionHash", ["sessionHash"])
+    .index("by_registrationId", ["registrationId"]),
+
+  interestFlows: defineTable({
+    interestId: v.id("interests"),
+    fromRegistrationId: v.id("registrations"),
+    toRegistrationId: v.id("registrations"),
+    flowStatus: interestFlowStatus,
+    recipientDecision: interestDecision,
+    requesterFinalApproval: approvalDecision,
+    recipientFinalApproval: approvalDecision,
+    photoDecision: photoDecision,
+    photoRequestedByRegistrationId: v.optional(v.id("registrations")),
+    bioVisibleAt: v.optional(v.number()),
+    requesterFinalApprovalAt: v.optional(v.number()),
+    recipientFinalApprovalAt: v.optional(v.number()),
+    photoRequestedAt: v.optional(v.number()),
+    photoDecisionAt: v.optional(v.number()),
+    photosVisibleAt: v.optional(v.number()),
+    contactSharedAt: v.optional(v.number()),
+    keepOpenExpiresAt: v.optional(v.number()),
+    closedReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_interestId", ["interestId"])
+    .index("by_fromRegistrationId_and_flowStatus", ["fromRegistrationId", "flowStatus"])
+    .index("by_toRegistrationId_and_flowStatus", ["toRegistrationId", "flowStatus"])
+    .index("by_keepOpenExpiresAt", ["keepOpenExpiresAt"]),
+
+  interestFlowEvents: defineTable({
+    interestFlowId: v.id("interestFlows"),
+    interestId: v.id("interests"),
+    actor: interestFlowEventActor,
+    actorRegistrationId: v.optional(v.id("registrations")),
+    eventType: v.string(),
+    message: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_interestFlowId_and_createdAt", ["interestFlowId", "createdAt"])
+    .index("by_interestId", ["interestId"]),
 
   settings: defineTable({
     key: v.string(),

@@ -10,6 +10,41 @@ type InterestSource = Doc<"interests">["source"];
 
 const openInterestStatusSet = new Set<InterestStatus>(openInterestStatuses);
 
+async function createInitialInterestFlow(ctx: MutationCtx, interest: Doc<"interests">) {
+  const now = Date.now();
+  const existingFlow = await ctx.db
+    .query("interestFlows")
+    .withIndex("by_interestId", (q) => q.eq("interestId", interest._id))
+    .unique();
+
+  if (existingFlow) return existingFlow._id;
+
+  const flowStatus =
+    interest.visibility === "internal_only" ? "private_documented" as const : "awaiting_inbound_response" as const;
+  const flowId = await ctx.db.insert("interestFlows", {
+    interestId: interest._id,
+    fromRegistrationId: interest.fromRegistrationId,
+    toRegistrationId: interest.toRegistrationId,
+    flowStatus,
+    recipientDecision: "pending",
+    requesterFinalApproval: "pending",
+    recipientFinalApproval: "pending",
+    photoDecision: "pending",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await ctx.db.insert("interestFlowEvents", {
+    interestFlowId: flowId,
+    interestId: interest._id,
+    actor: "system",
+    eventType: "flow_created",
+    createdAt: now,
+  });
+
+  return flowId;
+}
+
 export async function getRegistrationOrThrow(ctx: ReadCtx, id: Id<"registrations">) {
   const registration = await ctx.db.get(id);
   if (!registration) {
@@ -175,6 +210,17 @@ export async function createMatchFromInterest(
     adminStatus: "matched",
     updatedAt: now,
   });
+  const flow = await ctx.db
+    .query("interestFlows")
+    .withIndex("by_interestId", (q) => q.eq("interestId", interest._id))
+    .unique();
+  if (flow) {
+    await ctx.db.patch(flow._id, {
+      flowStatus: "bio_review",
+      bioVisibleAt: flow.bioVisibleAt ?? now,
+      updatedAt: now,
+    });
+  }
 
   return matchId;
 }
@@ -214,6 +260,17 @@ async function createMutualInterestMatch(
       adminStatus: "matched",
       updatedAt: now,
     });
+    const flow = await ctx.db
+      .query("interestFlows")
+      .withIndex("by_interestId", (q) => q.eq("interestId", matchedInterest._id))
+      .unique();
+    if (flow) {
+      await ctx.db.patch(flow._id, {
+        flowStatus: "bio_review",
+        bioVisibleAt: flow.bioVisibleAt ?? now,
+        updatedAt: now,
+      });
+    }
   }
 
   return matchId;
@@ -252,6 +309,7 @@ export async function createInterestWithRules(
   if (!interest) {
     throw new Error("Interest not found after creation");
   }
+  await createInitialInterestFlow(ctx, interest);
 
   if (initialStatus === "queued") {
     return { interestId, matchId: null };
