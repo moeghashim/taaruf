@@ -186,6 +186,11 @@ Management actions:
 
 Applicant emails:
 
+- Initial interest notification and outbound confirmation.
+- Interest response messages for accepted, declined, keep open, final approval, and photo request outcomes.
+- Match/contact info share message.
+- Follow-up messages when there is no response to an interest.
+- Follow-up status update messages for matched participants.
 - Magic login link.
 - New inbound interest received.
 - Inbound interest accepted by recipient.
@@ -211,6 +216,7 @@ All emails should:
 - Link applicants to `/me` or the specific `/me/interests/[interestId]` detail page.
 - Link management to the admin workbench URL above.
 - Record sent/error timestamps in Convex for retry visibility.
+- Use the template catalog in `docs/interest-management-message-templates.md`.
 
 ## Data Model Requirements
 

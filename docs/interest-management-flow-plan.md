@@ -109,20 +109,24 @@
 
 1. Extend `src/lib/email.ts` with templates:
    - applicant magic login.
-   - new inbound interest.
+   - initial interest.
+   - interest responses with multiple outcomes.
+   - match/contact info share.
+   - no-response interest follow-ups.
+   - matched-participant status updates.
+   - management approval needed.
    - bio review opened.
    - final approval requested.
    - photo requested.
    - photo decision made.
-   - contact shared.
-   - management approval needed.
 2. Add route handlers or actions to send emails after state transitions.
 3. Store send timestamps and errors either on `interestFlows` for latest state notifications or in `interestFlowEvents` for full audit history.
 4. Include applicant links to `/me/interests/<interestId>`.
 5. Include management links:
    - `/admin/workbench?interest=<interestId>&step=<step>`
    - `/admin/workbench?match=<matchId>&step=<step>`
-6. Update admin inbox to surface failed notification events.
+6. Use `docs/interest-management-message-templates.md` as the source catalog for copy and placeholders.
+7. Update admin inbox to surface failed notification events.
 
 ## Phase 6: Applicant UI
 
