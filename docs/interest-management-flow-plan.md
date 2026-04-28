@@ -86,12 +86,14 @@
 2. Add applicant-safe queries:
    - list inbound flows for current registration.
    - list outbound flows for current registration.
+   - list private documented interests for female applicants.
    - get one flow detail.
 3. Add applicant action mutations:
    - accept inbound interest.
    - decline inbound interest.
    - keep inbound interest open.
-   - create outbound interest when no pending inbound exists.
+   - create visible male outbound interest.
+   - create female private documented interest that is visible only to the applicant and admins.
    - give final approval.
    - decline after bio review.
    - request photo.
@@ -142,11 +144,12 @@
    - Photo section that appears only when `photosVisibleAt` is set.
    - Contact section that appears only when `contactSharedAt` is set.
 3. Add outbound initiation:
-   - Block when pending actionable inbound interests exist.
    - Do not show a broad browseable list of all eligible completed profiles.
-   - Show only existing inbound interests or management-approved safe suggestions.
+   - For male applicants, allow visible outbound interest submission from event/applicant numbers or management-approved safe suggestions.
    - For management-approved suggestions, expose only the minimal safe details management permits until bio review opens.
-   - Create interest through the applicant workflow API.
+   - For female applicants, provide a private "document interest" action instead of sending a visible outbound interest.
+   - Add dashboard copy explaining that female-documented interests are visible only to the applicant and admins.
+   - Create visible male outbound interests and private female documented interests through separate applicant workflow API actions.
 4. Use the existing admin design language where appropriate, but keep applicant UI simpler and privacy-focused.
 
 ## Phase 7: Admin UI Updates
@@ -186,9 +189,11 @@
 
 1. Convex unit tests:
    - inbound accept/decline/keep open.
-   - outbound blocked by pending inbound.
-   - outbound allowed when no pending inbound exists.
-   - bio visibility after accept/initiation.
+   - male outbound creates a visible inbound interest for the female recipient.
+   - female documented interest is visible only to the female applicant and admins.
+   - female documented interest does not notify the male applicant.
+   - multiple male inbound interests can appear for one female applicant.
+   - bio visibility opens only after the female recipient accepts a visible male outbound interest.
    - final approval from both sides.
    - photo request and approval.
    - photo decline does not block contact sharing.
@@ -234,11 +239,13 @@
 - Existing `internal_only` visibility semantics are preserved.
 - Existing tests in `convex/interests.test.ts` continue to pass.
 
-## Resolved Product Decision
+## Resolved Product Decisions
 
-- Applicants cannot browse profiles that have not shown interest.
-- Outbound selection must not show all eligible completed profiles.
-- Outbound initiation should come from one of two safe sources:
-  - Existing inbound interests, where the other person already expressed interest.
-  - Management-approved suggestions, where management intentionally exposes minimal safe details without revealing the full profile.
+- Visible outbound interests are male-initiated.
+- Women may receive and review multiple pending inbound interests from men.
+- Women can document private interests because many are not comfortable visibly expressing interest.
+- Female-documented interests are visible only to the female applicant and admins.
+- Female-documented interests must not notify the male applicant or open bio review by themselves.
+- Male outbound selection must not expose full female profiles before bio review.
+- Male outbound initiation can use event/applicant numbers or management-approved safe suggestions.
 - Full names and bios still remain hidden until the bio-review state opens.

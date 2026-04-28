@@ -1,45 +1,87 @@
-# Interest Management Flow Graph
+# Interest Management Flow Graphs
+
+## Male Applicant Flow
 
 ```mermaid
 flowchart TD
-  A["Applicant logs in"] --> B["Dashboard: Inbound + Outbound Interests"]
+  A["Male applicant logs in"] --> B["Dashboard: outbound interests + status"]
+  B --> C["Select allowed target by event/applicant number or management-approved safe suggestion"]
+  C --> D["Send visible outbound interest"]
+  D --> E["Female recipient sees inbound interest"]
+  E --> F{"Female decision"}
 
-  B --> C{"Has pending inbound interest?"}
+  F -->|Decline| G["Interest closed"]
+  G --> H["Male can pursue another eligible interest"]
 
-  C -->|Yes| D["Inbound Interest"]
-  D --> E{"Recipient decision"}
+  F -->|Keep Open| I["Interest remains pending until expiry"]
+  I --> J{"Expired?"}
+  J -->|No| E
+  J -->|Yes| G
+
+  F -->|Accept| K["Bio review opens"]
+  K --> L["Names + bios visible to both candidates"]
+  L --> M{"Both give final approval?"}
+  M -->|One declines| G
+  M -->|Both approve| N["Photo request optional"]
+
+  N --> O{"Picture requested?"}
+  O -->|No| P["Contact info shared automatically"]
+  O -->|Yes| Q{"Other candidate approves picture?"}
+  Q -->|Approve| R["Pictures visible to both"]
+  R --> P
+  Q -->|Decline| S["Pictures stay hidden"]
+  S --> P
+
+  P --> T["Match complete / contact shared"]
+```
+
+## Female Applicant Flow
+
+```mermaid
+flowchart TD
+  A["Female applicant logs in"] --> B["Dashboard: inbound interests + private documented interests"]
+  B --> C["May see multiple pending inbound interests from men"]
+  C --> D{"Choose one inbound interest"}
+  D --> E{"Female decision"}
+
   E -->|Decline| F["Interest closed"]
-  E -->|Keep Open| G["Interest stays open until expiry"]
+  E -->|Keep Open| G["Interest remains pending until expiry"]
   G --> H{"Expired?"}
+  H -->|No| C
   H -->|Yes| F
-  H -->|No| D
 
-  E -->|Accept| I["Bio review opens"]
-  I --> J["Names + bios visible to both candidates"]
-  J --> K{"Both give final approval?"}
-  K -->|No, one declines| F
-  K -->|Yes| L["Photo request optional"]
+  E -->|Accept| I{"Already in active bio review?"}
+  I -->|Yes| J["Accepted interest waits in queue"]
+  J --> C
+  I -->|No| K["Bio review opens"]
 
-  L --> M{"Picture requested?"}
-  M -->|No| N["Contact info shared automatically"]
-  M -->|Yes| O{"Other candidate approves picture?"}
-  O -->|Approve| P["Pictures visible to both"]
-  P --> N
-  O -->|Decline| Q["Pictures stay hidden"]
-  Q --> N
+  K --> L["Names + bios visible to both candidates"]
+  L --> M{"Both give final approval?"}
+  M -->|One declines| F
+  M -->|Both approve| N["Photo request optional"]
 
-  C -->|No| R["Can initiate outbound interest"]
-  R --> S["Only existing inbound interests or management-approved safe suggestions"]
-  S --> T["Outbound interest sent"]
-  T --> I
+  N --> O{"Picture requested?"}
+  O -->|No| P["Contact info shared automatically"]
+  O -->|Yes| Q{"Other candidate approves picture?"}
+  Q -->|Approve| R["Pictures visible to both"]
+  R --> P
+  Q -->|Decline| S["Pictures stay hidden"]
+  S --> P
 
-  N --> U["Match complete / contact shared"]
-  F --> V["Requester can pursue another eligible interest"]
+  B --> U["Document private interest"]
+  U --> V["Visible only to her and admins"]
+  V --> W["Does not notify male applicant"]
+  W --> X["Admins can use note for follow-up or recommendations"]
+
+  P --> Y["Match complete / contact shared"]
 ```
 
 ## Rules Reflected
 
-- Applicants cannot browse profiles that have not shown interest.
+- Visible outbound interests are male-initiated.
+- Women may see multiple pending inbound interests from men.
+- Women can document private interests that are visible only to themselves and admins.
+- Female-documented private interests do not notify men and do not open bio review by themselves.
 - Names and bios become visible only when bio review opens.
 - Contact sharing happens automatically after both final approvals.
 - Photo decline does not block contact sharing.

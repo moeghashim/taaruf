@@ -83,6 +83,40 @@ Open management review:
 {{managementReviewUrl}}
 ```
 
+### Female Private Interest Confirmation
+
+Subject: `Your private interest note was saved`
+
+Body:
+
+```text
+Assalamu Alaikum {{recipientName}},
+
+Your interest note has been saved privately.
+
+This does not notify the other participant and does not mean an interest has been sent. It helps the 1 Plus 1 team understand your preferences and follow up thoughtfully.
+
+View your dashboard:
+{{applicantPortalUrl}}
+
+Warmly,
+Bader & Danielle
+1 Plus 1 Leads
+```
+
+### Management Female Private Interest Notice
+
+Subject: `Private interest documented`
+
+Body:
+
+```text
+A female participant documented a private interest. This is visible only to her and management unless management decides to act on it.
+
+Open management review:
+{{managementReviewUrl}}
+```
+
 ## 2. Interest Responses
 
 ### Interest Accepted
@@ -413,4 +447,3 @@ Warmly,
 Bader & Danielle
 1 Plus 1 Leads
 ```
-
