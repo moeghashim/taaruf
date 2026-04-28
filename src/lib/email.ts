@@ -143,6 +143,59 @@ export async function sendProfileCompletionEmail({
   }
 }
 
+export async function sendApplicantMagicLoginEmail({
+  name,
+  email,
+  loginUrl,
+}: {
+  name: string;
+  email: string;
+  loginUrl: string;
+}): Promise<{ success: boolean; error?: string; id?: string }> {
+  try {
+    const resend = getResend();
+
+    const result = await resend.emails.send({
+      from: defaultFrom,
+      to: email,
+      subject: "Your 1 Plus 1 applicant portal link",
+      text: `Assalamu Alaikum ${name},\n\nUse the secure link below to access your 1 Plus 1 applicant portal. This link is time-limited and should not be shared.\n\nOpen your portal: ${loginUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
+          <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
+          <p style="line-height: 1.6;">
+            Use the secure link below to access your 1 Plus 1 applicant portal. This link is time-limited and should not be shared.
+          </p>
+          <p style="margin: 24px 0;">
+            <a href="${loginUrl}" style="display: inline-block; background: #0f766e; color: white; text-decoration: none; padding: 12px 18px; border-radius: 8px; font-weight: 600;">
+              Open Applicant Portal
+            </a>
+          </p>
+          <p style="line-height: 1.6; margin-top: 24px;">
+            Warmly,<br />
+            <strong>Bader & Danielle</strong><br />
+            <strong>1 Plus 1 Leads</strong>
+          </p>
+          <p style="color: #6b7280; line-height: 1.6; font-size: 14px; margin-top: 24px;">
+            If the button above does not work, copy and paste this link into your browser:<br />
+            <span style="word-break: break-all;">${loginUrl}</span>
+          </p>
+        </div>
+      `,
+    });
+
+    if (result.error) {
+      return { success: false, error: result.error.message };
+    }
+
+    return { success: true, id: result.data?.id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to send applicant login email:", message);
+    return { success: false, error: message };
+  }
+}
+
 export async function sendMatchNotificationEmail({
   name,
   email,

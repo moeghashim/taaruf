@@ -48,6 +48,19 @@ async function getRegistration(t: ReturnType<typeof convexTest>, id: Id<"registr
   });
 }
 
+async function createSession(t: ReturnType<typeof convexTest>, registrationId: Id<"registrations">) {
+  const sessionHash = `session-${registrationId}`;
+  await t.run(async (ctx) => {
+    await ctx.db.insert("applicantSessions", {
+      registrationId,
+      sessionHash,
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      createdAt: Date.now(),
+    });
+  });
+  return sessionHash;
+}
+
 describe("interest rules", () => {
   test("requires both applicants to have completed profiles", async () => {
     const t = convexTest(schema, modules);
@@ -291,6 +304,75 @@ describe("interest rules", () => {
     });
     expect(retryClaim).toMatchObject({
       claimed: true,
+    });
+  });
+
+  test("male number submission creates visible inbound interest for female dashboard", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Portal Male", "male");
+    const female = await createRegistration(t, "Portal Female", "female");
+    const maleSession = await createSession(t, male);
+    const femaleSession = await createSession(t, female);
+
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: maleSession,
+      applicantNumber: 2,
+    });
+    const interest = await getInterest(t, result.interestId);
+
+    expect(result.private).toBe(false);
+    expect(interest.visibility).toBe("admin_actionable");
+    await expect(
+      t.query(api.applicantInterests.getDashboard, {
+        sessionHash: femaleSession,
+      })
+    ).resolves.toMatchObject({
+      inbound: [
+        {
+          interestId: result.interestId,
+          visibility: "admin_actionable",
+          flowStatus: "awaiting_inbound_response",
+        },
+      ],
+    });
+  });
+
+  test("female number submission stays private from male dashboard before match", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Private Male", "male");
+    const female = await createRegistration(t, "Private Female", "female");
+    const maleSession = await createSession(t, male);
+    const femaleSession = await createSession(t, female);
+
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: femaleSession,
+      applicantNumber: 1,
+    });
+    const interest = await getInterest(t, result.interestId);
+
+    expect(result.private).toBe(true);
+    expect(interest.visibility).toBe("internal_only");
+    await expect(
+      t.query(api.applicantInterests.getDashboard, {
+        sessionHash: femaleSession,
+      })
+    ).resolves.toMatchObject({
+      privateDocumented: [
+        {
+          interestId: result.interestId,
+          visibility: "internal_only",
+          flowStatus: "private_documented",
+        },
+      ],
+    });
+    await expect(
+      t.query(api.applicantInterests.getDashboard, {
+        sessionHash: maleSession,
+      })
+    ).resolves.toMatchObject({
+      inbound: [],
+      outbound: [],
+      privateDocumented: [],
     });
   });
 });
