@@ -2,10 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { LogoMark } from "@/components/admin/primitives/logo-mark";
+import { Ico } from "@/components/admin/primitives/icons";
 
 export default function ApplicantLoginPage() {
   const [email, setEmail] = useState("");
@@ -42,20 +40,38 @@ export default function ApplicantLoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-12">
-      <div className="mx-auto max-w-md space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-semibold text-slate-950">Applicant Portal</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Enter the email you used for registration.
-          </p>
-        </div>
+    <main data-admin className="min-h-screen">
+      <div className="applicant-auth">
+        <section className="applicant-auth-brand">
+          <div className="brand compact">
+            <LogoMark />
+            <div>
+              <div className="brand-name">Taaruf</div>
+              <div className="brand-tag">Applicant</div>
+            </div>
+          </div>
+          <div className="page-head">
+            <div>
+              <h1>
+                Applicant <em>portal</em>
+              </h1>
+              <p>Enter the email you used for registration.</p>
+            </div>
+          </div>
+          <div className="applicant-auth-note">
+            <div className="mono">SECURE LINK</div>
+            <p>Approved applicants receive a time-limited login link by email.</p>
+          </div>
+        </section>
 
-        <Card className="p-6">
-          <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
+        <section className="panel applicant-auth-panel">
+          <div className="panel-head">
+            <h3>Login</h3>
+          </div>
+          <form onSubmit={submit} className="applicant-form">
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input
                 id="email"
                 type="email"
                 value={email}
@@ -64,22 +80,21 @@ export default function ApplicantLoginPage() {
                 required
               />
             </div>
-            {message && <p className="text-sm text-emerald-700">{message}</p>}
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Sending..." : "Send Login Link"}
-            </Button>
+            {message && <p className="notice success">{message}</p>}
+            {error && <p className="notice error">{error}</p>}
+            <button type="submit" className="btn btn-primary full" disabled={isSubmitting}>
+              {Ico.inbox}
+              <span>{isSubmitting ? "Sending..." : "Send Login Link"}</span>
+            </button>
           </form>
-        </Card>
 
-        <p className="text-center text-sm text-slate-500">
-          Need to update your full profile? Use the profile link sent by the 1 Plus 1 team.
-        </p>
-        <div className="text-center">
-          <Link className="text-sm font-medium text-emerald-700" href="/">
+          <div className="applicant-auth-foot">
+            <p>After logging in, you can update your profile from your applicant dashboard.</p>
+            <Link className="btn btn-ghost btn-sm" href="/">
             Back to home
-          </Link>
-        </div>
+            </Link>
+          </div>
+        </section>
       </div>
     </main>
   );

@@ -10,6 +10,7 @@
 
 import type * as applicantAuth from "../applicantAuth.js";
 import type * as applicantInterests from "../applicantInterests.js";
+import type * as applicantProfile from "../applicantProfile.js";
 import type * as interestRules from "../interestRules.js";
 import type * as interests from "../interests.js";
 import type * as matches from "../matches.js";
@@ -27,6 +28,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   applicantAuth: typeof applicantAuth;
   applicantInterests: typeof applicantInterests;
+  applicantProfile: typeof applicantProfile;
   interestRules: typeof interestRules;
   interests: typeof interests;
   matches: typeof matches;

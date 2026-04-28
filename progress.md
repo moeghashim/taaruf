@@ -218,6 +218,22 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/api/admin/notify-match/route.ts
   - src/components/admin-dashboard.tsx
   - progress.md
+## 2026-04-28T18:42:20.000Z
+- Trigger: commit
+- Learning: Moving profile updates into the authenticated applicant dashboard removes the confusing separate profile-link path and requires the live app to use the same admin visual system and session-scoped Convex mutations.
+- Context: feat(applicant): add dashboard profile editing
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/applicantProfile.ts
+  - convex/_generated/api.d.ts
+  - src/app/api/applicant/profile/route.ts
+  - src/app/globals.css
+  - src/app/layout.tsx
+  - src/app/login/page.tsx
+  - src/app/me/page.tsx
+  - src/lib/convex.ts
+  - progress.md
 ## 2026-04-15T02:00:33.000Z
 - Trigger: commit
 - Learning: All outbound email in Taaruf must use the single verified sender `contact@1plus1match.com`; allowing fallback to the old taarufusa.com sender causes delivery failures for match notifications.
