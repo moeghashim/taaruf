@@ -94,7 +94,7 @@ Assalamu Alaikum {{recipientName}},
 
 Your interest note has been saved privately.
 
-This does not notify the other participant and does not mean an interest has been sent. It helps the 1 Plus 1 team understand your preferences and follow up thoughtfully.
+This does not notify the other participant and does not mean a visible interest has been sent. It helps the 1 Plus 1 team understand your preferences and follow up thoughtfully.
 
 View your dashboard:
 {{applicantPortalUrl}}
@@ -111,7 +111,7 @@ Subject: `Private interest documented`
 Body:
 
 ```text
-A female participant documented a private interest. This is visible only to her and management unless management decides to act on it.
+A female participant documented a private interest by submitting an applicant/event number. This is visible only to her and management before a match is in place.
 
 Open management review:
 {{managementReviewUrl}}

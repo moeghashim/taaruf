@@ -145,9 +145,8 @@
    - Contact section that appears only when `contactSharedAt` is set.
 3. Add outbound initiation:
    - Do not show a broad browseable list of all eligible completed profiles.
-   - For male applicants, allow visible outbound interest submission from event/applicant numbers or management-approved safe suggestions.
-   - For management-approved suggestions, expose only the minimal safe details management permits until bio review opens.
-   - For female applicants, provide a private "document interest" action instead of sending a visible outbound interest.
+   - For male applicants, allow visible outbound interest submission only by entering a female applicant/event number.
+   - For female applicants, provide a private "document interest" action that accepts a male applicant/event number instead of sending a visible outbound interest.
    - Add dashboard copy explaining that female-documented interests are visible only to the applicant and admins.
    - Create visible male outbound interests and private female documented interests through separate applicant workflow API actions.
 4. Use the existing admin design language where appropriate, but keep applicant UI simpler and privacy-focused.
@@ -189,10 +188,11 @@
 
 1. Convex unit tests:
    - inbound accept/decline/keep open.
-   - male outbound creates a visible inbound interest for the female recipient.
-   - female documented interest is visible only to the female applicant and admins.
-   - female documented interest does not notify the male applicant.
+   - male number submission creates a visible inbound interest for the female recipient.
+   - female number submission creates a documented interest visible only to the female applicant and admins before match.
+   - female documented interest does not notify the male applicant before match.
    - multiple male inbound interests can appear for one female applicant.
+   - interest submission is only by applicant/event number, not browsing.
    - bio visibility opens only after the female recipient accepts a visible male outbound interest.
    - final approval from both sides.
    - photo request and approval.
@@ -244,8 +244,10 @@
 - Visible outbound interests are male-initiated.
 - Women may receive and review multiple pending inbound interests from men.
 - Women can document private interests because many are not comfortable visibly expressing interest.
-- Female-documented interests are visible only to the female applicant and admins.
-- Female-documented interests must not notify the male applicant or open bio review by themselves.
-- Male outbound selection must not expose full female profiles before bio review.
-- Male outbound initiation can use event/applicant numbers or management-approved safe suggestions.
+- Men and women express interest only by submitting the other person's applicant/event number.
+- Male number submission creates a visible outbound interest to the woman.
+- Female number submission creates a private documented interest visible only to the female applicant and admins before match.
+- Female-documented interests must not notify the male applicant or open bio review by themselves before match.
+- Once a match is in place, normal match visibility rules can show that mutual interest exists.
+- No applicant browsing is used to express interest.
 - Full names and bios still remain hidden until the bio-review state opens.

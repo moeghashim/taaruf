@@ -5,8 +5,8 @@
 ```mermaid
 flowchart TD
   A["Male applicant logs in"] --> B["Dashboard: outbound interests + status"]
-  B --> C["Select allowed target by event/applicant number or management-approved safe suggestion"]
-  C --> D["Send visible outbound interest"]
+  B --> C["Enter female applicant/event number"]
+  C --> D["Submit visible outbound interest"]
   D --> E["Female recipient sees inbound interest"]
   E --> F{"Female decision"}
 
@@ -68,10 +68,11 @@ flowchart TD
   Q -->|Decline| S["Pictures stay hidden"]
   S --> P
 
-  B --> U["Document private interest"]
-  U --> V["Visible only to her and admins"]
-  V --> W["Does not notify male applicant"]
-  W --> X["Admins can use note for follow-up or recommendations"]
+  B --> U["Enter male applicant/event number"]
+  U --> V["Document private interest"]
+  V --> W["Visible only to her and admins before match"]
+  W --> X["Does not notify male applicant before match"]
+  X --> Z["Admins use note for assistance and mutuality tracking"]
 
   P --> Y["Match complete / contact shared"]
 ```
@@ -79,12 +80,14 @@ flowchart TD
 ## Rules Reflected
 
 - Visible outbound interests are male-initiated.
+- Men and women express interest only by submitting the other person's applicant/event number.
 - Women may see multiple pending inbound interests from men.
-- Women can document private interests that are visible only to themselves and admins.
-- Female-documented private interests do not notify men and do not open bio review by themselves.
+- Women can document private interests by submitting a man's applicant/event number.
+- Female-documented private interests are visible only to women themselves and admins before match.
+- Female-documented private interests do not notify men and do not open bio review by themselves before match.
+- Once a match is in place, normal match visibility rules can show that mutual interest exists.
 - Names and bios become visible only when bio review opens.
 - Contact sharing happens automatically after both final approvals.
 - Photo decline does not block contact sharing.
 - Keep Open expires after a fixed period.
 - Each candidate can have only one active bio-review flow at a time.
-
