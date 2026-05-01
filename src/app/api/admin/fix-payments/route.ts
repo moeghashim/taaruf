@@ -64,11 +64,26 @@ export async function POST(request: NextRequest) {
           details.push(`Fixed: ${registration.name} (${registration.email})`);
         }
 
-        // Send confirmation email if not already sent
+        // Send welcome email if not already sent
         if (!registration.confirmationEmailSent) {
+          let profileAccessToken = registration.profileAccessToken;
+          if (!profileAccessToken) {
+            profileAccessToken = crypto.randomBytes(24).toString("hex");
+            await convexClient.mutation(api.registrations.setProfileAccessToken, {
+              id: registration._id,
+              token: profileAccessToken,
+            });
+          }
+
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL
+            || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+            || request.nextUrl.origin;
+          const profileUrl = `${appUrl}/profile/${profileAccessToken}`;
+
           const result = await sendConfirmationEmail({
             name: registration.name,
             email: registration.email,
+            profileUrl,
           });
           if (result.success) {
             await convexClient.mutation(api.registrations.markEmailSent, {

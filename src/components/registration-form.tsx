@@ -45,7 +45,6 @@ interface RegistrationFormData {
   spouseRequirement3: string;
   basicBio: string;
   photoSharingPermission: PhotoSharingPermission;
-  interestSubmission: string;
   backgroundCheckConsent: boolean;
 }
 
@@ -94,7 +93,6 @@ export function RegistrationForm() {
       spouseRequirement3: "",
       basicBio: "",
       photoSharingPermission: "",
-      interestSubmission: "",
       backgroundCheckConsent: false,
     } as RegistrationFormData,
     onSubmit: async ({ value }) => {
@@ -126,7 +124,6 @@ export function RegistrationForm() {
             spouseRequirement3: value.spouseRequirement3,
             shareableBio: value.basicBio,
             photoSharingPermission: value.photoSharingPermission,
-            interestSubmission: value.interestSubmission,
             imageStorageIds: uploadedImages.map((image) => image.storageId),
           }),
         });
@@ -506,26 +503,6 @@ export function RegistrationForm() {
               <Label htmlFor={field.name}>Provide a basic bio about yourself that you would be comfortable sharing with a potential match *</Label>
               <textarea id={field.name} value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} placeholder="Tell us about yourself in a way you would be comfortable sharing with a potential match..." className="flex min-h-[120px] w-full rounded-md border border-input bg-input px-3 py-2 text-base text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" rows={5} />
               {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
-            </div>
-          )}
-        </form.Field>
-
-        <form.Field
-          name="interestSubmission"
-        >
-          {(field) => (
-            <div className="space-y-2">
-              <Label htmlFor={field.name}>Optional: if you have attended a workshop, were there any other participants you were interested in?</Label>
-              <textarea
-                id={field.name}
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-                placeholder="Please provide their participant number or name."
-                className="flex min-h-[120px] w-full rounded-md border border-input bg-input px-3 py-2 text-base text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                rows={5}
-              />
-              <p className="text-xs text-slate-500">This helps our admin team to initiate matches or confirm mutual interest. For females, your interests will never be shared.</p>
             </div>
           )}
         </form.Field>

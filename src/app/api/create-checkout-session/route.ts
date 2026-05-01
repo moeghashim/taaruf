@@ -23,7 +23,6 @@ export async function POST(request: NextRequest) {
       spouseRequirement3,
       shareableBio,
       photoSharingPermission,
-      interestSubmission,
       imageStorageIds,
     } = body;
 
@@ -55,8 +54,8 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: "usd",
             product_data: {
-              name: "1Plus1 Pre-Marriage Workshop Registration",
-              description: "Registration fee for the 1Plus1 Pre-Marriage Workshop",
+              name: "1Plus1 Matching Registration",
+              description: "Registration & background check for the 1Plus1 matching program",
             },
             unit_amount: 1000, // $10.00 in cents
           },
@@ -102,7 +101,6 @@ export async function POST(request: NextRequest) {
       spouseRequirement3,
       shareableBio,
       photoSharingPermission,
-      interestSubmission,
       describeYourself: shareableBio,
       lookingFor: [spouseRequirement1, spouseRequirement2, spouseRequirement3].join(", "),
       stripeSessionId: session.id,

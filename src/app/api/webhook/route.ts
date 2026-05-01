@@ -1,7 +1,14 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { api } from "../../../../convex/_generated/api";
 import Stripe from "stripe";
+
+function getAppUrl(request: NextRequest) {
+  return process.env.NEXT_PUBLIC_APP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    || request.nextUrl.origin;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,17 +66,29 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
       }
 
-      // Send confirmation email (non-blocking — failure doesn't break webhook)
+      // Send welcome email with profile-edit link (non-blocking — failure doesn't break webhook)
       try {
         const registration = await convexClient.query(
           api.registrations.getByStripeSession,
           { stripeSessionId: session.id }
         );
         if (registration && registration.email) {
+          let profileAccessToken = registration.profileAccessToken;
+          if (!profileAccessToken) {
+            profileAccessToken = crypto.randomBytes(24).toString("hex");
+            await convexClient.mutation(api.registrations.setProfileAccessToken, {
+              id: registration._id,
+              token: profileAccessToken,
+            });
+          }
+
+          const profileUrl = `${getAppUrl(request)}/profile/${profileAccessToken}`;
+
           const { sendConfirmationEmail } = await import("@/lib/email");
           const result = await sendConfirmationEmail({
             name: registration.name,
             email: registration.email,
+            profileUrl,
           });
           if (result.success) {
             await convexClient.mutation(api.registrations.markEmailSent, {
@@ -78,7 +97,7 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (err) {
-        console.error("Failed to send confirmation email:", err instanceof Error ? err.message : err);
+        console.error("Failed to send welcome email:", err instanceof Error ? err.message : err);
         // Don't return error — payment was already confirmed
       }
     } else if (event.type === "checkout.session.expired") {

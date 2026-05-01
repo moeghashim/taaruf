@@ -119,6 +119,10 @@ function SuccessContent() {
   }
 
   // Payment confirmed — registered
+  const profileUrl = registration.profileAccessToken
+    ? `/profile/${registration.profileAccessToken}`
+    : null;
+
   return (
     <Card className="w-full max-w-md p-8 shadow-lg text-center">
       <div className="mb-6 flex justify-center">
@@ -126,16 +130,16 @@ function SuccessContent() {
       </div>
 
       <h1 className="text-3xl font-bold text-slate-900 mb-3">
-        Registration Confirmed!
+        Welcome to 1 Plus 1!
       </h1>
 
       <p className="text-lg text-slate-600 mb-2">
-        Welcome to 1 Plus 1 Matching & Taaruf
+        Your registration is complete
       </p>
 
       <p className="text-slate-600 mb-6">
-        Your payment has been received and your application is under review. Our team will
-        carefully evaluate your profile and get back to you within 24 hours.
+        Your payment has been received. The next step is to complete your profile so our
+        team can review it and begin supporting introductions for you.
       </p>
 
       <div className="space-y-3 text-left mb-8">
@@ -143,22 +147,24 @@ function SuccessContent() {
         <ul className="space-y-2 text-sm text-slate-600">
           <li className="flex gap-3">
             <span className="text-green-500 font-bold">&#10003;</span>
-            <span>Check your email for confirmation</span>
+            <span>Check your email for a welcome message and link to complete your profile</span>
           </li>
           <li className="flex gap-3">
             <span className="text-green-500 font-bold">&#10003;</span>
-            <span>Our team will review your profile within 24 hours</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="text-green-500 font-bold">&#10003;</span>
-            <span>You will receive an approval or rejection decision</span>
+            <span>Our team will review your profile once it&apos;s complete</span>
           </li>
         </ul>
       </div>
 
-      <Link href="/">
-        <Button className="w-full">Return to Home</Button>
-      </Link>
+      {profileUrl ? (
+        <Link href={profileUrl}>
+          <Button className="w-full">Complete Your Profile</Button>
+        </Link>
+      ) : (
+        <Link href="/">
+          <Button className="w-full">Return to Home</Button>
+        </Link>
+      )}
     </Card>
   );
 }
