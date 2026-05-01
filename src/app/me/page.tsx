@@ -152,6 +152,11 @@ function InterestCard({
     interest.flowStatus !== "declined" &&
     interest.flowStatus !== "closed"
   );
+  const canWithdraw =
+    (interest.direction === "outbound" || interest.direction === "private") &&
+    (interest.flowStatus === "awaiting_inbound_response" ||
+      interest.flowStatus === "kept_open" ||
+      interest.flowStatus === "private_documented");
 
   return (
     <div className="interest-card">
@@ -237,6 +242,22 @@ function InterestCard({
             onClick={() => onAction({ action: "final_approval", interestId: interest.interestId, approved: false })}
           >
             Decline After Bio
+          </button>
+        </div>
+      )}
+
+      {canWithdraw && (
+        <div className="action-row">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={busy}
+            onClick={() => {
+              if (typeof window !== "undefined" && !window.confirm("Withdraw this interest? This cannot be undone.")) return;
+              onAction({ action: "withdraw", interestId: interest.interestId });
+            }}
+          >
+            Withdraw
           </button>
         </div>
       )}

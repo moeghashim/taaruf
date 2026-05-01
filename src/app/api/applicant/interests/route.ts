@@ -48,6 +48,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (body.action === "withdraw") {
+      if (!body.interestId) {
+        return NextResponse.json({ error: "interestId is required" }, { status: 400 });
+      }
+      await convex.mutation(api.applicantInterests.withdrawOutbound, {
+        sessionHash,
+        interestId: body.interestId,
+      });
+      return NextResponse.json({ success: true });
+    }
+
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
     return NextResponse.json(

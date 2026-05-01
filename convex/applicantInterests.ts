@@ -322,6 +322,48 @@ export const respondToInbound = mutation({
   },
 });
 
+export const withdrawOutbound = mutation({
+  args: {
+    sessionHash: v.string(),
+    interestId: v.id("interests"),
+  },
+  handler: async (ctx, args) => {
+    const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    requireApprovedForInterestAction(registration);
+    const interest = await ctx.db.get(args.interestId);
+    if (!interest) throw new Error("Interest not found");
+    if (interest.fromRegistrationId !== registration._id) {
+      throw new Error("Interest does not belong to this applicant");
+    }
+    if (!["new", "queued", "active", "deferred"].includes(interest.status)) {
+      throw new Error("This interest can no longer be withdrawn");
+    }
+
+    const flow = await getFlowByInterestId(ctx, interest._id);
+    const withdrawableFlowStatuses = new Set(["private_documented", "awaiting_inbound_response", "kept_open"] as const);
+    if (flow && !withdrawableFlowStatuses.has(flow.flowStatus as "private_documented" | "awaiting_inbound_response" | "kept_open")) {
+      throw new Error("This interest can no longer be withdrawn");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(interest._id, {
+      status: "withdrawn",
+      adminStatus: interest.adminStatus === "matched" ? interest.adminStatus : "declined",
+      updatedAt: now,
+    });
+    if (flow) {
+      await ctx.db.patch(flow._id, {
+        flowStatus: "closed",
+        closedReason: "requester_withdrew",
+        updatedAt: now,
+      });
+      await appendEvent(ctx, flow, "outbound_withdrawn", registration._id);
+    }
+
+    return interest._id;
+  },
+});
+
 export const giveFinalApproval = mutation({
   args: {
     sessionHash: v.string(),
