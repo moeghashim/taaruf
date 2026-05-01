@@ -60,7 +60,7 @@ export default function ApplicantLoginPage() {
           </div>
           <div className="applicant-auth-note">
             <div className="mono">SECURE LINK</div>
-            <p>Approved applicants receive a time-limited login link by email.</p>
+            <p>Registered applicants receive a time-limited login link by email.</p>
           </div>
         </section>
 

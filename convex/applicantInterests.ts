@@ -26,11 +26,17 @@ async function getRegistrationForSession(ctx: ReadCtx, sessionHash: string) {
   }
 
   const registration = await ctx.db.get(session.registrationId);
-  if (!registration || registration.status !== "approved") {
+  if (!registration) {
     throw new Error("Unauthorized");
   }
 
   return registration;
+}
+
+function requireApprovedForInterestAction(registration: Registration) {
+  if (registration.status !== "approved") {
+    throw new Error("Your registration must be approved before you can express or respond to interests.");
+  }
 }
 
 async function getRegistrationNumberMap(ctx: ReadCtx) {
@@ -220,6 +226,7 @@ export const submitInterestNumber = mutation({
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    requireApprovedForInterestAction(registration);
     const { byNumber } = await getRegistrationNumberMap(ctx);
     const target = byNumber.get(args.applicantNumber);
 
@@ -258,6 +265,7 @@ export const respondToInbound = mutation({
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
     if (!interest) throw new Error("Interest not found");
     if (interest.toRegistrationId !== registration._id || interest.visibility === "internal_only") {
@@ -322,6 +330,7 @@ export const giveFinalApproval = mutation({
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
     if (!interest) throw new Error("Interest not found");
     if (interest.fromRegistrationId !== registration._id && interest.toRegistrationId !== registration._id) {

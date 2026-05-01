@@ -9,6 +9,7 @@ export const createLoginToken = mutation({
   args: {
     email: v.string(),
     tokenHash: v.string(),
+    expiresInMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const email = args.email.trim().toLowerCase();
@@ -23,7 +24,7 @@ export const createLoginToken = mutation({
       ) ??
       null;
 
-    if (!registration || registration.status !== "approved") {
+    if (!registration) {
       return null;
     }
 
@@ -31,7 +32,7 @@ export const createLoginToken = mutation({
     await ctx.db.insert("applicantLoginTokens", {
       registrationId: registration._id,
       tokenHash: args.tokenHash,
-      expiresAt: now + LOGIN_TOKEN_TTL_MS,
+      expiresAt: now + (args.expiresInMs ?? LOGIN_TOKEN_TTL_MS),
       createdAt: now,
     });
 
@@ -59,7 +60,7 @@ export const claimLoginToken = mutation({
     }
 
     const registration = await ctx.db.get(loginToken.registrationId);
-    if (!registration || registration.status !== "approved") {
+    if (!registration) {
       return null;
     }
 
@@ -100,7 +101,7 @@ export const getSession = query({
     }
 
     const registration = await ctx.db.get(session.registrationId);
-    if (!registration || registration.status !== "approved") {
+    if (!registration) {
       return null;
     }
 

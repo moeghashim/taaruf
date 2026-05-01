@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { sendConfirmationEmail } from "@/lib/email";
 import { api } from "../../../../../convex/_generated/api";
+import { createToken, hashToken } from "@/lib/applicant-session";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
@@ -66,19 +67,18 @@ export async function POST(request: NextRequest) {
 
         // Send welcome email if not already sent
         if (!registration.confirmationEmailSent) {
-          let profileAccessToken = registration.profileAccessToken;
-          if (!profileAccessToken) {
-            profileAccessToken = crypto.randomBytes(24).toString("hex");
-            await convexClient.mutation(api.registrations.setProfileAccessToken, {
-              id: registration._id,
-              token: profileAccessToken,
-            });
-          }
+          const loginToken = createToken();
+          const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+          await convexClient.mutation(api.applicantAuth.createLoginToken, {
+            email: registration.email,
+            tokenHash: hashToken(loginToken),
+            expiresInMs: SEVEN_DAYS_MS,
+          });
 
           const appUrl = process.env.NEXT_PUBLIC_APP_URL
             || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
             || request.nextUrl.origin;
-          const profileUrl = `${appUrl}/profile/${profileAccessToken}`;
+          const profileUrl = `${appUrl}/api/applicant/login/verify?token=${encodeURIComponent(loginToken)}`;
 
           const result = await sendConfirmationEmail({
             name: registration.name,

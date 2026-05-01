@@ -1,7 +1,7 @@
-import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { api } from "../../../../convex/_generated/api";
+import { createToken, hashToken } from "@/lib/applicant-session";
 import Stripe from "stripe";
 
 function getAppUrl(request: NextRequest) {
@@ -66,23 +66,22 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
       }
 
-      // Send welcome email with profile-edit link (non-blocking — failure doesn't break webhook)
+      // Send welcome email with auto-login link (non-blocking — failure doesn't break webhook)
       try {
         const registration = await convexClient.query(
           api.registrations.getByStripeSession,
           { stripeSessionId: session.id }
         );
         if (registration && registration.email) {
-          let profileAccessToken = registration.profileAccessToken;
-          if (!profileAccessToken) {
-            profileAccessToken = crypto.randomBytes(24).toString("hex");
-            await convexClient.mutation(api.registrations.setProfileAccessToken, {
-              id: registration._id,
-              token: profileAccessToken,
-            });
-          }
+          const loginToken = createToken();
+          const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+          await convexClient.mutation(api.applicantAuth.createLoginToken, {
+            email: registration.email,
+            tokenHash: hashToken(loginToken),
+            expiresInMs: SEVEN_DAYS_MS,
+          });
 
-          const profileUrl = `${getAppUrl(request)}/profile/${profileAccessToken}`;
+          const profileUrl = `${getAppUrl(request)}/api/applicant/login/verify?token=${encodeURIComponent(loginToken)}`;
 
           const { sendConfirmationEmail } = await import("@/lib/email");
           const result = await sendConfirmationEmail({

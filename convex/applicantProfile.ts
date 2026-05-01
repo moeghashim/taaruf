@@ -34,7 +34,7 @@ async function getRegistrationForSession(ctx: ReadCtx, sessionHash: string) {
   }
 
   const registration = await ctx.db.get(session.registrationId);
-  if (!registration || registration.status !== "approved") {
+  if (!registration) {
     throw new Error("Unauthorized");
   }
 

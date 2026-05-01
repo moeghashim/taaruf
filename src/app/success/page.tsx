@@ -119,10 +119,6 @@ function SuccessContent() {
   }
 
   // Payment confirmed — registered
-  const profileUrl = registration.profileAccessToken
-    ? `/profile/${registration.profileAccessToken}`
-    : null;
-
   return (
     <Card className="w-full max-w-md p-8 shadow-lg text-center">
       <div className="mb-6 flex justify-center">
@@ -138,8 +134,8 @@ function SuccessContent() {
       </p>
 
       <p className="text-slate-600 mb-6">
-        Your payment has been received. The next step is to complete your profile so our
-        team can review it and begin supporting introductions for you.
+        Your payment has been received. We&apos;ve sent you an email with a secure link
+        to your applicant dashboard, where you can complete your profile.
       </p>
 
       <div className="space-y-3 text-left mb-8">
@@ -147,24 +143,18 @@ function SuccessContent() {
         <ul className="space-y-2 text-sm text-slate-600">
           <li className="flex gap-3">
             <span className="text-green-500 font-bold">&#10003;</span>
-            <span>Check your email for a welcome message and link to complete your profile</span>
+            <span>Check your email for your applicant dashboard link</span>
           </li>
           <li className="flex gap-3">
             <span className="text-green-500 font-bold">&#10003;</span>
-            <span>Our team will review your profile once it&apos;s complete</span>
+            <span>Complete your profile so our team can review it</span>
           </li>
         </ul>
       </div>
 
-      {profileUrl ? (
-        <Link href={profileUrl}>
-          <Button className="w-full">Complete Your Profile</Button>
-        </Link>
-      ) : (
-        <Link href="/">
-          <Button className="w-full">Return to Home</Button>
-        </Link>
-      )}
+      <Link href="/login">
+        <Button className="w-full">Open Applicant Login</Button>
+      </Link>
     </Card>
   );
 }
