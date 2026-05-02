@@ -696,6 +696,19 @@
   text-underline-offset: 2px;
 }
 
+/* Public profile-completion page */
+[data-admin] .applicant-profile {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 40px 20px 60px;
+  display: grid;
+  gap: 22px;
+}
+[data-admin] .applicant-profile-head { display: grid; gap: 18px; }
+[data-admin] .applicant-profile-head .brand { border: 0; padding: 0; margin: 0; }
+[data-admin] .applicant-profile-head .page-head { margin-bottom: 0; }
+[data-admin] .applicant-profile-message { padding: 22px 24px; }
+
 /* Public shared-profile page */
 [data-admin] .applicant-share {
   width: min(100%, 760px);
@@ -976,6 +989,8 @@
   [data-admin] .applicant-share { padding: 24px 16px 40px; }
   [data-admin] .applicant-share-section { padding: 16px 18px; }
   [data-admin] .fact { grid-template-columns: 110px 1fr; gap: 10px; }
+
+  [data-admin] .applicant-profile { padding: 24px 16px 40px; }
 }
 
 /* Tablet — drop stats from 4 columns to 2 */

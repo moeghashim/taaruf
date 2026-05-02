@@ -1,20 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 type PrayerCommitment = "sometimes" | "strive_five" | "always_five" | "five_and_sunnah" | "";
 type HijabResponse = "yes" | "no" | "open" | "";
@@ -207,15 +197,29 @@ export function ProfileCompletionForm({ token }: { token: string }) {
   }
 
   if (isLoading) {
-    return <Card className="p-8">Loading profile...</Card>;
+    return (
+      <section className="panel">
+        <div className="coming-soon compact">
+          <div className="lede">Loading profile...</div>
+        </div>
+      </section>
+    );
   }
 
   if (error && !profile) {
-    return <Card className="p-8 text-red-600">{error}</Card>;
+    return (
+      <section className="panel applicant-profile-message">
+        <p className="notice error">{error}</p>
+      </section>
+    );
   }
 
   if (!profile) {
-    return <Card className="p-8">Profile not found.</Card>;
+    return (
+      <section className="panel applicant-profile-message">
+        <p className="notice error">Profile not found.</p>
+      </section>
+    );
   }
 
   const hijabLabel =
@@ -223,155 +227,182 @@ export function ProfileCompletionForm({ token }: { token: string }) {
       ? "Do you wear hijab?"
       : "Do you wish for your wife to wear hijab?";
 
-  return (
-    <Card className="p-8 shadow-lg">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">{profile.name}</h2>
-          <p className="text-sm text-slate-600">{profile.email}</p>
-        </div>
+  const isComplete = profile.profileCompletionStatus === "completed";
 
-        {profile.profileCompletionStatus !== "completed" && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Complete your profile to start matching.
-          </div>
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>{profile.name}</h3>
+          <p>{profile.email}</p>
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="profile-form">
+        {!isComplete && (
+          <p className="notice warning">Complete your profile to start matching.</p>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="ethnicity">Ethnicity *</Label>
-            <Input
+        <div className="profile-grid two">
+          <div className="field">
+            <label htmlFor="ethnicity">Ethnicity *</label>
+            <input
               id="ethnicity"
               value={profile.ethnicity}
-              onChange={(e) => setProfile({ ...profile, ethnicity: e.target.value })}
+              onChange={(event) => setProfile({ ...profile, ethnicity: event.target.value })}
               placeholder="e.g. Arab, South Asian, Somali"
             />
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="prayerCommitment">How would you describe your commitment to prayer? *</Label>
-            <Select
+          <div className="field">
+            <label htmlFor="prayerCommitment">Prayer commitment *</label>
+            <select
+              id="prayerCommitment"
               value={profile.prayerCommitment}
-              onValueChange={(value) => setProfile({ ...profile, prayerCommitment: value as PrayerCommitment })}
+              onChange={(event) =>
+                setProfile({ ...profile, prayerCommitment: event.target.value as PrayerCommitment })
+              }
             >
-              <SelectTrigger id="prayerCommitment">
-                <SelectValue placeholder="Select one" />
-              </SelectTrigger>
-              <SelectContent>
-                {prayerOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <option value="">Select one</option>
+              {prayerOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="hijabResponse">{hijabLabel} *</Label>
-          <Select
-            value={profile.hijabResponse}
-            onValueChange={(value) => setProfile({ ...profile, hijabResponse: value as HijabResponse })}
-          >
-            <SelectTrigger id="hijabResponse">
-              <SelectValue placeholder="Select one" />
-            </SelectTrigger>
-            <SelectContent>
+        <div className="profile-grid two">
+          <div className="field">
+            <label htmlFor="hijabResponse">{hijabLabel} *</label>
+            <select
+              id="hijabResponse"
+              value={profile.hijabResponse}
+              onChange={(event) =>
+                setProfile({ ...profile, hijabResponse: event.target.value as HijabResponse })
+              }
+            >
+              <option value="">Select one</option>
               {yesNoOpenOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
+                <option key={option.value} value={option.value}>
                   {option.label}
-                </SelectItem>
+                </option>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="photoSharingPermission">
-            Are you comfortable with your photos being shared with a potential match? *
-          </Label>
-          <Select
-            value={profile.photoSharingPermission}
-            onValueChange={(value) => setProfile({ ...profile, photoSharingPermission: value as PhotoSharingPermission })}
-          >
-            <SelectTrigger id="photoSharingPermission">
-              <SelectValue placeholder="Select one" />
-            </SelectTrigger>
-            <SelectContent>
-              {photoSharingOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-slate-500">
-            Your picture will not be shared with anyone without your permission.
-          </p>
-        </div>
-
-        <div className="space-y-3 rounded-lg border border-slate-200 p-4">
-          <div>
-            <Label htmlFor="photos">Pictures *</Label>
-            <p className="text-xs text-slate-500 mt-1">Upload up to 3 images. At least 1 is required.</p>
+            </select>
           </div>
-          <Input id="photos" type="file" accept="image/*" multiple onChange={(e) => void handleImageUpload(e.target.files)} disabled={isUploading || uploadedImages.length >= 3} />
-          <p className="text-xs text-slate-500">{isUploading ? "Uploading image..." : `${imageCount} / 3 images uploaded`}</p>
+          <div className="field">
+            <label htmlFor="photoSharingPermission">Photo sharing permission *</label>
+            <select
+              id="photoSharingPermission"
+              value={profile.photoSharingPermission}
+              onChange={(event) =>
+                setProfile({
+                  ...profile,
+                  photoSharingPermission: event.target.value as PhotoSharingPermission,
+                })
+              }
+            >
+              <option value="">Select one</option>
+              {photoSharingOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="field-hint">
+              Your picture will not be shared with anyone without your permission.
+            </p>
+          </div>
+        </div>
+
+        <div className="photo-upload-box">
+          <div>
+            <h4>Pictures *</h4>
+            <p>Upload up to 3 images. At least 1 is required.</p>
+          </div>
+          <div className="field">
+            <input
+              id="photos"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => void handleImageUpload(event.target.files)}
+              disabled={isUploading || uploadedImages.length >= 3}
+            />
+          </div>
+          <div className="mono">
+            {isUploading ? "Uploading..." : `${imageCount} / 3 uploaded`}
+          </div>
           {uploadedImages.length > 0 && (
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="photo-grid">
               {uploadedImages.map((image) => (
-                <div key={image.storageId} className="rounded-lg border border-slate-200 p-2 space-y-2">
-                  <img src={image.url} alt={image.name} className="h-28 w-full rounded object-cover" />
-                  <p className="truncate text-xs text-slate-600">{image.name}</p>
-                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => removeImage(image.storageId)}>Remove</Button>
+                <div key={image.storageId} className="photo-card">
+                  <Image src={image.url} alt={image.name} width={320} height={128} unoptimized />
+                  <div>
+                    <p>{image.name}</p>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => removeImage(image.storageId)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="requirement1">Top spouse requirement 1 *</Label>
-            <Input id="requirement1" value={profile.spouseRequirement1} onChange={(e) => setProfile({ ...profile, spouseRequirement1: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="requirement2">Top spouse requirement 2 *</Label>
-            <Input id="requirement2" value={profile.spouseRequirement2} onChange={(e) => setProfile({ ...profile, spouseRequirement2: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="requirement3">Top spouse requirement 3 *</Label>
-            <Input id="requirement3" value={profile.spouseRequirement3} onChange={(e) => setProfile({ ...profile, spouseRequirement3: e.target.value })} />
-          </div>
+        <div className="profile-grid three">
+          {([1, 2, 3] as const).map((n) => {
+            const key = `spouseRequirement${n}` as
+              | "spouseRequirement1"
+              | "spouseRequirement2"
+              | "spouseRequirement3";
+            return (
+              <div className="field" key={key}>
+                <label htmlFor={key}>Top spouse requirement {n} *</label>
+                <input
+                  id={key}
+                  value={profile[key]}
+                  onChange={(event) => setProfile({ ...profile, [key]: event.target.value })}
+                />
+              </div>
+            );
+          })}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="shareableBio">Provide a basic bio about yourself that you would be comfortable sharing with a potential match *</Label>
+        <div className="field">
+          <label htmlFor="shareableBio">
+            A short bio you would be comfortable sharing with a potential match *
+          </label>
           <textarea
             id="shareableBio"
             value={profile.shareableBio}
-            onChange={(e) => setProfile({ ...profile, shareableBio: e.target.value })}
-            className="flex min-h-[140px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            onChange={(event) => setProfile({ ...profile, shareableBio: event.target.value })}
             rows={6}
           />
         </div>
 
-        <div className="space-y-3">
-          <Label>Do you have any interests from a previous event that you would like us to follow up on?</Label>
-          <div className="grid gap-4 md:grid-cols-3">
+        <div className="field">
+          <label>
+            Do you have any interests from a previous event that you would like us to follow up on?
+          </label>
+          <div className="profile-grid three">
             {[0, 1, 2].map((index) => (
-              <div key={`interest-number-${index}`} className="space-y-2">
-                <Label htmlFor={`interestSubmissionNumber${index + 1}`}>Applicant number {index + 1}</Label>
-                <Input
+              <div key={`interest-number-${index}`} className="field">
+                <label htmlFor={`interestSubmissionNumber${index + 1}`}>
+                  Applicant number {index + 1}
+                </label>
+                <input
                   id={`interestSubmissionNumber${index + 1}`}
                   type="number"
                   min="1"
                   inputMode="numeric"
                   value={profile.interestSubmissionNumbers[index] || ""}
-                  onChange={(e) => {
+                  onChange={(event) => {
                     const nextNumbers = [...profile.interestSubmissionNumbers];
-                    nextNumbers[index] = e.target.value;
+                    nextNumbers[index] = event.target.value;
                     setProfile({
                       ...profile,
                       interestSubmissionNumbers: nextNumbers,
@@ -383,28 +414,35 @@ export function ProfileCompletionForm({ token }: { token: string }) {
               </div>
             ))}
           </div>
-          <p className="text-xs text-slate-500">Enter up to 3 applicant numbers. We will create the matching interests automatically.</p>
+          <p className="field-hint">
+            Enter up to 3 applicant numbers. We will create the matching interests automatically.
+          </p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="applicantNotesToAdmin">Anything you want the admin team to know?</Label>
+        <div className="field">
+          <label htmlFor="applicantNotesToAdmin">Anything you want the admin team to know?</label>
           <textarea
             id="applicantNotesToAdmin"
             value={profile.applicantNotesToAdmin}
-            onChange={(e) => setProfile({ ...profile, applicantNotesToAdmin: e.target.value })}
-            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            onChange={(event) =>
+              setProfile({ ...profile, applicantNotesToAdmin: event.target.value })
+            }
             rows={4}
             placeholder="Optional note for the admin team"
           />
         </div>
 
-        {message && <p className="text-sm text-green-700">{message}</p>}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {message && <p className="notice success">{message}</p>}
+        {error && <p className="notice error">{error}</p>}
 
-        <Button type="submit" disabled={isSaving || isUploading} className="w-full">
-          {isSaving ? "Saving..." : "Save Profile"}
-        </Button>
+        <button
+          type="submit"
+          className="btn btn-primary full"
+          disabled={isSaving || isUploading}
+        >
+          {isSaving ? "Saving..." : "Save profile"}
+        </button>
       </form>
-    </Card>
+    </section>
   );
 }

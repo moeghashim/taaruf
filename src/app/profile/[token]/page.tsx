@@ -1,3 +1,4 @@
+import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { ProfileCompletionForm } from "@/components/profile-completion-form";
 
 export default async function ProfilePage({
@@ -8,14 +9,29 @@ export default async function ProfilePage({
   const { token } = await params;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto max-w-3xl space-y-6">
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-semibold text-slate-900">Complete your profile</h1>
-          <p className="text-sm text-slate-600">
-            Please add the remaining details below so the 1 Plus 1 team can review your profile.
-          </p>
-        </div>
+    <main data-admin className="min-h-screen">
+      <div className="applicant-profile">
+        <header className="applicant-profile-head">
+          <div className="brand compact">
+            <LogoMark />
+            <div>
+              <div className="brand-name">Taaruf</div>
+              <div className="brand-tag">Profile</div>
+            </div>
+          </div>
+          <div className="page-head">
+            <div>
+              <h1>
+                Complete your <em>profile</em>
+              </h1>
+              <p>
+                Add the remaining details below so the 1Plus1 team can review your profile
+                and start matching.
+              </p>
+            </div>
+          </div>
+        </header>
+
         <ProfileCompletionForm token={token} />
       </div>
     </main>
