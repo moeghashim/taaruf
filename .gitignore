@@ -36,8 +36,9 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files
-.env*.local
 .env
+.env.*
+!.env.example
 
 # vercel
 .vercel
@@ -45,3 +46,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# remotion sub-project (tracked separately, not part of the Taaruf app)
+/remotion-video/
+
