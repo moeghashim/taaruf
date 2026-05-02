@@ -696,6 +696,87 @@
   text-underline-offset: 2px;
 }
 
+/* Public status / confirmation page */
+[data-admin] .applicant-status {
+  width: min(100%, 520px);
+  margin: 0 auto;
+  padding: 48px 20px 60px;
+  display: grid;
+  gap: 22px;
+}
+[data-admin] .applicant-status-head .brand { border: 0; padding: 0; margin: 0; }
+[data-admin] .applicant-status-body {
+  padding: 36px 28px;
+  display: grid;
+  gap: 14px;
+  text-align: center;
+  justify-items: center;
+}
+[data-admin] .applicant-status-body h2 {
+  font-family: var(--font-admin-serif, "Cormorant Garamond"), Georgia, serif;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  font-weight: 500;
+}
+[data-admin] .applicant-status-body p {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 360px;
+}
+[data-admin] .applicant-status-body .btn {
+  margin-top: 4px;
+  align-self: stretch;
+  justify-content: center;
+}
+[data-admin] .status-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-admin-serif, "Cormorant Garamond"), Georgia, serif;
+  font-size: 28px;
+  line-height: 1;
+}
+[data-admin] .status-mark.success { background: #E8F1EB; color: var(--green); }
+[data-admin] .status-mark.warning { background: #FBF0DA; color: var(--amber); }
+[data-admin] .status-mark.error { background: #F7E5E4; color: var(--rose); }
+[data-admin] .status-mark.pending { background: #E5EEF5; color: var(--blue); }
+[data-admin] .status-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: status-spin 0.9s linear infinite;
+}
+@keyframes status-spin { to { transform: rotate(360deg); } }
+[data-admin] .status-list {
+  align-self: stretch;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--bg-tint);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  list-style: none;
+  margin: 0;
+}
+[data-admin] .status-list li { padding-left: 22px; position: relative; line-height: 1.5; }
+[data-admin] .status-list li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* Public registration page */
 [data-admin] .applicant-register {
   width: min(100%, 760px);
@@ -853,6 +934,9 @@
     border-bottom: 1px solid var(--line-2);
   }
   [data-admin] .applicant-home-steps .step:last-child { border-bottom: 0; }
+
+  [data-admin] .applicant-status { padding: 28px 16px 40px; }
+  [data-admin] .applicant-status-body { padding: 28px 22px; }
 }
 
 /* Tablet — drop stats from 4 columns to 2 */

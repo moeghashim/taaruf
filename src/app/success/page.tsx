@@ -4,10 +4,53 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { CheckCircle, Loader2 } from "lucide-react";
 import { Suspense } from "react";
+import { LogoMark } from "@/components/admin/primitives/logo-mark";
+
+type Tone = "success" | "warning" | "error" | "pending";
+
+interface StatusViewModel {
+  tone: Tone;
+  title: string;
+  body: string;
+  bullets?: string[];
+  action?: { label: string; href: string };
+}
+
+function StatusPanel({ status }: { status: StatusViewModel }) {
+  const symbol =
+    status.tone === "success"
+      ? "✓"
+      : status.tone === "warning"
+      ? "✓"
+      : status.tone === "error"
+      ? "!"
+      : null;
+
+  return (
+    <section className="panel applicant-status-panel">
+      <div className="applicant-status-body">
+        <div className={`status-mark ${status.tone}`}>
+          {status.tone === "pending" ? <span className="status-spinner" /> : symbol}
+        </div>
+        <h2>{status.title}</h2>
+        <p>{status.body}</p>
+        {status.bullets && (
+          <ul className="status-list">
+            {status.bullets.map((bullet) => (
+              <li key={bullet}>{bullet}</li>
+            ))}
+          </ul>
+        )}
+        {status.action && (
+          <Link href={status.action.href} className="btn btn-primary full">
+            <span>{status.action.label}</span>
+          </Link>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function SuccessContent() {
   const searchParams = useSearchParams();
@@ -18,159 +61,85 @@ function SuccessContent() {
     sessionId ? { stripeSessionId: sessionId } : "skip"
   );
 
-  // No session_id — generic success
+  let status: StatusViewModel;
+
   if (!sessionId) {
-    return (
-      <Card className="w-full max-w-md p-8 shadow-lg text-center">
-        <div className="mb-6 flex justify-center">
-          <CheckCircle className="h-16 w-16 text-green-500" />
-        </div>
-        <h1 className="text-3xl font-bold text-slate-900 mb-3">Thank You!</h1>
-        <p className="text-slate-600 mb-6">Your registration has been received.</p>
-        <Link href="/">
-          <Button className="w-full">Return to Home</Button>
-        </Link>
-      </Card>
-    );
+    status = {
+      tone: "success",
+      title: "Thank you.",
+      body: "Your registration has been received.",
+      action: { label: "Return to home", href: "/" },
+    };
+  } else if (!registration || registration.paymentStatus === "pending") {
+    status = {
+      tone: "pending",
+      title: "Verifying your payment...",
+      body: "Please wait while we confirm your payment. This usually takes just a few seconds.",
+    };
+  } else if (registration.paymentStatus === "failed") {
+    status = {
+      tone: "error",
+      title: "Payment failed.",
+      body: "Your payment could not be processed. Please try registering again.",
+      action: { label: "Try again", href: "/register" },
+    };
+  } else if (registration.status === "waitlisted") {
+    status = {
+      tone: "warning",
+      title: "You’re on the waitlist.",
+      body:
+        "Your payment has been received. All current slots are full, so you have been placed on our waitlist. We will notify you if a spot becomes available. If you are not accepted, you will receive a full refund.",
+      bullets: [
+        "Your spot on the waitlist is secured.",
+        "You will be contacted if a slot opens up.",
+        "Your payment will be applied to your registration.",
+      ],
+      action: { label: "Return to home", href: "/" },
+    };
+  } else {
+    status = {
+      tone: "success",
+      title: "Welcome to 1Plus1.",
+      body:
+        "Your payment has been received. We’ve sent you an email with a secure link to your applicant dashboard, where you can complete your profile.",
+      bullets: [
+        "Check your email for your applicant dashboard link.",
+        "Complete your profile so our team can review it.",
+      ],
+      action: { label: "Open applicant login", href: "/login" },
+    };
   }
 
-  // Payment still being verified
-  if (!registration || registration.paymentStatus === "pending") {
-    return (
-      <Card className="w-full max-w-md p-8 shadow-lg text-center">
-        <div className="mb-6 flex justify-center">
-          <Loader2 className="h-16 w-16 text-blue-500 animate-spin" />
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-3">
-          Verifying Your Payment...
-        </h1>
-        <p className="text-slate-600">
-          Please wait while we confirm your payment. This usually takes just a few seconds.
-        </p>
-      </Card>
-    );
-  }
-
-  // Payment failed
-  if (registration.paymentStatus === "failed") {
-    return (
-      <Card className="w-full max-w-md p-8 shadow-lg text-center">
-        <div className="mb-6 flex justify-center">
-          <div className="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center">
-            <span className="text-red-500 text-3xl font-bold">!</span>
-          </div>
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-3">Payment Failed</h1>
-        <p className="text-slate-600 mb-6">
-          Your payment could not be processed. Please try registering again.
-        </p>
-        <Link href="/register">
-          <Button className="w-full">Try Again</Button>
-        </Link>
-      </Card>
-    );
-  }
-
-  // Waitlisted
-  if (registration.status === "waitlisted") {
-    return (
-      <Card className="w-full max-w-md p-8 shadow-lg text-center">
-        <div className="mb-6 flex justify-center">
-          <CheckCircle className="h-16 w-16 text-amber-500" />
-        </div>
-
-        <h1 className="text-3xl font-bold text-slate-900 mb-3">
-          You&apos;re on the Waitlist!
-        </h1>
-
-        <p className="text-lg text-slate-600 mb-2">
-          Thank you for registering with 1 Plus 1
-        </p>
-
-        <p className="text-slate-600 mb-6">
-          Your payment has been received. All current slots are full, so you have been placed
-          on our waitlist. We will notify you if a spot becomes available. If you are not
-          accepted, you will receive a full refund.
-        </p>
-
-        <div className="space-y-3 text-left mb-8">
-          <h3 className="font-semibold text-slate-900">What happens next:</h3>
-          <ul className="space-y-2 text-sm text-slate-600">
-            <li className="flex gap-3">
-              <span className="text-amber-500 font-bold">&#10003;</span>
-              <span>Your spot on the waitlist is secured</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="text-amber-500 font-bold">&#10003;</span>
-              <span>You will be contacted if a slot opens up</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="text-amber-500 font-bold">&#10003;</span>
-              <span>Your payment will be applied to your registration</span>
-            </li>
-          </ul>
-        </div>
-
-        <Link href="/">
-          <Button className="w-full">Return to Home</Button>
-        </Link>
-      </Card>
-    );
-  }
-
-  // Payment confirmed — registered
-  return (
-    <Card className="w-full max-w-md p-8 shadow-lg text-center">
-      <div className="mb-6 flex justify-center">
-        <CheckCircle className="h-16 w-16 text-green-500" />
-      </div>
-
-      <h1 className="text-3xl font-bold text-slate-900 mb-3">
-        Welcome to 1 Plus 1!
-      </h1>
-
-      <p className="text-lg text-slate-600 mb-2">
-        Your registration is complete
-      </p>
-
-      <p className="text-slate-600 mb-6">
-        Your payment has been received. We&apos;ve sent you an email with a secure link
-        to your applicant dashboard, where you can complete your profile.
-      </p>
-
-      <div className="space-y-3 text-left mb-8">
-        <h3 className="font-semibold text-slate-900">Next Steps:</h3>
-        <ul className="space-y-2 text-sm text-slate-600">
-          <li className="flex gap-3">
-            <span className="text-green-500 font-bold">&#10003;</span>
-            <span>Check your email for your applicant dashboard link</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="text-green-500 font-bold">&#10003;</span>
-            <span>Complete your profile so our team can review it</span>
-          </li>
-        </ul>
-      </div>
-
-      <Link href="/login">
-        <Button className="w-full">Open Applicant Login</Button>
-      </Link>
-    </Card>
-  );
+  return <StatusPanel status={status} />;
 }
 
 export default function SuccessPage() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center px-4 py-12">
-      <Suspense
-        fallback={
-          <Card className="w-full max-w-md p-8 shadow-lg text-center">
-            <Loader2 className="h-16 w-16 text-blue-500 animate-spin mx-auto" />
-          </Card>
-        }
-      >
-        <SuccessContent />
-      </Suspense>
+    <main data-admin className="min-h-screen">
+      <div className="applicant-status">
+        <header className="applicant-status-head">
+          <div className="brand compact">
+            <LogoMark />
+            <div>
+              <div className="brand-name">Taaruf</div>
+              <div className="brand-tag">Registration</div>
+            </div>
+          </div>
+        </header>
+        <Suspense
+          fallback={
+            <StatusPanel
+              status={{
+                tone: "pending",
+                title: "Loading...",
+                body: "One moment while we look up your registration.",
+              }}
+            />
+          }
+        >
+          <SuccessContent />
+        </Suspense>
+      </div>
     </main>
   );
 }
