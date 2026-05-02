@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card } from "@/components/ui/card";
+import Image from "next/image";
+import { LogoMark } from "@/components/admin/primitives/logo-mark";
+import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
 
 type SharedProfileResponse = {
   share: {
@@ -30,11 +32,34 @@ type SharedProfileResponse = {
 };
 
 function titleizeValue(value?: string) {
-  if (!value) return "-";
+  if (!value) return "—";
   return value.replace(/_/g, " ");
 }
 
-export default function SharedProfilePage({ params }: { params: Promise<{ token: string }> }) {
+function ShareShell({ children }: { children: React.ReactNode }) {
+  return (
+    <main data-admin className="min-h-screen">
+      <div className="applicant-share">
+        <header className="applicant-share-head">
+          <div className="brand compact">
+            <LogoMark />
+            <div>
+              <div className="brand-name">Taaruf</div>
+              <div className="brand-tag">Shared Profile</div>
+            </div>
+          </div>
+        </header>
+        {children}
+      </div>
+    </main>
+  );
+}
+
+export default function SharedProfilePage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
   const [data, setData] = useState<SharedProfileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,59 +82,125 @@ export default function SharedProfilePage({ params }: { params: Promise<{ token:
   }, [params]);
 
   if (error) {
-    return <main className="min-h-screen bg-slate-50 px-4 py-10"><Card className="mx-auto max-w-3xl p-8 text-red-600">{error}</Card></main>;
+    return (
+      <ShareShell>
+        <section className="panel applicant-share-message">
+          <p className="notice error">{error}</p>
+        </section>
+      </ShareShell>
+    );
   }
 
   if (!data) {
-    return <main className="min-h-screen bg-slate-50 px-4 py-10"><Card className="mx-auto max-w-3xl p-8">Loading shared profile...</Card></main>;
+    return (
+      <ShareShell>
+        <section className="panel applicant-share-message">
+          <div className="coming-soon compact">
+            <div className="lede">Loading shared profile...</div>
+          </div>
+        </section>
+      </ShareShell>
+    );
   }
 
   const { owner, recipient, includeImages } = data.share;
 
+  const facts: Fact[] = [
+    { label: "Age", value: owner.age },
+    { label: "Gender", value: titleizeValue(owner.gender) },
+    { label: "Marital", value: titleizeValue(owner.maritalStatus) },
+    { label: "Education", value: titleizeValue(owner.education) },
+    { label: "Job", value: owner.job || "—" },
+    { label: "Ethnicity", value: owner.ethnicity || "—" },
+    { label: "Prayer", value: titleizeValue(owner.prayerCommitment) },
+    { label: "Hijab", value: titleizeValue(owner.hijabResponse) },
+    { label: "Photo permission", value: titleizeValue(owner.photoSharingPermission) },
+  ];
+
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto max-w-4xl space-y-6">
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-semibold text-slate-900">Shared Profile</h1>
-          <p className="text-sm text-slate-600">This profile has been shared for {recipient.name} to review.</p>
+    <ShareShell>
+      <div className="page-head">
+        <div>
+          <h1>
+            Shared <em>profile</em>
+          </h1>
+          <p>This profile has been shared for {recipient.name} to review.</p>
         </div>
-
-        <Card className="p-8 space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 text-sm">
-            <div><strong>Age:</strong> {owner.age}</div>
-            <div><strong>Gender:</strong> {owner.gender}</div>
-            <div><strong>Marital status:</strong> {owner.maritalStatus}</div>
-            <div><strong>Education:</strong> {owner.education}</div>
-            <div><strong>Job:</strong> {owner.job}</div>
-            <div><strong>Ethnicity:</strong> {owner.ethnicity || "-"}</div>
-            <div><strong>Prayer:</strong> {titleizeValue(owner.prayerCommitment)}</div>
-            <div><strong>Hijab:</strong> {titleizeValue(owner.hijabResponse)}</div>
-            <div><strong>Photo permission:</strong> {titleizeValue(owner.photoSharingPermission)}</div>
-          </div>
-
-          {includeImages && owner.imageUrls.length > 0 && (
-            <div className="space-y-2">
-              <h2 className="font-semibold text-slate-900">Photos</h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {owner.imageUrls.map((imageUrl, index) => (
-                  <img key={`${imageUrl}-${index}`} src={imageUrl} alt={`Profile image ${index + 1}`} className="h-32 w-full rounded-lg object-cover border border-slate-200" />
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="grid gap-4 md:grid-cols-3 text-sm">
-            <div><strong>Requirement 1:</strong> {owner.spouseRequirement1 || "-"}</div>
-            <div><strong>Requirement 2:</strong> {owner.spouseRequirement2 || "-"}</div>
-            <div><strong>Requirement 3:</strong> {owner.spouseRequirement3 || "-"}</div>
-          </div>
-
-          <div className="space-y-2 text-sm">
-            <h2 className="font-semibold text-slate-900">Basic bio</h2>
-            <p className="whitespace-pre-wrap text-slate-700">{owner.shareableBio || "-"}</p>
-          </div>
-        </Card>
       </div>
-    </main>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h3>Details</h3>
+            <p>About this applicant.</p>
+          </div>
+        </div>
+        <div className="applicant-share-section">
+          <FactList facts={facts} />
+        </div>
+      </section>
+
+      {includeImages && owner.imageUrls.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h3>Photos</h3>
+            </div>
+          </div>
+          <div className="applicant-share-section">
+            <div className="photo-grid">
+              {owner.imageUrls.map((imageUrl, index) => (
+                <div key={`${imageUrl}-${index}`} className="photo-card">
+                  <Image
+                    src={imageUrl}
+                    alt={`Profile image ${index + 1}`}
+                    width={320}
+                    height={128}
+                    unoptimized
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h3>Top spouse requirements</h3>
+          </div>
+        </div>
+        <div className="applicant-share-section">
+          <ol className="applicant-share-requirements">
+            <li>
+              <span className="rank">01</span>
+              <span>{owner.spouseRequirement1 || "—"}</span>
+            </li>
+            <li>
+              <span className="rank">02</span>
+              <span>{owner.spouseRequirement2 || "—"}</span>
+            </li>
+            <li>
+              <span className="rank">03</span>
+              <span>{owner.spouseRequirement3 || "—"}</span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h3>Bio</h3>
+          </div>
+        </div>
+        <div className="applicant-share-section">
+          <div className="bio-box">
+            <p>{owner.shareableBio || "—"}</p>
+          </div>
+        </div>
+      </section>
+    </ShareShell>
   );
 }

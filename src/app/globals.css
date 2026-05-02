@@ -696,6 +696,41 @@
   text-underline-offset: 2px;
 }
 
+/* Public shared-profile page */
+[data-admin] .applicant-share {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 40px 20px 60px;
+  display: grid;
+  gap: 18px;
+}
+[data-admin] .applicant-share-head .brand { border: 0; padding: 0; margin: 0; }
+[data-admin] .applicant-share .page-head { margin-bottom: 0; }
+[data-admin] .applicant-share-section { padding: 18px 20px; }
+[data-admin] .applicant-share-message { padding: 22px 24px; }
+[data-admin] .applicant-share-requirements {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+[data-admin] .applicant-share-requirements li {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+[data-admin] .applicant-share-requirements .rank {
+  font-family: var(--font-admin-serif, "Cormorant Garamond"), Georgia, serif;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--accent);
+  line-height: 1;
+}
+
 /* Public status / confirmation page */
 [data-admin] .applicant-status {
   width: min(100%, 520px);
@@ -937,6 +972,10 @@
 
   [data-admin] .applicant-status { padding: 28px 16px 40px; }
   [data-admin] .applicant-status-body { padding: 28px 22px; }
+
+  [data-admin] .applicant-share { padding: 24px 16px 40px; }
+  [data-admin] .applicant-share-section { padding: 16px 18px; }
+  [data-admin] .fact { grid-template-columns: 110px 1fr; gap: 10px; }
 }
 
 /* Tablet — drop stats from 4 columns to 2 */
