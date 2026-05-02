@@ -1,22 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Ico } from "@/components/admin/primitives/icons";
 
 type PrayerCommitment = "sometimes" | "strive_five" | "always_five" | "five_and_sunnah" | "";
 type HijabResponse = "yes" | "no" | "open" | "";
@@ -72,7 +62,10 @@ export function RegistrationForm() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const stats = useQuery(api.registrations.getStats) as { maleCount: number; femaleCount: number; maleLimit: number; femaleLimit: number } | undefined;
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const stats = useQuery(api.registrations.getStats) as
+    | { maleCount: number; femaleCount: number; maleLimit: number; femaleLimit: number }
+    | undefined;
   const generateUploadUrl = useMutation(api.registrations.generateImageUploadUrl);
 
   const form = useForm({
@@ -103,6 +96,7 @@ export function RegistrationForm() {
 
       setIsSubmitting(true);
       setUploadError(null);
+      setSubmitError(null);
       try {
         const response = await fetch("/api/create-checkout-session", {
           method: "POST",
@@ -137,20 +131,20 @@ export function RegistrationForm() {
         window.location.href = data.url;
       } catch (error) {
         console.error("Registration error:", error);
-        alert("Failed to proceed to payment. Please try again.");
+        setSubmitError("Failed to proceed to payment. Please try again.");
         setIsSubmitting(false);
       }
     },
   });
 
-  const isMaleFull = stats && stats.maleCount >= stats.maleLimit;
-  const isFemaleFull = stats && stats.femaleCount >= stats.femaleLimit;
+  const isMaleFull = !!(stats && stats.maleCount >= stats.maleLimit);
+  const isFemaleFull = !!(stats && stats.femaleCount >= stats.femaleLimit);
 
   const hijabLabel = useMemo(
     () =>
       form.state.values.gender === "female"
-        ? "Do you wear hijab? *"
-        : "Do you wish for your wife to wear hijab? *",
+        ? "Do you wear hijab?"
+        : "Do you wish for your wife to wear hijab?",
     [form.state.values.gender]
   );
 
@@ -206,13 +200,19 @@ export function RegistrationForm() {
   }
 
   return (
-    <Card className="p-8 shadow-lg">
+    <section className="panel applicant-register-form">
+      <div className="panel-head">
+        <div>
+          <h3>Application</h3>
+          <p>$10 registration fee — paid via Stripe at the next step.</p>
+        </div>
+      </div>
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
+        onSubmit={(event) => {
+          event.preventDefault();
           form.handleSubmit();
         }}
-        className="space-y-6"
+        className="applicant-form"
       >
         <form.Field
           name="name"
@@ -222,129 +222,191 @@ export function RegistrationForm() {
           }}
         >
           {(field) => (
-            <div className="space-y-2">
-              <Label htmlFor={field.name}>Full Name *</Label>
-              <Input id={field.name} type="text" value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} placeholder="Enter your full name" className="h-10" />
-              {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+            <div className="field">
+              <label htmlFor={field.name}>Full name *</label>
+              <input
+                id={field.name}
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="Enter your full name"
+              />
+              {field.state.meta.errors?.length > 0 && (
+                <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+              )}
             </div>
           )}
         </form.Field>
 
-        <form.Field
-          name="age"
-          validators={{
-            onChange: ({ value }) => {
-              if (!value) return "Age is required";
-              if (value < 18 || value > 99) return "Age must be between 18 and 99";
-              return undefined;
-            },
-          }}
-        >
-          {(field) => (
-            <div className="space-y-2">
-              <Label htmlFor={field.name}>Age *</Label>
-              <Input id={field.name} type="number" min="18" max="99" value={field.state.value || ""} onChange={(e) => field.handleChange(parseInt(e.target.value) || 0)} onBlur={field.handleBlur} placeholder="18-99" className="h-10" />
-              {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
-            </div>
-          )}
-        </form.Field>
-
-        <form.Field
-          name="gender"
-          validators={{ onChange: ({ value }) => (!value ? "Gender is required" : undefined) }}
-        >
-          {(field) => (
-            <div className="space-y-3">
-              <Label>Gender *</Label>
-              <RadioGroup value={field.state.value} onValueChange={(val) => field.handleChange(val as "male" | "female" | "")} onBlur={field.handleBlur}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="male" id="male" />
-                  <Label htmlFor="male" className="font-normal cursor-pointer">Male {isMaleFull && <span className="text-amber-600 text-sm ml-2">(Waitlist)</span>}</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="female" id="female" />
-                  <Label htmlFor="female" className="font-normal cursor-pointer">Female {isFemaleFull && <span className="text-amber-600 text-sm ml-2">(Waitlist)</span>}</Label>
-                </div>
-              </RadioGroup>
-              {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
-            </div>
-          )}
-        </form.Field>
-
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="profile-grid two">
           <form.Field
-            name="maritalStatus"
-            validators={{ onChange: ({ value }) => (!value ? "Marital status is required" : undefined) }}
+            name="age"
+            validators={{
+              onChange: ({ value }) => {
+                if (!value) return "Age is required";
+                if (value < 18 || value > 99) return "Age must be between 18 and 99";
+                return undefined;
+              },
+            }}
           >
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="maritalStatus">Marital Status *</Label>
-                <Select value={field.state.value} onValueChange={(value) => field.handleChange(value)}>
-                  <SelectTrigger id="maritalStatus" onBlur={field.handleBlur}><SelectValue placeholder="Select marital status" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="single">Single</SelectItem>
-                    <SelectItem value="divorced">Divorced</SelectItem>
-                    <SelectItem value="divorced_with_children">Divorced with Children</SelectItem>
-                    <SelectItem value="widowed">Widowed</SelectItem>
-                    <SelectItem value="widowed_with_children">Widowed with Children</SelectItem>
-                  </SelectContent>
-                </Select>
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+              <div className="field">
+                <label htmlFor={field.name}>Age *</label>
+                <input
+                  id={field.name}
+                  type="number"
+                  min="18"
+                  max="99"
+                  value={field.state.value || ""}
+                  onChange={(e) => field.handleChange(parseInt(e.target.value) || 0)}
+                  onBlur={field.handleBlur}
+                  placeholder="18-99"
+                />
+                {field.state.meta.errors?.length > 0 && (
+                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                )}
+              </div>
+            )}
+          </form.Field>
+
+          <form.Field
+            name="gender"
+            validators={{ onChange: ({ value }) => (!value ? "Gender is required" : undefined) }}
+          >
+            {(field) => (
+              <div className="field">
+                <label htmlFor={field.name}>Gender *</label>
+                <select
+                  id={field.name}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value as "male" | "female" | "")}
+                  onBlur={field.handleBlur}
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male{isMaleFull ? " (Waitlist)" : ""}</option>
+                  <option value="female">Female{isFemaleFull ? " (Waitlist)" : ""}</option>
+                </select>
+                {field.state.meta.errors?.length > 0 && (
+                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                )}
+              </div>
+            )}
+          </form.Field>
+        </div>
+
+        <div className="profile-grid two">
+          <form.Field
+            name="maritalStatus"
+            validators={{
+              onChange: ({ value }) => (!value ? "Marital status is required" : undefined),
+            }}
+          >
+            {(field) => (
+              <div className="field">
+                <label htmlFor={field.name}>Marital status *</label>
+                <select
+                  id={field.name}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                >
+                  <option value="">Select marital status</option>
+                  <option value="single">Single</option>
+                  <option value="divorced">Divorced</option>
+                  <option value="divorced_with_children">Divorced with Children</option>
+                  <option value="widowed">Widowed</option>
+                  <option value="widowed_with_children">Widowed with Children</option>
+                </select>
+                {field.state.meta.errors?.length > 0 && (
+                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                )}
               </div>
             )}
           </form.Field>
 
           <form.Field
             name="education"
-            validators={{ onChange: ({ value }) => (!value ? "Education is required" : undefined) }}
+            validators={{
+              onChange: ({ value }) => (!value ? "Education is required" : undefined),
+            }}
           >
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="education">Education Level *</Label>
-                <Select value={field.state.value} onValueChange={(value) => field.handleChange(value)}>
-                  <SelectTrigger id="education" onBlur={field.handleBlur}><SelectValue placeholder="Select education level" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="highSchool">High School</SelectItem>
-                    <SelectItem value="bachelor">Bachelor&apos;s</SelectItem>
-                    <SelectItem value="master">Master&apos;s</SelectItem>
-                    <SelectItem value="phd">PhD</SelectItem>
-                  </SelectContent>
-                </Select>
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+              <div className="field">
+                <label htmlFor={field.name}>Education level *</label>
+                <select
+                  id={field.name}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                >
+                  <option value="">Select education level</option>
+                  <option value="highSchool">High School</option>
+                  <option value="bachelor">Bachelor&apos;s</option>
+                  <option value="master">Master&apos;s</option>
+                  <option value="phd">PhD</option>
+                </select>
+                {field.state.meta.errors?.length > 0 && (
+                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                )}
               </div>
             )}
           </form.Field>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="profile-grid two">
           <form.Field
             name="job"
-            validators={{ onChange: ({ value }) => (!value || value.trim().length === 0 ? "Job/Occupation is required" : undefined) }}
+            validators={{
+              onChange: ({ value }) =>
+                !value || value.trim().length === 0 ? "Job/Occupation is required" : undefined,
+            }}
           >
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Job/Occupation *</Label>
-                <Input id={field.name} type="text" value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} placeholder="e.g., Software Engineer, Teacher, etc." className="h-10" />
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+              <div className="field">
+                <label htmlFor={field.name}>Job / occupation *</label>
+                <input
+                  id={field.name}
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="e.g. Software engineer, Teacher"
+                />
+                {field.state.meta.errors?.length > 0 && (
+                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                )}
               </div>
             )}
           </form.Field>
 
           <form.Field
             name="ethnicity"
-            validators={{ onChange: ({ value }) => (!value || value.trim().length === 0 ? "Ethnicity is required" : undefined) }}
+            validators={{
+              onChange: ({ value }) =>
+                !value || value.trim().length === 0 ? "Ethnicity is required" : undefined,
+            }}
           >
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Ethnicity *</Label>
-                <Input id={field.name} type="text" value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} placeholder="Enter your ethnicity" className="h-10" />
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+              <div className="field">
+                <label htmlFor={field.name}>Ethnicity *</label>
+                <input
+                  id={field.name}
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="e.g. Arab, South Asian, Somali"
+                />
+                {field.state.meta.errors?.length > 0 && (
+                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                )}
               </div>
             )}
           </form.Field>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="profile-grid two">
           <form.Field
             name="email"
             validators={{
@@ -357,23 +419,44 @@ export function RegistrationForm() {
             }}
           >
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Email Address *</Label>
-                <Input id={field.name} type="email" value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} placeholder="your.email@example.com" className="h-10" />
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+              <div className="field">
+                <label htmlFor={field.name}>Email address *</label>
+                <input
+                  id={field.name}
+                  type="email"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="you@example.com"
+                />
+                {field.state.meta.errors?.length > 0 && (
+                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                )}
               </div>
             )}
           </form.Field>
 
           <form.Field
             name="phone"
-            validators={{ onChange: ({ value }) => (!value || value.trim().length === 0 ? "Phone number is required" : undefined) }}
+            validators={{
+              onChange: ({ value }) =>
+                !value || value.trim().length === 0 ? "Phone number is required" : undefined,
+            }}
           >
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Phone Number *</Label>
-                <Input id={field.name} type="tel" value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} placeholder="+1 (555) 123-4567" className="h-10" />
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+              <div className="field">
+                <label htmlFor={field.name}>Phone number *</label>
+                <input
+                  id={field.name}
+                  type="tel"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="+1 (555) 123-4567"
+                />
+                {field.state.meta.errors?.length > 0 && (
+                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                )}
               </div>
             )}
           </form.Field>
@@ -381,170 +464,253 @@ export function RegistrationForm() {
 
         <form.Field
           name="prayerCommitment"
-          validators={{ onChange: ({ value }) => (!value ? "Prayer commitment is required" : undefined) }}
+          validators={{
+            onChange: ({ value }) => (!value ? "Prayer commitment is required" : undefined),
+          }}
         >
           {(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="prayerCommitment">How would you describe your commitment to prayer? *</Label>
-              <Select value={field.state.value} onValueChange={(value) => field.handleChange(value as PrayerCommitment)}>
-                <SelectTrigger id="prayerCommitment" onBlur={field.handleBlur}><SelectValue placeholder="Select one" /></SelectTrigger>
-                <SelectContent>
-                  {prayerOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+            <div className="field">
+              <label htmlFor={field.name}>How would you describe your commitment to prayer? *</label>
+              <select
+                id={field.name}
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value as PrayerCommitment)}
+                onBlur={field.handleBlur}
+              >
+                <option value="">Select one</option>
+                {prayerOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {field.state.meta.errors?.length > 0 && (
+                <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+              )}
             </div>
           )}
         </form.Field>
 
         <form.Field
           name="hijabResponse"
-          validators={{ onChange: ({ value }) => (!value ? "This field is required" : undefined) }}
+          validators={{
+            onChange: ({ value }) => (!value ? "This field is required" : undefined),
+          }}
         >
           {(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="hijabResponse">{hijabLabel}</Label>
-              <Select value={field.state.value} onValueChange={(value) => field.handleChange(value as HijabResponse)}>
-                <SelectTrigger id="hijabResponse" onBlur={field.handleBlur}><SelectValue placeholder="Select one" /></SelectTrigger>
-                <SelectContent>
-                  {yesNoOpenOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+            <div className="field">
+              <label htmlFor={field.name}>{hijabLabel} *</label>
+              <select
+                id={field.name}
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value as HijabResponse)}
+                onBlur={field.handleBlur}
+              >
+                <option value="">Select one</option>
+                {yesNoOpenOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {field.state.meta.errors?.length > 0 && (
+                <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+              )}
             </div>
           )}
         </form.Field>
 
         <form.Field
           name="photoSharingPermission"
-          validators={{ onChange: ({ value }) => (!value ? "Photo sharing permission is required" : undefined) }}
+          validators={{
+            onChange: ({ value }) =>
+              !value ? "Photo sharing permission is required" : undefined,
+          }}
         >
           {(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="photoSharingPermission">Photo sharing permission *</Label>
-              <Select value={field.state.value} onValueChange={(value) => field.handleChange(value as PhotoSharingPermission)}>
-                <SelectTrigger id="photoSharingPermission" onBlur={field.handleBlur}><SelectValue placeholder="Select one" /></SelectTrigger>
-                <SelectContent>
-                  {photoSharingOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-slate-500">Your picture will not be shared with anyone without your permission.</p>
-              {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+            <div className="field">
+              <label htmlFor={field.name}>Photo sharing permission *</label>
+              <select
+                id={field.name}
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value as PhotoSharingPermission)}
+                onBlur={field.handleBlur}
+              >
+                <option value="">Select one</option>
+                {photoSharingOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="field-hint">
+                Your picture will not be shared with anyone without your permission.
+              </p>
+              {field.state.meta.errors?.length > 0 && (
+                <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+              )}
             </div>
           )}
         </form.Field>
 
-        <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+        <div className="photo-upload-box">
           <div>
-            <Label htmlFor="photos">Pictures *</Label>
-            <p className="text-xs text-slate-500 mt-1">Upload up to 3 images. At least 1 is required. Your picture will not be shared with anyone without your permission.</p>
+            <h4>Pictures *</h4>
+            <p>Upload up to 3 images. At least 1 is required.</p>
           </div>
-          <Input id="photos" type="file" accept="image/*" multiple onChange={(e) => void handleImageUpload(e.target.files)} disabled={uploadingImage || uploadedImages.length >= 3} />
-          <p className="text-xs text-slate-500">{uploadingImage ? "Uploading image..." : `${uploadedImages.length} / 3 images uploaded`}</p>
+          <div className="field">
+            <input
+              id="photos"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => void handleImageUpload(event.target.files)}
+              disabled={uploadingImage || uploadedImages.length >= 3}
+            />
+          </div>
+          <div className="mono">
+            {uploadingImage ? "Uploading..." : `${uploadedImages.length} / 3 uploaded`}
+          </div>
           {uploadedImages.length > 0 && (
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="photo-grid">
               {uploadedImages.map((image) => (
-                <div key={image.storageId} className="rounded-lg border border-slate-200 p-2 space-y-2">
-                  <img src={image.url} alt={image.name} className="h-28 w-full rounded object-cover" />
-                  <p className="truncate text-xs text-slate-600">{image.name}</p>
-                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => removeImage(image.storageId)}>Remove</Button>
+                <div key={image.storageId} className="photo-card">
+                  <Image src={image.url} alt={image.name} width={320} height={128} unoptimized />
+                  <div>
+                    <p>{image.name}</p>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => removeImage(image.storageId)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
-          {uploadError && <p className="text-red-500 text-sm">{uploadError}</p>}
+          {uploadError && <p className="notice error">{uploadError}</p>}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <form.Field
-            name="spouseRequirement1"
-            validators={{ onChange: ({ value }) => (!value || value.trim().length === 0 ? "Requirement 1 is required" : undefined) }}
-          >
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Top spouse requirement 1 *</Label>
-                <Input id={field.name} value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} />
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
-              </div>
-            )}
-          </form.Field>
-          <form.Field
-            name="spouseRequirement2"
-            validators={{ onChange: ({ value }) => (!value || value.trim().length === 0 ? "Requirement 2 is required" : undefined) }}
-          >
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Top spouse requirement 2 *</Label>
-                <Input id={field.name} value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} />
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
-              </div>
-            )}
-          </form.Field>
-          <form.Field
-            name="spouseRequirement3"
-            validators={{ onChange: ({ value }) => (!value || value.trim().length === 0 ? "Requirement 3 is required" : undefined) }}
-          >
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Top spouse requirement 3 *</Label>
-                <Input id={field.name} value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} />
-                {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
-              </div>
-            )}
-          </form.Field>
+        <div className="profile-grid three">
+          {([1, 2, 3] as const).map((n) => {
+            const key = `spouseRequirement${n}` as
+              | "spouseRequirement1"
+              | "spouseRequirement2"
+              | "spouseRequirement3";
+            return (
+              <form.Field
+                key={key}
+                name={key}
+                validators={{
+                  onChange: ({ value }) =>
+                    !value || value.trim().length === 0
+                      ? `Requirement ${n} is required`
+                      : undefined,
+                }}
+              >
+                {(field) => (
+                  <div className="field">
+                    <label htmlFor={field.name}>Top spouse requirement {n} *</label>
+                    <input
+                      id={field.name}
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                    {field.state.meta.errors?.length > 0 && (
+                      <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+            );
+          })}
         </div>
 
         <form.Field
           name="basicBio"
-          validators={{ onChange: ({ value }) => (!value || value.trim().length === 0 ? "Basic bio is required" : undefined) }}
+          validators={{
+            onChange: ({ value }) =>
+              !value || value.trim().length === 0 ? "Basic bio is required" : undefined,
+          }}
         >
           {(field) => (
-            <div className="space-y-2">
-              <Label htmlFor={field.name}>Provide a basic bio about yourself that you would be comfortable sharing with a potential match *</Label>
-              <textarea id={field.name} value={field.state.value} onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur} placeholder="Tell us about yourself in a way you would be comfortable sharing with a potential match..." className="flex min-h-[120px] w-full rounded-md border border-input bg-input px-3 py-2 text-base text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" rows={5} />
-              {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+            <div className="field">
+              <label htmlFor={field.name}>
+                A short bio you would be comfortable sharing with a potential match *
+              </label>
+              <textarea
+                id={field.name}
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="Tell us about yourself..."
+                rows={5}
+              />
+              {field.state.meta.errors?.length > 0 && (
+                <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+              )}
             </div>
           )}
         </form.Field>
 
         <form.Field
           name="backgroundCheckConsent"
-          validators={{ onChange: ({ value }) => (!value ? "You must consent to a background check to register" : undefined) }}
+          validators={{
+            onChange: ({ value }) =>
+              !value ? "You must consent to a background check to register" : undefined,
+          }}
         >
           {(field) => (
-            <div className="space-y-2">
-              <div className="flex items-start space-x-3">
-                <input id="backgroundCheckConsent" type="checkbox" checked={field.state.value} onChange={(e) => field.handleChange(e.target.checked)} onBlur={field.handleBlur} className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
-                <Label htmlFor="backgroundCheckConsent" className="font-normal cursor-pointer text-sm leading-relaxed">I consent to a background check being conducted by the 1Plus1 team as part of the registration process. *</Label>
-              </div>
-              {field.state.meta.errors?.length > 0 && <p className="text-red-500 text-sm">{field.state.meta.errors.join(", ")}</p>}
+            <div className="field">
+              <label htmlFor={field.name} className="consent">
+                <input
+                  id={field.name}
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                />
+                <span>
+                  I consent to a background check being conducted by the 1Plus1 team as part of the
+                  registration process. *
+                </span>
+              </label>
+              {field.state.meta.errors?.length > 0 && (
+                <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+              )}
             </div>
           )}
         </form.Field>
 
         {(isMaleFull || isFemaleFull) && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-amber-800 text-sm">
-              {isMaleFull && isFemaleFull
-                ? "Registration is full for both genders. New registrations will be placed on a waitlist."
-                : isMaleFull
-                ? "Male registration is full. New male registrations will be placed on a waitlist."
-                : "Female registration is full. New female registrations will be placed on a waitlist."}
-            </p>
-          </div>
+          <p className="notice warning">
+            {isMaleFull && isFemaleFull
+              ? "Registration is full for both genders. New registrations will be placed on a waitlist."
+              : isMaleFull
+              ? "Male registration is full. New male registrations will be placed on a waitlist."
+              : "Female registration is full. New female registrations will be placed on a waitlist."}
+          </p>
         )}
 
-        <div className="pt-4">
-          <Button type="submit" className="w-full h-11 text-base" disabled={isSubmitting || uploadingImage}>
-            {isSubmitting ? "Redirecting to payment..." : "Proceed to Payment ($10)"}
-          </Button>
-        </div>
+        {submitError && <p className="notice error">{submitError}</p>}
 
-        <p className="text-xs text-slate-500 text-center">
-          You will be redirected to Stripe to complete your $10 registration payment.
-          Have a promo code? You can enter it at checkout.
+        <button
+          type="submit"
+          className="btn btn-primary full"
+          disabled={isSubmitting || uploadingImage}
+        >
+          {Ico.heart}
+          <span>{isSubmitting ? "Redirecting to payment..." : "Proceed to payment ($10)"}</span>
+        </button>
+
+        <p className="form-foot">
+          You will be redirected to Stripe to complete your $10 registration payment. Have a promo
+          code? You can enter it at checkout.
         </p>
       </form>
-    </Card>
+    </section>
   );
 }

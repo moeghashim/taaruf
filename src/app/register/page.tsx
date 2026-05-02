@@ -1,21 +1,31 @@
+import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { RegistrationForm } from "@/components/registration-form";
 
 export const dynamic = "force-dynamic";
 
 export default function RegisterPage() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-12 px-4">
-      <div className="container mx-auto max-w-2xl">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-3">
-            Join the 1Plus1 Matching Program
-          </h1>
-          <p className="text-lg font-semibold text-slate-700 mb-2">
-            Intentional, dignified, faith-centered introductions
-          </p>
-        </div>
+    <main data-admin className="min-h-screen">
+      <div className="applicant-register">
+        <header className="applicant-register-head">
+          <div className="brand compact">
+            <LogoMark />
+            <div>
+              <div className="brand-name">Taaruf</div>
+              <div className="brand-tag">Registration</div>
+            </div>
+          </div>
+          <div className="page-head">
+            <div>
+              <h1>
+                Join the 1Plus1 <em>Matching Program</em>
+              </h1>
+              <p>Intentional, dignified, faith-centered introductions.</p>
+            </div>
+          </div>
+        </header>
 
-        <div className="bg-white rounded-lg p-6 shadow-sm mb-8 text-slate-700 space-y-4 text-sm leading-relaxed">
+        <section className="panel applicant-register-intro">
           <p>
             Finding the right spouse has become one of the biggest challenges for young Muslims today. With busy schedules, limited opportunities, and a culture that often complicates the path to marriage, many are searching without the right environment to do so.
           </p>
@@ -25,14 +35,15 @@ export default function RegisterPage() {
           <p>
             The $10 registration fee covers the cost of a background check conducted by the 1Plus1 team to ensure the safety and integrity of all participants.
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="mute">
             By registering, you consent to be added to our internal matching program{" "}
-            <a href="https://1plus1match.com" className="underline text-slate-600 hover:text-slate-900" target="_blank" rel="noopener noreferrer">
+            <a href="https://1plus1match.com" target="_blank" rel="noopener noreferrer">
               1plus1match.com
             </a>{" "}
             where we track potential matches.
           </p>
-        </div>
+        </section>
+
         <RegistrationForm />
       </div>
     </main>
