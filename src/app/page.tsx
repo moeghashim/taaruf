@@ -10,7 +10,6 @@ export default function Home() {
           <div className="brand compact">
             <LogoMark />
             <div>
-              <div className="brand-name">Taaruf</div>
               <div className="brand-tag">1Plus1 Matching</div>
             </div>
           </div>
