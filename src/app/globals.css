@@ -632,8 +632,16 @@
   gap: 24px;
 }
 [data-admin] .applicant-home-head { display: grid; gap: 22px; }
-[data-admin] .applicant-home-head .brand { border: 0; padding: 0; margin: 0; gap: 16px; }
+[data-admin] .applicant-home-head .brand { border: 0; padding: 0; margin: 0; gap: 8px; }
 [data-admin] .applicant-home-head .brand svg { width: 96px; height: 96px; }
+[data-admin] .applicant-home-head .brand-tag {
+  font-family: var(--font-admin-serif, "Cormorant Garamond");
+  font-size: 28px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--ink);
+  margin-top: 0;
+}
 [data-admin] .applicant-home-hero { margin-bottom: 0; align-items: flex-start; }
 [data-admin] .applicant-home-hero h1 {
   font-size: 56px;
