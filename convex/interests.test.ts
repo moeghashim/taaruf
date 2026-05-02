@@ -28,6 +28,7 @@ async function createRegistration(
       searchStatus: "active",
       createdAt: Date.now(),
       profileCompletionStatus: completed ? "completed" : "not_started",
+      shareableBio: `${name} bio text`,
     });
   });
 }
@@ -334,6 +335,65 @@ describe("interest rules", () => {
           flowStatus: "awaiting_inbound_response",
         },
       ],
+    });
+  });
+
+  test("female recipient sees male initiator's profile on inbound before accepting", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Visible Male", "male");
+    const female = await createRegistration(t, "Visible Female", "female");
+    const maleSession = await createSession(t, male);
+    const femaleSession = await createSession(t, female);
+
+    await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: maleSession,
+      applicantNumber: 2,
+    });
+
+    const femaleDashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: femaleSession,
+    });
+    expect(femaleDashboard.inbound[0]?.flowStatus).toBe("awaiting_inbound_response");
+    expect(femaleDashboard.inbound[0]?.counterparty).toMatchObject({
+      name: "Visible Male",
+      shareableBio: "Visible Male bio text",
+      label: "Visible Male",
+      email: null,
+      phone: null,
+    });
+
+    const maleDashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: maleSession,
+    });
+    expect(maleDashboard.outbound[0]?.counterparty).toMatchObject({
+      name: "Visible Female",
+      shareableBio: "Visible Female bio text",
+      label: "Visible Female",
+      email: null,
+      phone: null,
+    });
+  });
+
+  test("female initiator sees male recipient's profile on private documented interest", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Documented Male", "male");
+    const female = await createRegistration(t, "Documenting Female", "female");
+    const femaleSession = await createSession(t, female);
+
+    await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: femaleSession,
+      applicantNumber: 1,
+    });
+
+    const dashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: femaleSession,
+    });
+    expect(dashboard.privateDocumented[0]?.counterparty).toMatchObject({
+      name: "Documented Male",
+      shareableBio: "Documented Male bio text",
+      label: "Documented Male",
+      email: null,
+      phone: null,
     });
   });
 

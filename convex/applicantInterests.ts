@@ -110,29 +110,37 @@ async function ensureFlowForQuery(ctx: ReadCtx, interest: Interest) {
   return await getFlowByInterestId(ctx, interest._id);
 }
 
-function canSeeCounterpartyIdentity(flow: InterestFlow | null) {
-  return Boolean(flow?.bioVisibleAt || flow?.contactSharedAt);
+function canSeeCounterpartyProfile(
+  viewer: Registration,
+  flow: InterestFlow | null,
+  direction: "inbound" | "outbound" | "private"
+) {
+  if (flow?.contactSharedAt) return true;
+  if (direction === "outbound" || direction === "private") return true;
+  return viewer.gender === "female";
 }
 
 function safeCounterparty(
   viewer: Registration,
   counterparty: Registration | null,
   counterpartyNumber: number | undefined,
-  flow: InterestFlow | null
+  flow: InterestFlow | null,
+  direction: "inbound" | "outbound" | "private"
 )
  {
   if (!counterparty) return null;
-  const showIdentity = canSeeCounterpartyIdentity(flow);
+  const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
+  const contactShared = Boolean(flow?.contactSharedAt);
   return {
-    registrationId: showIdentity ? counterparty._id : null,
+    registrationId: showProfile ? counterparty._id : null,
     applicantNumber: counterpartyNumber ?? null,
-    name: showIdentity ? counterparty.name : null,
+    name: showProfile ? counterparty.name : null,
     age: counterparty.age,
     gender: counterparty.gender,
-    shareableBio: flow?.bioVisibleAt ? counterparty.shareableBio ?? null : null,
-    email: flow?.contactSharedAt ? counterparty.email : null,
-    phone: flow?.contactSharedAt ? counterparty.phone : null,
-    label: showIdentity ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
+    shareableBio: showProfile ? counterparty.shareableBio ?? null : null,
+    email: contactShared ? counterparty.email : null,
+    phone: contactShared ? counterparty.phone : null,
+    label: showProfile ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
     viewerGender: viewer.gender,
   };
 }
@@ -168,7 +176,7 @@ async function serializeInterest(
     requesterFinalApproval: flow?.requesterFinalApproval ?? "pending",
     recipientFinalApproval: flow?.recipientFinalApproval ?? "pending",
     photoDecision: flow?.photoDecision ?? "pending",
-    counterparty: safeCounterparty(viewer, counterparty, counterparty ? numberById.get(counterparty._id) : undefined, flow),
+    counterparty: safeCounterparty(viewer, counterparty, counterparty ? numberById.get(counterparty._id) : undefined, flow, direction),
   };
 }
 
