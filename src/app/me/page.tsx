@@ -7,6 +7,7 @@ import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
+import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
 import { Pill, type Tone } from "@/components/admin/primitives/status-pill";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 
@@ -28,10 +29,22 @@ type DashboardInterest = {
     name: string | null;
     age: number;
     gender: string;
+    maritalStatus: string | null;
+    education: string | null;
+    job: string | null;
+    ethnicity: string | null;
+    prayerCommitment: string | null;
+    hijabResponse: string | null;
+    spouseRequirement1: string | null;
+    spouseRequirement2: string | null;
+    spouseRequirement3: string | null;
+    photoSharingPermission: string | null;
+    imageUrls: string[];
     shareableBio: string | null;
     email: string | null;
     phone: string | null;
     label: string;
+    fullProfileVisible: boolean;
   } | null;
 };
 
@@ -115,6 +128,11 @@ function titleize(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function titleizeValue(value?: string | null) {
+  if (!value) return "-";
+  return titleize(value);
+}
+
 function sectionId(title: string) {
   return title.toLowerCase().replace(/\s+/g, "-");
 }
@@ -157,6 +175,17 @@ function InterestCard({
     (interest.flowStatus === "awaiting_inbound_response" ||
       interest.flowStatus === "kept_open" ||
       interest.flowStatus === "private_documented");
+  const profileFacts: Fact[] = counterparty?.fullProfileVisible
+    ? [
+        { label: "Marital", value: titleizeValue(counterparty.maritalStatus) },
+        { label: "Education", value: titleizeValue(counterparty.education) },
+        { label: "Job", value: counterparty.job || "-" },
+        { label: "Ethnicity", value: counterparty.ethnicity || "-" },
+        { label: "Prayer", value: titleizeValue(counterparty.prayerCommitment) },
+        { label: "Hijab", value: titleizeValue(counterparty.hijabResponse) },
+        { label: "Photo permission", value: titleizeValue(counterparty.photoSharingPermission) },
+      ]
+    : [];
 
   return (
     <div className="interest-card">
@@ -173,6 +202,52 @@ function InterestCard({
 
       {interest.keepOpenExpiresAt && (
         <p className="notice warning">Keep Open expires {formatDate(interest.keepOpenExpiresAt)}.</p>
+      )}
+
+      {counterparty?.fullProfileVisible && (
+        <div className="profile-review-box">
+          <h4>Profile details</h4>
+          <FactList facts={profileFacts} />
+        </div>
+      )}
+
+      {counterparty?.fullProfileVisible && (
+        <div className="profile-review-box">
+          <h4>Top spouse requirements</h4>
+          <ol className="applicant-share-requirements">
+            <li>
+              <span className="rank">01</span>
+              <span>{counterparty.spouseRequirement1 || "-"}</span>
+            </li>
+            <li>
+              <span className="rank">02</span>
+              <span>{counterparty.spouseRequirement2 || "-"}</span>
+            </li>
+            <li>
+              <span className="rank">03</span>
+              <span>{counterparty.spouseRequirement3 || "-"}</span>
+            </li>
+          </ol>
+        </div>
+      )}
+
+      {counterparty?.fullProfileVisible && counterparty.imageUrls.length > 0 && (
+        <div className="profile-review-box">
+          <h4>Photos</h4>
+          <div className="photo-grid">
+            {counterparty.imageUrls.map((imageUrl, index) => (
+              <div key={`${imageUrl}-${index}`} className="photo-card">
+                <Image
+                  src={imageUrl}
+                  alt={`Profile image ${index + 1}`}
+                  width={320}
+                  height={128}
+                  unoptimized
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {counterparty?.shareableBio && (

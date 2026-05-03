@@ -120,7 +120,8 @@ function canSeeCounterpartyProfile(
   return viewer.gender === "female";
 }
 
-function safeCounterparty(
+async function safeCounterparty(
+  ctx: ReadCtx,
   viewer: Registration,
   counterparty: Registration | null,
   counterpartyNumber: number | undefined,
@@ -130,17 +131,34 @@ function safeCounterparty(
  {
   if (!counterparty) return null;
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
+  const fullProfileVisible = showProfile && Boolean(flow?.bioVisibleAt || flow?.contactSharedAt);
   const contactShared = Boolean(flow?.contactSharedAt);
+  const imageUrls = fullProfileVisible
+    ? await Promise.all((counterparty.imageStorageIds || []).map((storageId) => ctx.storage.getUrl(storageId)))
+    : [];
+
   return {
     registrationId: showProfile ? counterparty._id : null,
     applicantNumber: counterpartyNumber ?? null,
     name: showProfile ? counterparty.name : null,
     age: counterparty.age,
     gender: counterparty.gender,
+    maritalStatus: fullProfileVisible ? counterparty.maritalStatus : null,
+    education: fullProfileVisible ? counterparty.education : null,
+    job: fullProfileVisible ? counterparty.job : null,
+    ethnicity: fullProfileVisible ? counterparty.ethnicity ?? null : null,
+    prayerCommitment: fullProfileVisible ? counterparty.prayerCommitment ?? null : null,
+    hijabResponse: fullProfileVisible ? counterparty.hijabResponse ?? null : null,
+    spouseRequirement1: fullProfileVisible ? counterparty.spouseRequirement1 ?? null : null,
+    spouseRequirement2: fullProfileVisible ? counterparty.spouseRequirement2 ?? null : null,
+    spouseRequirement3: fullProfileVisible ? counterparty.spouseRequirement3 ?? null : null,
+    photoSharingPermission: fullProfileVisible ? counterparty.photoSharingPermission ?? null : null,
+    imageUrls: imageUrls.filter((url): url is string => Boolean(url)),
     shareableBio: showProfile ? counterparty.shareableBio ?? null : null,
     email: contactShared ? counterparty.email : null,
     phone: contactShared ? counterparty.phone : null,
     label: showProfile ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
+    fullProfileVisible,
     viewerGender: viewer.gender,
   };
 }
@@ -176,7 +194,7 @@ async function serializeInterest(
     requesterFinalApproval: flow?.requesterFinalApproval ?? "pending",
     recipientFinalApproval: flow?.recipientFinalApproval ?? "pending",
     photoDecision: flow?.photoDecision ?? "pending",
-    counterparty: safeCounterparty(viewer, counterparty, counterparty ? numberById.get(counterparty._id) : undefined, flow, direction),
+    counterparty: await safeCounterparty(ctx, viewer, counterparty, counterparty ? numberById.get(counterparty._id) : undefined, flow, direction),
   };
 }
 
@@ -459,4 +477,3 @@ export const giveFinalApproval = mutation({
     return flow._id;
   },
 });
-
