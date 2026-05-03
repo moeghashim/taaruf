@@ -131,7 +131,10 @@ async function safeCounterparty(
  {
   if (!counterparty) return null;
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
-  const fullProfileVisible = showProfile && Boolean(flow?.bioVisibleAt || flow?.contactSharedAt);
+  const fullProfileVisible =
+    showProfile &&
+    (Boolean(flow?.bioVisibleAt || flow?.contactSharedAt) ||
+      (direction === "inbound" && viewer.gender === "female"));
   const contactShared = Boolean(flow?.contactSharedAt);
   const imageUrls = fullProfileVisible
     ? await Promise.all((counterparty.imageStorageIds || []).map((storageId) => ctx.storage.getUrl(storageId)))
