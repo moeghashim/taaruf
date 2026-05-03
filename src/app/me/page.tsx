@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
 import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
@@ -381,7 +379,6 @@ function Section({
 
 export default function ApplicantDashboardPage() {
   const router = useRouter();
-  const generateUploadUrl = useMutation(api.registrations.generateImageUploadUrl);
   const [data, setData] = useState<DashboardData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -505,7 +502,13 @@ export default function ApplicantDashboardPage() {
 
       for (const file of chosenFiles) {
         const preparedFile = await prepareImageFileForUpload(file);
-        const uploadUrl = await generateUploadUrl({});
+        const uploadUrlResponse = await fetch("/api/applicant/upload-url", { method: "POST" });
+        const uploadUrlPayload = await uploadUrlResponse.json();
+        if (!uploadUrlResponse.ok) {
+          throw new Error(uploadUrlPayload.error || "Failed to prepare image upload");
+        }
+
+        const uploadUrl = uploadUrlPayload.uploadUrl;
         const result = await fetch(uploadUrl, {
           method: "POST",
           headers: {
