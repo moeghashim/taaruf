@@ -28,7 +28,14 @@ async function createRegistration(
       searchStatus: "active",
       createdAt: Date.now(),
       profileCompletionStatus: completed ? "completed" : "not_started",
+      ethnicity: "Arab",
+      prayerCommitment: "always_five",
+      hijabResponse: gender === "female" ? "yes" : "open",
+      spouseRequirement1: `${name} requirement one`,
+      spouseRequirement2: `${name} requirement two`,
+      spouseRequirement3: `${name} requirement three`,
       shareableBio: `${name} bio text`,
+      photoSharingPermission: "ask_me_first",
     });
   });
 }
@@ -374,9 +381,59 @@ describe("interest rules", () => {
     });
   });
 
+  test("first inbound approval reveals full profile but not contact details", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Submitting Male", "male");
+    const female = await createRegistration(t, "Approving Female", "female");
+    const maleSession = await createSession(t, male);
+    const femaleSession = await createSession(t, female);
+
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: maleSession,
+      applicantNumber: 2,
+    });
+
+    const beforeApproval = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: femaleSession,
+    });
+    expect(beforeApproval.inbound[0]?.counterparty).toMatchObject({
+      name: "Submitting Male",
+      fullProfileVisible: false,
+      maritalStatus: null,
+      email: null,
+      phone: null,
+    });
+
+    await t.mutation(api.applicantInterests.respondToInbound, {
+      sessionHash: femaleSession,
+      interestId: result.interestId,
+      decision: "accept",
+    });
+
+    const afterApproval = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: femaleSession,
+    });
+    expect(afterApproval.inbound[0]?.counterparty).toMatchObject({
+      name: "Submitting Male",
+      fullProfileVisible: true,
+      maritalStatus: "single",
+      education: "College",
+      job: "Engineer",
+      ethnicity: "Arab",
+      prayerCommitment: "always_five",
+      hijabResponse: "open",
+      spouseRequirement1: "Submitting Male requirement one",
+      spouseRequirement2: "Submitting Male requirement two",
+      spouseRequirement3: "Submitting Male requirement three",
+      photoSharingPermission: "ask_me_first",
+      email: null,
+      phone: null,
+    });
+  });
+
   test("female initiator sees male recipient's profile on private documented interest", async () => {
     const t = convexTest(schema, modules);
-    const male = await createRegistration(t, "Documented Male", "male");
+    await createRegistration(t, "Documented Male", "male");
     const female = await createRegistration(t, "Documenting Female", "female");
     const femaleSession = await createSession(t, female);
 
