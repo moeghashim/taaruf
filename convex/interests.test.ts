@@ -363,6 +363,17 @@ describe("interest rules", () => {
     expect(femaleDashboard.inbound[0]?.flowStatus).toBe("awaiting_inbound_response");
     expect(femaleDashboard.inbound[0]?.counterparty).toMatchObject({
       name: "Visible Male",
+      fullProfileVisible: true,
+      maritalStatus: "single",
+      education: "College",
+      job: "Engineer",
+      ethnicity: "Arab",
+      prayerCommitment: "always_five",
+      hijabResponse: "open",
+      spouseRequirement1: "Visible Male requirement one",
+      spouseRequirement2: "Visible Male requirement two",
+      spouseRequirement3: "Visible Male requirement three",
+      photoSharingPermission: "ask_me_first",
       shareableBio: "Visible Male bio text",
       label: "Visible Male",
       email: null,
@@ -381,7 +392,7 @@ describe("interest rules", () => {
     });
   });
 
-  test("first inbound approval reveals full profile but not contact details", async () => {
+  test("first inbound approval keeps full profile visible but not contact details", async () => {
     const t = convexTest(schema, modules);
     const male = await createRegistration(t, "Submitting Male", "male");
     const female = await createRegistration(t, "Approving Female", "female");
@@ -398,8 +409,8 @@ describe("interest rules", () => {
     });
     expect(beforeApproval.inbound[0]?.counterparty).toMatchObject({
       name: "Submitting Male",
-      fullProfileVisible: false,
-      maritalStatus: null,
+      fullProfileVisible: true,
+      maritalStatus: "single",
       email: null,
       phone: null,
     });
