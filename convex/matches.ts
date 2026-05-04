@@ -277,3 +277,20 @@ export const markNotificationSent = mutation({
     return args.id;
   },
 });
+
+export const markContactSharedNotificationSent = mutation({
+  args: {
+    id: v.id("matches"),
+    sent: v.boolean(),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      contactSharedNotificationSentAt: args.sent ? Date.now() : undefined,
+      contactSharedNotificationError: args.error,
+      updatedAt: Date.now(),
+    });
+
+    return args.id;
+  },
+});

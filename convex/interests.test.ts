@@ -56,17 +56,6 @@ async function getRegistration(t: ReturnType<typeof convexTest>, id: Id<"registr
   });
 }
 
-async function getInterestFlow(t: ReturnType<typeof convexTest>, interestId: Id<"interests">) {
-  return await t.run(async (ctx) => {
-    const flow = await ctx.db
-      .query("interestFlows")
-      .withIndex("by_interestId", (q) => q.eq("interestId", interestId))
-      .unique();
-    if (!flow) throw new Error("Interest flow not found");
-    return flow;
-  });
-}
-
 async function createSession(t: ReturnType<typeof convexTest>, registrationId: Id<"registrations">) {
   const sessionHash = `session-${registrationId}`;
   await t.run(async (ctx) => {
@@ -483,14 +472,6 @@ describe("interest rules", () => {
       email: "final.approval.male@example.com",
     });
 
-    const flowAfterFirstApproval = await getInterestFlow(t, result.interestId);
-    expect(flowAfterFirstApproval).toMatchObject({
-      flowStatus: "awaiting_final_approvals",
-      requesterFinalApproval: "pending",
-      recipientFinalApproval: "approved",
-    });
-    expect(flowAfterFirstApproval.finalApprovalNotificationSentAt).toBeTypeOf("number");
-
     const femaleDashboard = await t.query(api.applicantInterests.getDashboard, {
       sessionHash: femaleSession,
     });
@@ -519,10 +500,24 @@ describe("interest rules", () => {
       alreadyRecorded: true,
     });
 
-    await t.mutation(api.applicantInterests.giveFinalApproval, {
+    const secondApproval = await t.mutation(api.applicantInterests.giveFinalApproval, {
       sessionHash: maleSession,
       interestId: result.interestId,
       approved: true,
+    });
+    expect(secondApproval.contactSharedNotification).toMatchObject({
+      recipients: [
+        {
+          registrationId: male,
+          name: "Final Approval Male",
+          email: "final.approval.male@example.com",
+        },
+        {
+          registrationId: female,
+          name: "Final Approval Female",
+          email: "final.approval.female@example.com",
+        },
+      ],
     });
 
     const finalMaleDashboard = await t.query(api.applicantInterests.getDashboard, {

@@ -194,6 +194,8 @@ export default defineSchema({
     closedReason: v.optional(v.string()),
     matchNotificationSentAt: v.optional(v.number()),
     matchNotificationError: v.optional(v.string()),
+    contactSharedNotificationSentAt: v.optional(v.number()),
+    contactSharedNotificationError: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

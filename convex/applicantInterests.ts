@@ -494,6 +494,23 @@ export const giveFinalApproval = mutation({
       }
     }
 
+    const contactSharedMatch = bothApproved && matchId ? await ctx.db.get(matchId) : null;
+    const contactSharedRecipientRows = contactSharedMatch && !contactSharedMatch.contactSharedNotificationSentAt
+      ? await Promise.all([
+          ctx.db.get(contactSharedMatch.maleRegistrationId),
+          ctx.db.get(contactSharedMatch.femaleRegistrationId),
+        ])
+      : [];
+    const contactSharedRecipients = contactSharedRecipientRows.flatMap((recipient) =>
+      recipient
+        ? [{
+            registrationId: recipient._id,
+            name: recipient.name,
+            email: recipient.email,
+          }]
+        : []
+    );
+
     await ctx.db.patch(flow._id, {
       flowStatus: bothApproved ? "contact_shared" : "awaiting_final_approvals",
       requesterFinalApproval,
@@ -515,6 +532,12 @@ export const giveFinalApproval = mutation({
             registrationId: notificationRecipient._id,
             name: notificationRecipient.name,
             email: notificationRecipient.email,
+          }
+        : null,
+      contactSharedNotification: contactSharedMatch
+        ? {
+            matchId: contactSharedMatch._id,
+            recipients: contactSharedRecipients,
           }
         : null,
       alreadyRecorded: false,
