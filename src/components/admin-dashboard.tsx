@@ -19,6 +19,7 @@ type PairFilterStatus = "all" | "pending" | "requested" | "declined" | "matched"
 type MainTab = "registrations" | "interests" | "settings";
 type InterestStatus = "new" | "queued" | "active" | "converted_to_match" | "deferred" | "withdrawn" | "declined" | "closed";
 type InterestAdminStatus = "pending" | "requested" | "declined" | "matched";
+type AdminNotice = { tone: "success" | "error"; message: string };
 
 function titleizeValue(value?: string) {
   if (!value) return "-";
@@ -54,6 +55,7 @@ export default function AdminDashboard() {
   const [maleSlots, setMaleSlots] = useState<number | string>("");
   const [femaleSlots, setFemaleSlots] = useState<number | string>("");
   const [savingSlots, setSavingSlots] = useState(false);
+  const [adminNotice, setAdminNotice] = useState<AdminNotice | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [editingNotes, setEditingNotes] = useState<{ id: string; notes: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -350,9 +352,10 @@ export default function AdminDashboard() {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await deleteRegistration({ id: registrationId as any });
+        setAdminNotice({ tone: "success", message: "Registration deleted." });
       } catch (error) {
         console.error("Error deleting registration:", error);
-        alert("Failed to delete registration");
+        setAdminNotice({ tone: "error", message: "Failed to delete registration." });
       }
     }
   }
@@ -362,9 +365,10 @@ export default function AdminDashboard() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await updateStatus({ id: registrationId as any, status: newStatus });
+      setAdminNotice({ tone: "success", message: `Registration ${newStatus}.` });
     } catch (error) {
       console.error("Error updating status:", error);
-      alert("Failed to update status");
+      setAdminNotice({ tone: "error", message: "Failed to update status." });
     } finally {
       setUpdatingStatus(null);
     }
@@ -377,10 +381,10 @@ export default function AdminDashboard() {
         maleSlots: Number(maleSlots),
         femaleSlots: Number(femaleSlots),
       });
-      alert("Slot limits updated successfully");
+      setAdminNotice({ tone: "success", message: "Slot limits updated successfully." });
     } catch (error) {
       console.error("Error updating slots:", error);
-      alert("Failed to update slot limits");
+      setAdminNotice({ tone: "error", message: "Failed to update slot limits." });
     } finally {
       setSavingSlots(false);
     }
@@ -392,9 +396,10 @@ export default function AdminDashboard() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await updateAdminNotes({ id: editingNotes.id as any, adminNotes: editingNotes.notes });
       setEditingNotes(null);
+      setAdminNotice({ tone: "success", message: "Notes saved." });
     } catch (error) {
       console.error("Failed to save notes:", error);
-      alert("Failed to save notes");
+      setAdminNotice({ tone: "error", message: "Failed to save notes." });
     }
   }
 
@@ -736,6 +741,17 @@ export default function AdminDashboard() {
               Settings
             </TabsTrigger>
           </TabsList>
+          {adminNotice && (
+            <p
+              className={`rounded-md border p-3 text-sm ${
+                adminNotice.tone === "success"
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-red-200 bg-red-50 text-red-800"
+              }`}
+            >
+              {adminNotice.message}
+            </p>
+          )}
 
           <TabsContent value="registrations" className="space-y-6">
             <Card>
