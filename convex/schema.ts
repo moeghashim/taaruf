@@ -260,6 +260,8 @@ export default defineSchema({
     photoDecisionAt: v.optional(v.number()),
     photosVisibleAt: v.optional(v.number()),
     contactSharedAt: v.optional(v.number()),
+    finalApprovalNotificationSentAt: v.optional(v.number()),
+    finalApprovalNotificationError: v.optional(v.string()),
     keepOpenExpiresAt: v.optional(v.number()),
     closedReason: v.optional(v.string()),
     createdAt: v.number(),

@@ -56,6 +56,17 @@ async function getRegistration(t: ReturnType<typeof convexTest>, id: Id<"registr
   });
 }
 
+async function getInterestFlow(t: ReturnType<typeof convexTest>, interestId: Id<"interests">) {
+  return await t.run(async (ctx) => {
+    const flow = await ctx.db
+      .query("interestFlows")
+      .withIndex("by_interestId", (q) => q.eq("interestId", interestId))
+      .unique();
+    if (!flow) throw new Error("Interest flow not found");
+    return flow;
+  });
+}
+
 async function createSession(t: ReturnType<typeof convexTest>, registrationId: Id<"registrations">) {
   const sessionHash = `session-${registrationId}`;
   await t.run(async (ctx) => {
@@ -439,6 +450,92 @@ describe("interest rules", () => {
       photoSharingPermission: "ask_me_first",
       email: null,
       phone: null,
+    });
+  });
+
+  test("first final approval updates dashboards and requests the other applicant's approval", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Final Approval Male", "male");
+    const female = await createRegistration(t, "Final Approval Female", "female");
+    const maleSession = await createSession(t, male);
+    const femaleSession = await createSession(t, female);
+
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: maleSession,
+      applicantNumber: 2,
+    });
+
+    await t.mutation(api.applicantInterests.respondToInbound, {
+      sessionHash: femaleSession,
+      interestId: result.interestId,
+      decision: "accept",
+    });
+
+    const firstApproval = await t.mutation(api.applicantInterests.giveFinalApproval, {
+      sessionHash: femaleSession,
+      interestId: result.interestId,
+      approved: true,
+    });
+
+    expect(firstApproval.finalApprovalNotification).toMatchObject({
+      registrationId: male,
+      name: "Final Approval Male",
+      email: "final.approval.male@example.com",
+    });
+
+    const flowAfterFirstApproval = await getInterestFlow(t, result.interestId);
+    expect(flowAfterFirstApproval).toMatchObject({
+      flowStatus: "awaiting_final_approvals",
+      requesterFinalApproval: "pending",
+      recipientFinalApproval: "approved",
+    });
+    expect(flowAfterFirstApproval.finalApprovalNotificationSentAt).toBeTypeOf("number");
+
+    const femaleDashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: femaleSession,
+    });
+    expect(femaleDashboard.inbound[0]).toMatchObject({
+      flowStatus: "awaiting_final_approvals",
+      requesterFinalApproval: "pending",
+      recipientFinalApproval: "approved",
+    });
+
+    const maleDashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: maleSession,
+    });
+    expect(maleDashboard.outbound[0]).toMatchObject({
+      flowStatus: "awaiting_final_approvals",
+      requesterFinalApproval: "pending",
+      recipientFinalApproval: "approved",
+    });
+
+    const duplicateApproval = await t.mutation(api.applicantInterests.giveFinalApproval, {
+      sessionHash: femaleSession,
+      interestId: result.interestId,
+      approved: true,
+    });
+    expect(duplicateApproval).toMatchObject({
+      finalApprovalNotification: null,
+      alreadyRecorded: true,
+    });
+
+    await t.mutation(api.applicantInterests.giveFinalApproval, {
+      sessionHash: maleSession,
+      interestId: result.interestId,
+      approved: true,
+    });
+
+    const finalMaleDashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: maleSession,
+    });
+    expect(finalMaleDashboard.outbound[0]).toMatchObject({
+      flowStatus: "contact_shared",
+      requesterFinalApproval: "approved",
+      recipientFinalApproval: "approved",
+    });
+    expect(finalMaleDashboard.outbound[0]?.counterparty).toMatchObject({
+      email: "final.approval.female@example.com",
+      phone: "555-0100",
     });
   });
 

@@ -414,13 +414,28 @@ export const giveFinalApproval = mutation({
     }
 
     const now = Date.now();
+    const viewerIsRequester = interest.fromRegistrationId === registration._id;
+    const existingViewerFinalApproval = viewerIsRequester ? flow.requesterFinalApproval : flow.recipientFinalApproval;
+    const requestedFinalApproval = args.approved ? "approved" as const : "declined" as const;
+    if (existingViewerFinalApproval !== "pending") {
+      if (existingViewerFinalApproval === requestedFinalApproval) {
+        return {
+          flowId: flow._id,
+          matchId: interest.matchId ?? null,
+          finalApprovalNotification: null,
+          alreadyRecorded: true,
+        };
+      }
+      throw new Error("Final approval has already been recorded for this interest");
+    }
+
     const requesterFinalApproval =
-      interest.fromRegistrationId === registration._id
-        ? args.approved ? "approved" as const : "declined" as const
+      viewerIsRequester
+        ? requestedFinalApproval
         : flow.requesterFinalApproval;
     const recipientFinalApproval =
       interest.toRegistrationId === registration._id
-        ? args.approved ? "approved" as const : "declined" as const
+        ? requestedFinalApproval
         : flow.recipientFinalApproval;
 
     if (!args.approved) {
@@ -439,10 +454,23 @@ export const giveFinalApproval = mutation({
         updatedAt: now,
       });
       await appendEvent(ctx, flow, "final_approval_declined", registration._id);
-      return flow._id;
+      return {
+        flowId: flow._id,
+        matchId: interest.matchId ?? null,
+        finalApprovalNotification: null,
+        alreadyRecorded: false,
+      };
     }
 
     const bothApproved = requesterFinalApproval === "approved" && recipientFinalApproval === "approved";
+    const shouldNotifyOtherApplicant =
+      !bothApproved &&
+      !flow.finalApprovalNotificationSentAt &&
+      (viewerIsRequester ? flow.recipientFinalApproval : flow.requesterFinalApproval) === "pending";
+    const notificationRecipientId = viewerIsRequester ? interest.toRegistrationId : interest.fromRegistrationId;
+    const notificationRecipient = shouldNotifyOtherApplicant
+      ? await ctx.db.get(notificationRecipientId)
+      : null;
     let matchId = interest.matchId;
     if (bothApproved && !matchId) {
       matchId = await createMatchFromInterest(ctx, interest);
@@ -473,9 +501,43 @@ export const giveFinalApproval = mutation({
       requesterFinalApprovalAt: interest.fromRegistrationId === registration._id ? now : flow.requesterFinalApprovalAt,
       recipientFinalApprovalAt: interest.toRegistrationId === registration._id ? now : flow.recipientFinalApprovalAt,
       contactSharedAt: bothApproved ? now : flow.contactSharedAt,
+      finalApprovalNotificationSentAt: shouldNotifyOtherApplicant ? now : flow.finalApprovalNotificationSentAt,
+      finalApprovalNotificationError: shouldNotifyOtherApplicant ? undefined : flow.finalApprovalNotificationError,
       updatedAt: now,
     });
     await appendEvent(ctx, flow, bothApproved ? "contact_shared" : "final_approval_given", registration._id);
+
+    return {
+      flowId: flow._id,
+      matchId: matchId ?? null,
+      finalApprovalNotification: notificationRecipient
+        ? {
+            registrationId: notificationRecipient._id,
+            name: notificationRecipient.name,
+            email: notificationRecipient.email,
+          }
+        : null,
+      alreadyRecorded: false,
+    };
+  },
+});
+
+export const recordFinalApprovalNotificationFailure = mutation({
+  args: {
+    interestId: v.id("interests"),
+    error: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const flow = await getFlowByInterestId(ctx, args.interestId);
+    if (!flow) {
+      throw new Error("Interest flow not found");
+    }
+
+    await ctx.db.patch(flow._id, {
+      finalApprovalNotificationSentAt: undefined,
+      finalApprovalNotificationError: args.error,
+      updatedAt: Date.now(),
+    });
 
     return flow._id;
   },

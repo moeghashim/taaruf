@@ -116,6 +116,7 @@ const statusTone: Record<string, Tone> = {
   declined: "rose",
   closed: "rose",
   awaiting_inbound_response: "amber",
+  awaiting_final_approvals: "amber",
   kept_open: "amber",
   bio_review: "blue",
   picture_requested: "blue",
@@ -162,8 +163,13 @@ function InterestCard({
     interest.direction === "inbound" &&
     interest.visibility !== "internal_only" &&
     (interest.flowStatus === "awaiting_inbound_response" || interest.flowStatus === "kept_open");
+  const viewerFinalApproval =
+    interest.direction === "inbound" ? interest.recipientFinalApproval : interest.requesterFinalApproval;
+  const counterpartyFinalApproval =
+    interest.direction === "inbound" ? interest.requesterFinalApproval : interest.recipientFinalApproval;
   const canFinalApprove = Boolean(
     interest.bioVisibleAt &&
+    viewerFinalApproval === "pending" &&
     interest.flowStatus !== "contact_shared" &&
     interest.flowStatus !== "declined" &&
     interest.flowStatus !== "closed"
@@ -200,6 +206,18 @@ function InterestCard({
 
       {interest.keepOpenExpiresAt && (
         <p className="notice warning">Keep Open expires {formatDate(interest.keepOpenExpiresAt)}.</p>
+      )}
+
+      {viewerFinalApproval === "approved" && interest.flowStatus !== "contact_shared" && (
+        <p className="notice success">Your final approval is recorded. Waiting for the other applicant.</p>
+      )}
+
+      {viewerFinalApproval === "pending" && counterpartyFinalApproval === "approved" && (
+        <p className="notice warning">The other applicant approved after bio review. Your final decision is needed.</p>
+      )}
+
+      {interest.flowStatus === "contact_shared" && (
+        <p className="notice success">Both final approvals are complete. Contact information is available below.</p>
       )}
 
       {counterparty?.fullProfileVisible && (
@@ -467,7 +485,7 @@ export default function ApplicantDashboardPage() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Action failed");
-      setMessage("Updated.");
+      setMessage(typeof payload.message === "string" ? payload.message : "Updated.");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
