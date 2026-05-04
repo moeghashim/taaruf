@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import {
   demoteOpenInterestsInvolvingRegistration,
   promoteOldestQueuedForRegistration,
@@ -15,6 +16,19 @@ const matchStatus = v.union(
 );
 
 const releasingStatuses = new Set(["closed", "declined", "paused"]);
+const interestFlowStatuses = [
+  "private_documented",
+  "awaiting_inbound_response",
+  "kept_open",
+  "bio_review",
+  "awaiting_final_approvals",
+  "awaiting_photo_request",
+  "awaiting_photo_response",
+  "photos_visible",
+  "contact_shared",
+  "declined",
+  "closed",
+] as const;
 
 export const getById = query({
   args: {
@@ -148,6 +162,167 @@ export const resetPair = mutation({
     return {
       clearedInterestIds: interestsToReset.map((interest) => interest._id),
       deletedMatchIds: matchesToDelete.map((match) => match._id),
+    };
+  },
+});
+
+export const deletePairConnection = mutation({
+  args: {
+    registrationAId: v.id("registrations"),
+    registrationBId: v.id("registrations"),
+  },
+  handler: async (ctx, args) => {
+    const registrations = await Promise.all([
+      ctx.db.get(args.registrationAId),
+      ctx.db.get(args.registrationBId),
+    ]);
+
+    if (!registrations[0] || !registrations[1]) {
+      throw new Error("Registration not found");
+    }
+
+    const pairIds = new Set([args.registrationAId, args.registrationBId]);
+
+    const outboundA = await ctx.db
+      .query("interests")
+      .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", args.registrationAId))
+      .collect();
+    const outboundB = await ctx.db
+      .query("interests")
+      .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", args.registrationBId))
+      .collect();
+
+    const interestsToDelete = [...outboundA, ...outboundB].filter(
+      (interest) => pairIds.has(interest.fromRegistrationId) && pairIds.has(interest.toRegistrationId)
+    );
+
+    const flowCandidates: Doc<"interestFlows">[] = [];
+    for (const status of interestFlowStatuses) {
+      const flowsFromA = await ctx.db
+        .query("interestFlows")
+        .withIndex("by_fromRegistrationId_and_flowStatus", (q) =>
+          q.eq("fromRegistrationId", args.registrationAId).eq("flowStatus", status)
+        )
+        .collect();
+      const flowsFromB = await ctx.db
+        .query("interestFlows")
+        .withIndex("by_fromRegistrationId_and_flowStatus", (q) =>
+          q.eq("fromRegistrationId", args.registrationBId).eq("flowStatus", status)
+        )
+        .collect();
+      flowCandidates.push(...flowsFromA, ...flowsFromB);
+    }
+
+    for (const interest of interestsToDelete) {
+      const flow = await ctx.db
+        .query("interestFlows")
+        .withIndex("by_interestId", (q) => q.eq("interestId", interest._id))
+        .unique();
+      if (flow) {
+        flowCandidates.push(flow);
+      }
+    }
+
+    const flowsToDelete = flowCandidates.filter(
+      (flow, index, all) =>
+        pairIds.has(flow.fromRegistrationId) &&
+        pairIds.has(flow.toRegistrationId) &&
+        all.findIndex((candidate) => candidate._id === flow._id) === index
+    );
+
+    const deletedEventIds = new Set<string>();
+    for (const flow of flowsToDelete) {
+      const events = await ctx.db
+        .query("interestFlowEvents")
+        .withIndex("by_interestFlowId_and_createdAt", (q) => q.eq("interestFlowId", flow._id))
+        .collect();
+      for (const event of events) {
+        if (!deletedEventIds.has(event._id)) {
+          await ctx.db.delete(event._id);
+          deletedEventIds.add(event._id);
+        }
+      }
+      await ctx.db.delete(flow._id);
+    }
+
+    for (const interest of interestsToDelete) {
+      const events = await ctx.db
+        .query("interestFlowEvents")
+        .withIndex("by_interestId", (q) => q.eq("interestId", interest._id))
+        .collect();
+      for (const event of events) {
+        if (!deletedEventIds.has(event._id)) {
+          await ctx.db.delete(event._id);
+          deletedEventIds.add(event._id);
+        }
+      }
+
+      await ctx.db.delete(interest._id);
+    }
+
+    const matchesByMaleA = await ctx.db
+      .query("matches")
+      .withIndex("by_maleRegistrationId", (q) => q.eq("maleRegistrationId", args.registrationAId))
+      .collect();
+    const matchesByMaleB = await ctx.db
+      .query("matches")
+      .withIndex("by_maleRegistrationId", (q) => q.eq("maleRegistrationId", args.registrationBId))
+      .collect();
+    const matchesByFemaleA = await ctx.db
+      .query("matches")
+      .withIndex("by_femaleRegistrationId", (q) => q.eq("femaleRegistrationId", args.registrationAId))
+      .collect();
+    const matchesByFemaleB = await ctx.db
+      .query("matches")
+      .withIndex("by_femaleRegistrationId", (q) => q.eq("femaleRegistrationId", args.registrationBId))
+      .collect();
+
+    const matchesToDelete = [...matchesByMaleA, ...matchesByMaleB, ...matchesByFemaleA, ...matchesByFemaleB].filter(
+      (match, index, all) =>
+        pairIds.has(match.maleRegistrationId) &&
+        pairIds.has(match.femaleRegistrationId) &&
+        all.findIndex((candidate) => candidate._id === match._id) === index
+    );
+    const deletedMatchIds = new Set(matchesToDelete.map((match) => match._id));
+
+    for (const match of matchesToDelete) {
+      await ctx.db.delete(match._id);
+    }
+
+    const sharesByOwnerA = await ctx.db
+      .query("profileShares")
+      .withIndex("by_ownerRegistrationId", (q) => q.eq("ownerRegistrationId", args.registrationAId))
+      .collect();
+    const sharesByOwnerB = await ctx.db
+      .query("profileShares")
+      .withIndex("by_ownerRegistrationId", (q) => q.eq("ownerRegistrationId", args.registrationBId))
+      .collect();
+    const profileSharesToDelete = [...sharesByOwnerA, ...sharesByOwnerB].filter(
+      (share, index, all) =>
+        pairIds.has(share.ownerRegistrationId) &&
+        pairIds.has(share.recipientRegistrationId) &&
+        all.findIndex((candidate) => candidate._id === share._id) === index
+    );
+
+    for (const share of profileSharesToDelete) {
+      await ctx.db.delete(share._id);
+    }
+
+    if (registrations[0].activeMatchId && deletedMatchIds.has(registrations[0].activeMatchId)) {
+      await ctx.db.patch(args.registrationAId, { activeMatchId: undefined });
+    }
+    if (registrations[1].activeMatchId && deletedMatchIds.has(registrations[1].activeMatchId)) {
+      await ctx.db.patch(args.registrationBId, { activeMatchId: undefined });
+    }
+
+    await promoteOldestQueuedForRegistration(ctx, args.registrationAId);
+    await promoteOldestQueuedForRegistration(ctx, args.registrationBId);
+
+    return {
+      deletedInterestIds: interestsToDelete.map((interest) => interest._id),
+      deletedInterestFlowIds: flowsToDelete.map((flow) => flow._id),
+      deletedMatchIds: matchesToDelete.map((match) => match._id),
+      deletedProfileShareIds: profileSharesToDelete.map((share) => share._id),
     };
   },
 });
