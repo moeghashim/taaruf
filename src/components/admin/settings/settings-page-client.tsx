@@ -26,6 +26,7 @@ export function SettingsPageClient() {
   const [femaleSlots, setFemaleSlots] = useState<string>("");
   const [savingSlots, setSavingSlots] = useState(false);
   const [slotsSavedAt, setSlotsSavedAt] = useState<number | null>(null);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
 
   // Admin name
   const [adminName, setAdminName] = useState("");
@@ -64,9 +65,10 @@ export function SettingsPageClient() {
     const m = Number(maleSlots);
     const f = Number(femaleSlots);
     if (!Number.isFinite(m) || m < 0 || !Number.isFinite(f) || f < 0) {
-      alert("Slot caps must be non-negative numbers.");
+      setSlotsError("Slot caps must be non-negative numbers.");
       return;
     }
+    setSlotsError(null);
     setSavingSlots(true);
     try {
       await data.actions.updateSlotLimits(m, f);
@@ -247,6 +249,11 @@ export function SettingsPageClient() {
                 </span>
               )}
             </div>
+            {slotsError && (
+              <p className="notice error" style={{ marginTop: 12 }}>
+                {slotsError}
+              </p>
+            )}
           </div>
         </div>
 
