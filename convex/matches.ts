@@ -81,9 +81,31 @@ export const resetPair = mutation({
     for (const interest of interestsToReset) {
       await ctx.db.patch(interest._id, {
         status: "closed",
+        adminStatus: "declined",
         matchId: undefined,
         updatedAt: now,
       });
+
+      const flow = await ctx.db
+        .query("interestFlows")
+        .withIndex("by_interestId", (q) => q.eq("interestId", interest._id))
+        .unique();
+      if (flow) {
+        await ctx.db.patch(flow._id, {
+          flowStatus: "closed",
+          contactSharedAt: undefined,
+          closedReason: "admin_reset_pair",
+          updatedAt: now,
+        });
+        await ctx.db.insert("interestFlowEvents", {
+          interestFlowId: flow._id,
+          interestId: interest._id,
+          actor: "system",
+          eventType: "pair_reset",
+          message: "Connection removed by admin reset.",
+          createdAt: now,
+        });
+      }
     }
 
     const matchesByMaleA = await ctx.db
