@@ -259,6 +259,9 @@ describe("interest rules", () => {
     });
 
     expect((await getRegistration(t, male)).activeMatchId).toBeUndefined();
+    await expect(getInterest(t, interestId)).resolves.toMatchObject({
+      status: "closed",
+    });
     await expect(getInterest(t, activeAlternative)).resolves.toMatchObject({
       status: "active",
     });
@@ -546,6 +549,31 @@ describe("interest rules", () => {
       email: "final.approval.female@example.com",
       phone: "555-0100",
     });
+
+    await t.mutation(api.applicantInterests.closeConnection, {
+      sessionHash: maleSession,
+      interestId: result.interestId,
+    });
+
+    const closedMatch = await t.query(api.matches.getById, {
+      id: secondApproval.matchId as Id<"matches">,
+    });
+    expect(closedMatch).toMatchObject({
+      status: "closed",
+      closedReason: "applicant_closed_connection",
+    });
+    await expect(getInterest(t, result.interestId)).resolves.toMatchObject({
+      status: "closed",
+    });
+
+    const closedMaleDashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: maleSession,
+    });
+    const closedFemaleDashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: femaleSession,
+    });
+    expect(closedMaleDashboard.outbound).toEqual([]);
+    expect(closedFemaleDashboard.inbound).toEqual([]);
   });
 
   test("female initiator sees male recipient's profile on private documented interest", async () => {

@@ -199,6 +199,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (body.action === "close_connection") {
+      if (!body.interestId) {
+        return NextResponse.json({ error: "interestId is required" }, { status: 400 });
+      }
+      await convex.mutation(api.applicantInterests.closeConnection, {
+        sessionHash,
+        interestId: body.interestId,
+      });
+      return NextResponse.json({ success: true, message: "Connection closed. The profile has been removed." });
+    }
+
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
     return NextResponse.json(

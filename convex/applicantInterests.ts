@@ -6,6 +6,7 @@ import {
   createInterestWithRules,
   createMatchFromInterest,
   demoteOpenInterestsInvolvingRegistration,
+  promoteOldestQueuedForRegistration,
 } from "./interestRules";
 
 const KEEP_OPEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -178,6 +179,10 @@ function flowStatus(flow: InterestFlow | null, interest: Interest) {
   return flow?.flowStatus ?? initialFlowStatusForInterest(interest);
 }
 
+function isVisibleInApplicantDashboard(interest: Interest) {
+  return !["closed", "declined", "withdrawn"].includes(interest.status);
+}
+
 async function serializeInterest(
   ctx: ReadCtx,
   viewer: Registration,
@@ -225,14 +230,20 @@ export const getDashboard = query({
       .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", registration._id))
       .take(100);
 
-    const visibleInbound = inboundRows.filter((interest) => interest.visibility !== "internal_only");
+    const visibleInbound = inboundRows.filter(
+      (interest) => interest.visibility !== "internal_only" && isVisibleInApplicantDashboard(interest)
+    );
     const privateDocumented =
       registration.gender === "female"
-        ? outboundRows.filter((interest) => interest.visibility === "internal_only")
+        ? outboundRows.filter(
+            (interest) => interest.visibility === "internal_only" && isVisibleInApplicantDashboard(interest)
+          )
         : [];
     const visibleOutbound =
       registration.gender === "male"
-        ? outboundRows.filter((interest) => interest.visibility !== "internal_only")
+        ? outboundRows.filter(
+            (interest) => interest.visibility !== "internal_only" && isVisibleInApplicantDashboard(interest)
+          )
         : [];
 
     return {
@@ -439,6 +450,71 @@ export const withdrawOutbound = mutation({
     }
 
     return interest._id;
+  },
+});
+
+export const closeConnection = mutation({
+  args: {
+    sessionHash: v.string(),
+    interestId: v.id("interests"),
+  },
+  handler: async (ctx, args) => {
+    const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    requireApprovedForInterestAction(registration);
+    const interest = await ctx.db.get(args.interestId);
+    if (!interest) throw new Error("Interest not found");
+    if (interest.fromRegistrationId !== registration._id && interest.toRegistrationId !== registration._id) {
+      throw new Error("Interest is not available for this applicant");
+    }
+
+    const flow = await ensureFlow(ctx, interest);
+    const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+    const connectionIsOpen = flow.flowStatus === "contact_shared" || Boolean(flow.contactSharedAt) || match?.status === "contact_shared";
+    if (!connectionIsOpen) {
+      throw new Error("Contact information has not been shared for this connection");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(interest._id, {
+      status: "closed",
+      updatedAt: now,
+    });
+    await ctx.db.patch(flow._id, {
+      flowStatus: "closed",
+      closedReason: "applicant_closed_connection",
+      updatedAt: now,
+    });
+    await appendEvent(ctx, flow, "connection_closed", registration._id);
+
+    if (match) {
+      await ctx.db.patch(match._id, {
+        status: "closed",
+        closedReason: "applicant_closed_connection",
+        updatedAt: now,
+      });
+
+      const maleRegistration = await ctx.db.get(match.maleRegistrationId);
+      const femaleRegistration = await ctx.db.get(match.femaleRegistrationId);
+
+      if (maleRegistration?.activeMatchId === match._id) {
+        await ctx.db.patch(match.maleRegistrationId, {
+          activeMatchId: undefined,
+        });
+      }
+      if (femaleRegistration?.activeMatchId === match._id) {
+        await ctx.db.patch(match.femaleRegistrationId, {
+          activeMatchId: undefined,
+        });
+      }
+
+      await promoteOldestQueuedForRegistration(ctx, match.maleRegistrationId);
+      await promoteOldestQueuedForRegistration(ctx, match.femaleRegistrationId);
+    }
+
+    return {
+      interestId: interest._id,
+      matchId: match?._id ?? null,
+    };
   },
 });
 

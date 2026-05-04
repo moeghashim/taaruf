@@ -211,6 +211,10 @@ function canWithdrawInterest(interest: DashboardInterest) {
   );
 }
 
+function canCloseConnection(interest: DashboardInterest) {
+  return interest.flowStatus === "contact_shared" || Boolean(interest.contactSharedAt);
+}
+
 function profileFactsFor(counterparty: NonNullable<DashboardInterest["counterparty"]>): Fact[] {
   return [
     { label: "Marital", value: titleizeValue(counterparty.maritalStatus) },
@@ -292,6 +296,7 @@ function ProfileSideCard({
   const canRespond = canRespondToInterest(interest);
   const canFinalApprove = canFinalApproveInterest(interest);
   const canWithdraw = canWithdrawInterest(interest);
+  const canClose = canCloseConnection(interest);
   const profileFacts = counterparty.fullProfileVisible ? profileFactsFor(counterparty) : [];
 
   return (
@@ -453,6 +458,22 @@ function ProfileSideCard({
             }}
           >
             Withdraw
+          </button>
+        </div>
+      )}
+
+      {canClose && (
+        <div className="action-row">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={busy}
+            onClick={() => {
+              if (typeof window !== "undefined" && !window.confirm("Close this connection and remove this profile from your dashboard?")) return;
+              onAction({ action: "close_connection", interestId: interest.interestId });
+            }}
+          >
+            Close Connection
           </button>
         </div>
       )}

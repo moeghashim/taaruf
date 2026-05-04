@@ -17,6 +17,7 @@ type RegistrationWithImages = Registration & { imageUrls?: string[] };
 type InterestStatus = Doc<"interests">["status"];
 type InterestAdminStatus = NonNullable<Doc<"interests">["adminStatus"]>;
 type MatchStatus = Doc<"matches">["status"];
+type PipelineStage = MatchStatus | "approved";
 type ShareStatus = Doc<"profileShares">["status"];
 
 type InterestRecord = Doc<"interests"> & {
@@ -47,6 +48,7 @@ const INTEREST_STATUSES: InterestStatus[] = [
 ];
 const ADMIN_STATUSES: InterestAdminStatus[] = ["pending", "requested", "declined", "matched"];
 const MATCH_STATUSES: MatchStatus[] = ["new", "reviewing", "contact_shared", "paused", "closed", "declined"];
+const PIPELINE_STAGES: PipelineStage[] = ["new", "reviewing", "contact_shared", "approved", "paused", "closed", "declined"];
 const ATTENTION_SHARE_STATUSES: ShareStatus[] = ["interested", "follow_up_needed", "viewed"];
 
 function titleize(value: string) {
@@ -74,6 +76,10 @@ function formatDateTime(timestamp?: number) {
 
 function isOpenInterest(status: InterestStatus) {
   return status === "new" || status === "queued" || status === "active" || status === "deferred";
+}
+
+function pipelineStageForMatch(match: MatchRecord): PipelineStage {
+  return match.status === "contact_shared" && match.contactSharedNotificationSentAt ? "approved" : match.status;
 }
 
 function useMatchingData() {
@@ -844,7 +850,7 @@ function MatchCard({
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
         <div style={{ display: "grid", gap: 8 }}>
-          <StatusPill status={match.status} />
+          <StatusPill status={pipelineStageForMatch(match)} />
           <ApplicantMini registration={match.maleRegistration} number={match.maleRegistration ? numbers.get(match.maleRegistration._id) : undefined} />
           <ApplicantMini registration={match.femaleRegistration} number={match.femaleRegistration ? numbers.get(match.femaleRegistration._id) : undefined} />
         </div>
@@ -917,10 +923,10 @@ export function PipelinePageClient() {
   const [message, setMessage] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
-    const map = new Map<MatchStatus, MatchRecord[]>();
-    for (const status of MATCH_STATUSES) map.set(status, []);
+    const map = new Map<PipelineStage, MatchRecord[]>();
+    for (const stage of PIPELINE_STAGES) map.set(stage, []);
     for (const match of data.matches) {
-      map.get(match.status)?.push(match);
+      map.get(pipelineStageForMatch(match))?.push(match);
     }
     for (const matches of map.values()) {
       matches.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -939,12 +945,12 @@ export function PipelinePageClient() {
         <LoadingPanel />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-          {MATCH_STATUSES.map((status) => {
-            const matches = grouped.get(status) ?? [];
+          {PIPELINE_STAGES.map((stage) => {
+            const matches = grouped.get(stage) ?? [];
             return (
-              <section key={status} className="panel" style={{ minHeight: 240 }}>
+              <section key={stage} className="panel" style={{ minHeight: 240 }}>
                 <div className="panel-head">
-                  <h3>{titleize(status)}</h3>
+                  <h3>{titleize(stage)}</h3>
                   <Pill tone="plain">{matches.length}</Pill>
                 </div>
                 <div style={{ padding: 12, display: "grid", gap: 12 }}>

@@ -389,6 +389,30 @@ export const updateStatus = mutation({
       await promoteOldestQueuedForRegistration(ctx, match.femaleRegistrationId);
     }
 
+    const linkedInterestId = match.interestId;
+    if ((args.status === "closed" || args.status === "declined") && linkedInterestId) {
+      const interest = await ctx.db.get(linkedInterestId);
+      if (interest) {
+        await ctx.db.patch(interest._id, {
+          status: args.status,
+          adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,
+          updatedAt: now,
+        });
+      }
+
+      const flow = await ctx.db
+        .query("interestFlows")
+        .withIndex("by_interestId", (q) => q.eq("interestId", linkedInterestId))
+        .unique();
+      if (flow) {
+        await ctx.db.patch(flow._id, {
+          flowStatus: args.status,
+          closedReason: args.closedReason ?? `match_${args.status}`,
+          updatedAt: now,
+        });
+      }
+    }
+
     return args.id;
   },
 });
