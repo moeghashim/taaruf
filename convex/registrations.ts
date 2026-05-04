@@ -99,6 +99,17 @@ function hasCompletedProfile(args: Pick<
   );
 }
 
+function legacyLookingForText(args: {
+  spouseRequirement1: string;
+  spouseRequirement2: string;
+  spouseRequirement3: string;
+}) {
+  return [args.spouseRequirement1, args.spouseRequirement2, args.spouseRequirement3]
+    .map((requirement) => requirement.trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
 export const create = mutation({
   args: {
     name: v.string(),
@@ -367,6 +378,8 @@ export const updateProfile = mutation({
     const now = Date.now();
 
     const normalizedInterestSubmissionNumbers = normalizeInterestSubmissionNumbers(args.interestSubmissionNumbers);
+    const shareableBio = args.shareableBio.trim();
+    const lookingFor = legacyLookingForText(args);
     await ctx.db.patch(registration._id, {
       ethnicity: args.ethnicity.trim(),
       imageStorageIds: args.imageStorageIds,
@@ -375,7 +388,9 @@ export const updateProfile = mutation({
       spouseRequirement1: args.spouseRequirement1.trim(),
       spouseRequirement2: args.spouseRequirement2.trim(),
       spouseRequirement3: args.spouseRequirement3.trim(),
-      shareableBio: args.shareableBio.trim(),
+      shareableBio,
+      describeYourself: shareableBio,
+      lookingFor,
       photoSharingPermission: args.photoSharingPermission,
       interestSubmission: normalizedInterestSubmissionNumbers.length
         ? normalizedInterestSubmissionNumbers.join(", ")

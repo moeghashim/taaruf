@@ -24,6 +24,22 @@ function formatDate(timestamp?: number) {
   });
 }
 
+function currentText(primary?: string, fallback?: string) {
+  return primary?.trim() || fallback?.trim() || "";
+}
+
+function currentLookingFor(profile: RegistrationDoc) {
+  const requirements = [
+    profile.spouseRequirement1,
+    profile.spouseRequirement2,
+    profile.spouseRequirement3,
+  ]
+    .map((requirement) => requirement?.trim())
+    .filter((requirement): requirement is string => Boolean(requirement));
+
+  return requirements.length ? requirements.join(", ") : profile.lookingFor?.trim() || "";
+}
+
 /**
  * Body of the detail pane drawer for a single registration. Renders
  * profile facts + applicant long-form text + an editable admin notes
@@ -41,6 +57,8 @@ export function ProfileDetail({
   const [notes, setNotes] = useState(profile.adminNotes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
   const [busyAction, setBusyAction] = useState<null | "approve" | "reject" | "delete">(null);
+  const about = currentText(profile.shareableBio, profile.describeYourself);
+  const lookingFor = currentLookingFor(profile);
 
   // Reset notes whenever the visible profile changes.
   useEffect(() => {
@@ -144,7 +162,7 @@ export function ProfileDetail({
         <FactList facts={facts} />
       </div>
 
-      {profile.describeYourself && (
+      {about && (
         <>
           {sectionHeading("About")}
           <div
@@ -161,12 +179,12 @@ export function ProfileDetail({
               whiteSpace: "pre-wrap",
             }}
           >
-            “{profile.describeYourself}”
+            “{about}”
           </div>
         </>
       )}
 
-      {profile.lookingFor && (
+      {lookingFor && (
         <>
           {sectionHeading("Looking for")}
           <div
@@ -183,7 +201,7 @@ export function ProfileDetail({
               whiteSpace: "pre-wrap",
             }}
           >
-            “{profile.lookingFor}”
+            “{lookingFor}”
           </div>
         </>
       )}
