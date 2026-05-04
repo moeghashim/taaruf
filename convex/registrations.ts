@@ -179,12 +179,19 @@ export const getAll = query({
       registrations.map(async (registration) => {
         const imageStorageIds = registration.imageStorageIds || [];
         const imageUrls = await Promise.all(
-          imageStorageIds.map((storageId) => ctx.storage.getUrl(storageId))
+          imageStorageIds.map(async (storageId) => ({
+            storageId,
+            url: await ctx.storage.getUrl(storageId),
+          }))
+        );
+        const images = imageUrls.filter((image): image is { storageId: typeof image.storageId; url: string } =>
+          Boolean(image.url)
         );
 
         return {
           ...registration,
-          imageUrls: imageUrls.filter((url): url is string => Boolean(url)),
+          imageUrls: images.map((image) => image.url),
+          images,
         };
       })
     );

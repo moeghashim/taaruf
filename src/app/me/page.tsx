@@ -68,6 +68,11 @@ type UploadedImage = {
   name: string;
 };
 
+type ProfileImagePayload = {
+  storageId: string;
+  url: string;
+};
+
 type ProfileData = {
   name: string;
   gender: "male" | "female";
@@ -75,6 +80,7 @@ type ProfileData = {
   ethnicity: string;
   imageStorageIds: string[];
   imageUrls: string[];
+  images?: ProfileImagePayload[];
   prayerCommitment: PrayerCommitment;
   hijabResponse: HijabResponse;
   spouseRequirement1: string;
@@ -106,6 +112,27 @@ const photoSharingOptions = [
   { value: "no", label: "No" },
   { value: "ask_me_first", label: "Ask me first" },
 ] as const;
+
+function uploadedImagesFromProfile(registration: {
+  imageStorageIds?: string[];
+  imageUrls?: string[];
+  images?: ProfileImagePayload[];
+}) {
+  const images = Array.isArray(registration.images)
+    ? registration.images
+    : (registration.imageStorageIds || []).map((storageId, index) => ({
+        storageId,
+        url: registration.imageUrls?.[index] || "",
+      }));
+
+  return images
+    .filter((image) => image.storageId && image.url)
+    .map((image, index) => ({
+      storageId: image.storageId,
+      url: image.url,
+      name: `Uploaded image ${index + 1}`,
+    }));
+}
 
 const statusTone: Record<string, Tone> = {
   accepted: "green",
@@ -149,54 +176,130 @@ function StatusBadge({ value }: { value: string }) {
   return <Pill tone={statusTone[value] ?? "plain"}>{titleize(value)}</Pill>;
 }
 
-function InterestCard({
-  interest,
-  onAction,
-  busy,
-}: {
-  interest: DashboardInterest;
-  onAction: (body: Record<string, unknown>) => Promise<void>;
-  busy: boolean;
-}) {
-  const counterparty = interest.counterparty;
-  const canRespond =
+function viewerFinalApprovalFor(interest: DashboardInterest) {
+  return interest.direction === "inbound" ? interest.recipientFinalApproval : interest.requesterFinalApproval;
+}
+
+function counterpartyFinalApprovalFor(interest: DashboardInterest) {
+  return interest.direction === "inbound" ? interest.requesterFinalApproval : interest.recipientFinalApproval;
+}
+
+function canRespondToInterest(interest: DashboardInterest) {
+  return (
     interest.direction === "inbound" &&
     interest.visibility !== "internal_only" &&
-    (interest.flowStatus === "awaiting_inbound_response" || interest.flowStatus === "kept_open");
-  const viewerFinalApproval =
-    interest.direction === "inbound" ? interest.recipientFinalApproval : interest.requesterFinalApproval;
-  const counterpartyFinalApproval =
-    interest.direction === "inbound" ? interest.requesterFinalApproval : interest.recipientFinalApproval;
-  const canFinalApprove = Boolean(
+    (interest.flowStatus === "awaiting_inbound_response" || interest.flowStatus === "kept_open")
+  );
+}
+
+function canFinalApproveInterest(interest: DashboardInterest) {
+  return Boolean(
     interest.bioVisibleAt &&
-    viewerFinalApproval === "pending" &&
+    viewerFinalApprovalFor(interest) === "pending" &&
     interest.flowStatus !== "contact_shared" &&
     interest.flowStatus !== "declined" &&
     interest.flowStatus !== "closed"
   );
-  const canWithdraw =
+}
+
+function canWithdrawInterest(interest: DashboardInterest) {
+  return (
     (interest.direction === "outbound" || interest.direction === "private") &&
     (interest.flowStatus === "awaiting_inbound_response" ||
       interest.flowStatus === "kept_open" ||
-      interest.flowStatus === "private_documented");
-  const profileFacts: Fact[] = counterparty?.fullProfileVisible
-    ? [
-        { label: "Marital", value: titleizeValue(counterparty.maritalStatus) },
-        { label: "Education", value: titleizeValue(counterparty.education) },
-        { label: "Job", value: counterparty.job || "-" },
-        { label: "Ethnicity", value: counterparty.ethnicity || "-" },
-        { label: "Prayer", value: titleizeValue(counterparty.prayerCommitment) },
-        { label: "Hijab", value: titleizeValue(counterparty.hijabResponse) },
-        { label: "Photo permission", value: titleizeValue(counterparty.photoSharingPermission) },
-      ]
-    : [];
+      interest.flowStatus === "private_documented")
+  );
+}
+
+function profileFactsFor(counterparty: NonNullable<DashboardInterest["counterparty"]>): Fact[] {
+  return [
+    { label: "Marital", value: titleizeValue(counterparty.maritalStatus) },
+    { label: "Education", value: titleizeValue(counterparty.education) },
+    { label: "Job", value: counterparty.job || "-" },
+    { label: "Ethnicity", value: counterparty.ethnicity || "-" },
+    { label: "Prayer", value: titleizeValue(counterparty.prayerCommitment) },
+    { label: "Hijab", value: titleizeValue(counterparty.hijabResponse) },
+    { label: "Photo permission", value: titleizeValue(counterparty.photoSharingPermission) },
+  ];
+}
+
+function InterestRow({
+  interest,
+  selected,
+  onSelect,
+}: {
+  interest: DashboardInterest;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const counterparty = interest.counterparty;
+  const needsAction = canRespondToInterest(interest) || canFinalApproveInterest(interest);
 
   return (
-    <div className="interest-card">
-      <div className="interest-card-head">
+    <button
+      type="button"
+      className={`interest-row ${selected ? "selected" : ""}`}
+      onClick={onSelect}
+      aria-pressed={selected}
+    >
+      <div className="interest-row-main">
+        <h4>{counterparty?.label ?? "Unknown applicant"}</h4>
+        <p>{counterparty ? `${titleize(counterparty.gender)} · age ${counterparty.age}` : "Profile unavailable"}</p>
+      </div>
+      <div className="interest-row-meta">
+        {needsAction && <Pill tone="amber">Action Needed</Pill>}
+        <StatusBadge value={interest.flowStatus} />
+      </div>
+    </button>
+  );
+}
+
+function ProfileSideCard({
+  interest,
+  onAction,
+  busy,
+}: {
+  interest: DashboardInterest | null;
+  onAction: (body: Record<string, unknown>) => Promise<void>;
+  busy: boolean;
+}) {
+  if (!interest) {
+    return (
+      <aside className="interest-detail-panel empty">
+        <div className="interest-detail-empty">
+          <h4>No profile selected</h4>
+          <p>Select an interest to review profile details.</p>
+        </div>
+      </aside>
+    );
+  }
+
+  const counterparty = interest.counterparty;
+  if (!counterparty) {
+    return (
+      <aside className="interest-detail-panel empty">
+        <div className="interest-detail-empty">
+          <h4>Profile unavailable</h4>
+          <p>This profile could not be loaded.</p>
+        </div>
+      </aside>
+    );
+  }
+
+  const viewerFinalApproval =
+    viewerFinalApprovalFor(interest);
+  const counterpartyFinalApproval = counterpartyFinalApprovalFor(interest);
+  const canRespond = canRespondToInterest(interest);
+  const canFinalApprove = canFinalApproveInterest(interest);
+  const canWithdraw = canWithdrawInterest(interest);
+  const profileFacts = counterparty.fullProfileVisible ? profileFactsFor(counterparty) : [];
+
+  return (
+    <aside className="interest-detail-panel">
+      <div className="interest-detail-head">
         <div>
           <h3>{counterparty?.label ?? "Unknown applicant"}</h3>
-          <p>{counterparty ? `${counterparty.gender} · age ${counterparty.age}` : "Profile unavailable"}</p>
+          <p>{`${titleize(counterparty.gender)} · age ${counterparty.age}`}</p>
         </div>
         <div className="pill-row">
           <StatusBadge value={interest.flowStatus} />
@@ -256,8 +359,9 @@ function InterestCard({
                 <Image
                   src={imageUrl}
                   alt={`Profile image ${index + 1}`}
-                  width={320}
-                  height={128}
+                  width={960}
+                  height={720}
+                  sizes="(max-width: 900px) 100vw, 52vw"
                   unoptimized
                 />
               </div>
@@ -352,7 +456,7 @@ function InterestCard({
           </button>
         </div>
       )}
-    </div>
+    </aside>
   );
 }
 
@@ -369,6 +473,20 @@ function Section({
   onAction: (body: Record<string, unknown>) => Promise<void>;
   busy: boolean;
 }) {
+  const [selectedInterestId, setSelectedInterestId] = useState<string | null>(null);
+  const selectedInterest =
+    interests.find((interest) => interest.interestId === selectedInterestId) ?? interests[0] ?? null;
+
+  useEffect(() => {
+    if (!interests.length) {
+      setSelectedInterestId(null);
+      return;
+    }
+    if (!selectedInterestId || !interests.some((interest) => interest.interestId === selectedInterestId)) {
+      setSelectedInterestId(interests[0].interestId);
+    }
+  }, [interests, selectedInterestId]);
+
   return (
     <section id={sectionId(title)} className="panel applicant-section">
       <div className="panel-head">
@@ -380,11 +498,21 @@ function Section({
           {interests.length} item{interests.length === 1 ? "" : "s"}
         </span>
       </div>
-      <div className="interest-list">
+      <div className="interest-workspace">
         {interests.length ? (
-          interests.map((interest) => (
-            <InterestCard key={interest.interestId} interest={interest} onAction={onAction} busy={busy} />
-          ))
+          <>
+            <div className="interest-list">
+              {interests.map((interest) => (
+                <InterestRow
+                  key={interest.interestId}
+                  interest={interest}
+                  selected={interest.interestId === selectedInterest?.interestId}
+                  onSelect={() => setSelectedInterestId(interest.interestId)}
+                />
+              ))}
+            </div>
+            <ProfileSideCard interest={selectedInterest} onAction={onAction} busy={busy} />
+          </>
         ) : (
           <div className="coming-soon compact">
             <div className="lede">Nothing to show right now.</div>
@@ -414,7 +542,7 @@ export default function ApplicantDashboardPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/applicant/me");
+      const response = await fetch("/api/applicant/me", { cache: "no-store" });
       if (response.status === 401) {
         router.replace("/login");
         return;
@@ -436,7 +564,7 @@ export default function ApplicantDashboardPage() {
   const loadProfile = useCallback(async () => {
     setIsProfileLoading(true);
     try {
-      const response = await fetch("/api/applicant/profile");
+      const response = await fetch("/api/applicant/profile", { cache: "no-store" });
       if (response.status === 401) {
         router.replace("/login");
         return;
@@ -448,13 +576,7 @@ export default function ApplicantDashboardPage() {
         ...registration,
         interestSubmissionNumbers: ((registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
       });
-      setUploadedImages(
-        ((registration.imageStorageIds || []) as string[]).map((storageId, index) => ({
-          storageId,
-          url: registration.imageUrls?.[index] || "",
-          name: `Uploaded image ${index + 1}`,
-        }))
-      );
+      setUploadedImages(uploadedImagesFromProfile(registration));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -898,7 +1020,10 @@ export default function ApplicantDashboardPage() {
                           type="file"
                           accept="image/*"
                           multiple
-                          onChange={(event) => void handleImageUpload(event.target.files)}
+                          onChange={(event) => {
+                            void handleImageUpload(event.target.files);
+                            event.currentTarget.value = "";
+                          }}
                           disabled={isUploading || uploadedImages.length >= 3}
                         />
                       </div>

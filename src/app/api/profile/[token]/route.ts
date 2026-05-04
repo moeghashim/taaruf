@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
 
+export const dynamic = "force-dynamic";
+
 function getConvexClient() {
   const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
   if (!convexUrl) {
@@ -24,35 +26,40 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
     const imageUrls = imageStorageIds.length
       ? await convexClient.query(api.registrations.getImageUrls, { storageIds: imageStorageIds })
       : [];
+    const images = imageUrls.flatMap((image) =>
+      image.url ? [{ storageId: image.storageId, url: image.url }] : []
+    );
     const fallbackInterestSubmissionNumbers = (registration.interestSubmission || "")
       .match(/\d+/g)
       ?.slice(0, 3)
       .map((value) => Number(value))
       .filter((value) => Number.isInteger(value) && value > 0) || [];
 
-    return NextResponse.json({
-      registration: {
-        name: registration.name,
-        gender: registration.gender,
-        email: registration.email,
-        ethnicity: registration.ethnicity || "",
-        imageStorageIds,
-        imageUrls: imageUrls
-          .map((image) => image.url)
-          .filter((url): url is string => Boolean(url)),
-        prayerCommitment: registration.prayerCommitment || "",
-        hijabResponse: registration.hijabResponse || "",
-        spouseRequirement1: registration.spouseRequirement1 || "",
-        spouseRequirement2: registration.spouseRequirement2 || "",
-        spouseRequirement3: registration.spouseRequirement3 || "",
-        shareableBio: registration.shareableBio || "",
-        photoSharingPermission: registration.photoSharingPermission || "",
-        interestSubmission: registration.interestSubmission || "",
-        interestSubmissionNumbers: registration.interestSubmissionNumbers || fallbackInterestSubmissionNumbers,
-        applicantNotesToAdmin: registration.applicantNotesToAdmin || "",
-        profileCompletionStatus: registration.profileCompletionStatus || "not_started",
+    return NextResponse.json(
+      {
+        registration: {
+          name: registration.name,
+          gender: registration.gender,
+          email: registration.email,
+          ethnicity: registration.ethnicity || "",
+          imageStorageIds,
+          imageUrls: images.map((image) => image.url),
+          images,
+          prayerCommitment: registration.prayerCommitment || "",
+          hijabResponse: registration.hijabResponse || "",
+          spouseRequirement1: registration.spouseRequirement1 || "",
+          spouseRequirement2: registration.spouseRequirement2 || "",
+          spouseRequirement3: registration.spouseRequirement3 || "",
+          shareableBio: registration.shareableBio || "",
+          photoSharingPermission: registration.photoSharingPermission || "",
+          interestSubmission: registration.interestSubmission || "",
+          interestSubmissionNumbers: registration.interestSubmissionNumbers || fallbackInterestSubmissionNumbers,
+          applicantNotesToAdmin: registration.applicantNotesToAdmin || "",
+          profileCompletionStatus: registration.profileCompletionStatus || "not_started",
+        },
       },
-    });
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },

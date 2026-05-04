@@ -3,6 +3,8 @@ import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
 import { getConvexClient } from "@/lib/convex";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const sessionHash = await getApplicantSessionHash();
@@ -14,7 +16,7 @@ export async function GET() {
     const profile = await convex.query(api.applicantProfile.getProfile, { sessionHash });
     await convex.mutation(api.applicantAuth.touchSession, { sessionHash });
 
-    return NextResponse.json(profile);
+    return NextResponse.json(profile, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },

@@ -329,7 +329,14 @@ describe("interest rules", () => {
     const interest = await getInterest(t, result.interestId);
 
     expect(result.private).toBe(false);
+    expect(result.inboundInterestNotification).toMatchObject({
+      interestId: result.interestId,
+      name: "Portal Female",
+      email: "portal.female@example.com",
+    });
     expect(interest.visibility).toBe("admin_actionable");
+    expect(interest.inboundInterestNotificationSentAt).toBeTypeOf("number");
+    expect(interest.inboundInterestNotificationError).toBeUndefined();
     await expect(
       t.query(api.applicantInterests.getDashboard, {
         sessionHash: femaleSession,
@@ -385,11 +392,18 @@ describe("interest rules", () => {
     });
     expect(maleDashboard.outbound[0]?.counterparty).toMatchObject({
       name: "Visible Female",
+      fullProfileVisible: true,
+      maritalStatus: "single",
+      education: "College",
+      job: "Engineer",
+      ethnicity: "Arab",
+      spouseRequirement1: "Visible Female requirement one",
       shareableBio: "Visible Female bio text",
       label: "Visible Female",
       email: null,
       phone: null,
     });
+    expect(maleDashboard.outbound[0]?.counterparty?.imageUrls).toEqual([]);
   });
 
   test("first inbound approval keeps full profile visible but not contact details", async () => {
@@ -550,6 +564,12 @@ describe("interest rules", () => {
     });
     expect(dashboard.privateDocumented[0]?.counterparty).toMatchObject({
       name: "Documented Male",
+      fullProfileVisible: true,
+      maritalStatus: "single",
+      education: "College",
+      job: "Engineer",
+      ethnicity: "Arab",
+      spouseRequirement1: "Documented Male requirement one",
       shareableBio: "Documented Male bio text",
       label: "Documented Male",
       email: null,
@@ -571,7 +591,9 @@ describe("interest rules", () => {
     const interest = await getInterest(t, result.interestId);
 
     expect(result.private).toBe(true);
+    expect(result.inboundInterestNotification).toBeNull();
     expect(interest.visibility).toBe("internal_only");
+    expect(interest.inboundInterestNotificationSentAt).toBeUndefined();
     await expect(
       t.query(api.applicantInterests.getDashboard, {
         sessionHash: femaleSession,

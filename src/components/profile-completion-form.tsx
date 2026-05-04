@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -16,6 +16,11 @@ interface UploadedImage {
   name: string;
 }
 
+type ProfileImagePayload = {
+  storageId: string;
+  url: string;
+};
+
 interface ProfileData {
   name: string;
   gender: "male" | "female";
@@ -23,6 +28,7 @@ interface ProfileData {
   ethnicity: string;
   imageStorageIds: string[];
   imageUrls: string[];
+  images?: ProfileImagePayload[];
   prayerCommitment: PrayerCommitment;
   hijabResponse: HijabResponse;
   spouseRequirement1: string;
@@ -55,6 +61,27 @@ const photoSharingOptions = [
   { value: "ask_me_first", label: "Ask me first" },
 ] as const;
 
+function uploadedImagesFromProfile(registration: {
+  imageStorageIds?: string[];
+  imageUrls?: string[];
+  images?: ProfileImagePayload[];
+}) {
+  const images = Array.isArray(registration.images)
+    ? registration.images
+    : (registration.imageStorageIds || []).map((storageId, index) => ({
+        storageId,
+        url: registration.imageUrls?.[index] || "",
+      }));
+
+  return images
+    .filter((image) => image.storageId && image.url)
+    .map((image, index) => ({
+      storageId: image.storageId,
+      url: image.url,
+      name: `Uploaded image ${index + 1}`,
+    }));
+}
+
 export function ProfileCompletionForm({ token }: { token: string }) {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -65,34 +92,28 @@ export function ProfileCompletionForm({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
   const generateUploadUrl = useMutation(api.registrations.generateImageUploadUrl);
 
-  useEffect(() => {
-    async function loadProfile() {
-      try {
-        const response = await fetch(`/api/profile/${token}`);
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to load profile");
-        }
-        setProfile({
-          ...data.registration,
-          interestSubmissionNumbers: ((data.registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
-        });
-        setUploadedImages(
-          ((data.registration.imageStorageIds || []) as string[]).map((storageId, index) => ({
-            storageId,
-            url: data.registration.imageUrls?.[index] || "",
-            name: `Uploaded image ${index + 1}`,
-          }))
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setIsLoading(false);
+  const loadProfile = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/profile/${token}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load profile");
       }
+      setProfile({
+        ...data.registration,
+        interestSubmissionNumbers: ((data.registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
+      });
+      setUploadedImages(uploadedImagesFromProfile(data.registration));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoading(false);
     }
-
-    void loadProfile();
   }, [token]);
+
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
 
   const imageCount = useMemo(() => uploadedImages.length, [uploadedImages]);
 
@@ -188,6 +209,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         throw new Error(data.error || "Failed to save profile");
       }
 
+      await loadProfile();
       setMessage("Your profile has been saved successfully.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -325,7 +347,10 @@ export function ProfileCompletionForm({ token }: { token: string }) {
               type="file"
               accept="image/*"
               multiple
-              onChange={(event) => void handleImageUpload(event.target.files)}
+              onChange={(event) => {
+                void handleImageUpload(event.target.files);
+                event.currentTarget.value = "";
+              }}
               disabled={isUploading || uploadedImages.length >= 3}
             />
           </div>

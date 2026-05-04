@@ -168,6 +168,8 @@ export default defineSchema({
     adminStatus: v.optional(interestAdminStatus),
     notes: v.optional(v.string()),
     matchId: v.optional(v.id("matches")),
+    inboundInterestNotificationSentAt: v.optional(v.number()),
+    inboundInterestNotificationError: v.optional(v.string()),
     declineNotificationSentAt: v.optional(v.number()),
     declineNotificationError: v.optional(v.string()),
     createdAt: v.number(),

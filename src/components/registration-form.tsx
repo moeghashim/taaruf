@@ -564,7 +564,10 @@ export function RegistrationForm() {
               type="file"
               accept="image/*"
               multiple
-              onChange={(event) => void handleImageUpload(event.target.files)}
+              onChange={(event) => {
+                void handleImageUpload(event.target.files);
+                event.currentTarget.value = "";
+              }}
               disabled={uploadingImage || uploadedImages.length >= 3}
             />
           </div>

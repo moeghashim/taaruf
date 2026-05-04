@@ -110,6 +110,9 @@ export const getProfile = query({
           }))
         )
       : [];
+    const images = imageUrls.filter(
+      (image): image is { storageId: Id<"_storage">; url: string } => Boolean(image.url)
+    );
 
     return {
       registration: {
@@ -118,9 +121,8 @@ export const getProfile = query({
         email: registration.email,
         ethnicity: registration.ethnicity || "",
         imageStorageIds,
-        imageUrls: imageUrls
-          .map((image) => image.url)
-          .filter((url): url is string => Boolean(url)),
+        imageUrls: images.map((image) => image.url),
+        images,
         prayerCommitment: registration.prayerCommitment || "",
         hijabResponse: registration.hijabResponse || "",
         spouseRequirement1: registration.spouseRequirement1 || "",

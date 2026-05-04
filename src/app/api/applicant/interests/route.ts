@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
 import { getConvexClient } from "@/lib/convex";
-import { sendContactSharedEmail, sendFinalApprovalRequestedEmail } from "@/lib/email";
+import { sendContactSharedEmail, sendFinalApprovalRequestedEmail, sendInboundInterestReceivedEmail } from "@/lib/email";
 
 function getAppUrl() {
   return process.env.NEXT_PUBLIC_APP_URL
@@ -27,6 +27,50 @@ export async function POST(request: NextRequest) {
         sessionHash,
         applicantNumber: body.applicantNumber,
       });
+
+      if (result.inboundInterestNotification) {
+        const appUrl = getAppUrl();
+        if (!appUrl) {
+          const error = "App URL not configured";
+          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, {
+            interestId: result.inboundInterestNotification.interestId,
+            error,
+          });
+          return NextResponse.json({
+            success: true,
+            result,
+            message: "Interest submitted, but the recipient notification email could not be sent.",
+            notification: { sent: false, error },
+          });
+        }
+
+        const emailResult = await sendInboundInterestReceivedEmail({
+          name: result.inboundInterestNotification.name,
+          email: result.inboundInterestNotification.email,
+          applicantPortalUrl: `${appUrl}/me`,
+        });
+
+        if (!emailResult.success) {
+          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, {
+            interestId: result.inboundInterestNotification.interestId,
+            error: emailResult.error || "Failed to send inbound interest email",
+          });
+          return NextResponse.json({
+            success: true,
+            result,
+            message: "Interest submitted, but the recipient notification email could not be sent.",
+            notification: { sent: false, error: emailResult.error || "Failed to send inbound interest email" },
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          result,
+          message: "Interest submitted. The recipient has been notified.",
+          notification: { sent: true, providerId: emailResult.id },
+        });
+      }
+
       return NextResponse.json({ success: true, result });
     }
 

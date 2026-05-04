@@ -131,12 +131,20 @@ async function safeCounterparty(
  {
   if (!counterparty) return null;
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
+  const contactShared = Boolean(flow?.contactSharedAt);
   const fullProfileVisible =
     showProfile &&
-    (Boolean(flow?.bioVisibleAt || flow?.contactSharedAt) ||
+    (contactShared ||
+      Boolean(flow?.bioVisibleAt) ||
+      direction === "outbound" ||
+      direction === "private" ||
       (direction === "inbound" && viewer.gender === "female"));
-  const contactShared = Boolean(flow?.contactSharedAt);
-  const imageUrls = fullProfileVisible
+  const imagesVisible =
+    showProfile &&
+    (contactShared ||
+      (direction === "private" && viewer.gender === "female") ||
+      (direction === "inbound" && viewer.gender === "female"));
+  const imageUrls = imagesVisible
     ? await Promise.all((counterparty.imageStorageIds || []).map((storageId) => ctx.storage.getUrl(storageId)))
     : [];
 
@@ -278,11 +286,52 @@ export const submitInterestNumber = mutation({
     const flow = await ensureFlow(ctx, interest);
     await appendEvent(ctx, flow, "interest_number_submitted", registration._id);
 
+    const shouldNotifyInboundRecipient =
+      registration.gender === "male" &&
+      target.gender === "female" &&
+      interest.visibility === "admin_actionable" &&
+      !interest.inboundInterestNotificationSentAt;
+    if (shouldNotifyInboundRecipient) {
+      await ctx.db.patch(interest._id, {
+        inboundInterestNotificationSentAt: Date.now(),
+        inboundInterestNotificationError: undefined,
+        updatedAt: Date.now(),
+      });
+    }
+
     return {
       interestId: result.interestId,
       matchId: result.matchId,
       private: interest.visibility === "internal_only",
+      inboundInterestNotification: shouldNotifyInboundRecipient
+        ? {
+            interestId: interest._id,
+            name: target.name,
+            email: target.email,
+          }
+        : null,
     };
+  },
+});
+
+export const recordInboundInterestNotificationFailure = mutation({
+  args: {
+    interestId: v.id("interests"),
+    error: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const interest = await ctx.db.get(args.interestId);
+    if (!interest) {
+      throw new Error("Interest not found");
+    }
+
+    await ctx.db.patch(interest._id, {
+      inboundInterestNotificationSentAt: undefined,
+      inboundInterestNotificationError: args.error,
+      updatedAt: Date.now(),
+    });
+
+    return interest._id;
   },
 });
 

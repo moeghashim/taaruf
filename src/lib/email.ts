@@ -192,6 +192,62 @@ export async function sendApplicantMagicLoginEmail({
   }
 }
 
+export async function sendInboundInterestReceivedEmail({
+  name,
+  email,
+  applicantPortalUrl,
+}: {
+  name: string;
+  email: string;
+  applicantPortalUrl: string;
+}): Promise<{ success: boolean; error?: string; id?: string }> {
+  try {
+    const resend = getResend();
+
+    const result = await resend.emails.send({
+      from: defaultFrom,
+      to: email,
+      subject: "New interest received in 1 Plus 1",
+      text: `Assalamu Alaikum ${name},\n\nYou have received a new interest in your 1 Plus 1 applicant portal.\n\nPlease log in to review it and choose whether you want to accept, decline, or keep it open.\n\nReview interest: ${applicantPortalUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
+          <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
+          <p style="line-height: 1.6;">
+            You have received a new interest in your 1 Plus 1 applicant portal.
+          </p>
+          <p style="line-height: 1.6;">
+            Please log in to review it and choose whether you want to accept, decline, or keep it open.
+          </p>
+          <p style="margin: 24px 0;">
+            <a href="${applicantPortalUrl}" style="display: inline-block; background: #0f766e; color: white; text-decoration: none; padding: 12px 18px; border-radius: 8px; font-weight: 600;">
+              Review Interest
+            </a>
+          </p>
+          <p style="line-height: 1.6; margin-top: 24px;">
+            Warmly,<br />
+            <strong>Bader & Danielle</strong><br />
+            <strong>1 Plus 1 Leads</strong>
+          </p>
+          <p style="color: #6b7280; line-height: 1.6; font-size: 14px; margin-top: 24px;">
+            If the button above does not work, copy and paste this link into your browser:<br />
+            <span style="word-break: break-all;">${applicantPortalUrl}</span>
+          </p>
+        </div>
+      `,
+    });
+
+    if (result.error) {
+      return { success: false, error: result.error.message };
+    }
+
+    return { success: true, id: result.data?.id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to send inbound interest email:", message);
+    return { success: false, error: message };
+  }
+}
+
 export async function sendMatchNotificationEmail({
   name,
   email,
