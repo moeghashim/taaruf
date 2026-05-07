@@ -137,7 +137,7 @@ export const create = mutation({
     paymentStatus: v.optional(
       v.union(v.literal("pending"), v.literal("paid"), v.literal("failed"))
     ),
-    status: v.optional(v.literal("pending")),
+    status: v.optional(v.union(v.literal("pending"), v.literal("waitlisted"))),
     profileAccessToken: v.optional(v.string()),
     ethnicity: v.optional(v.string()),
     imageStorageIds: v.optional(v.array(v.id("_storage"))),
@@ -170,7 +170,7 @@ export const create = mutation({
       backgroundCheck: args.backgroundCheck,
       stripeSessionId: args.stripeSessionId,
       paymentStatus: args.paymentStatus ?? "pending",
-      status: args.status ?? "pending",
+      status: "pending",
       searchStatus: "active",
       createdAt: now,
       profileAccessToken: args.profileAccessToken,
@@ -220,17 +220,35 @@ export const getAll = query({
   },
 });
 
+export const getStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const allRegistrations = await ctx.db.query("registrations").collect();
+    const nonRejected = allRegistrations.filter((r) => r.status !== "rejected");
+
+    return {
+      maleCount: nonRejected.filter((r) => r.gender === "male").length,
+      femaleCount: nonRejected.filter((r) => r.gender === "female").length,
+      maleLimit: 1000,
+      femaleLimit: 1000,
+    };
+  },
+});
+
+// Compatibility for older deployed admin bundles. Original registration waitlist
+// is retired, so old writes of "waitlisted" are normalized back to "pending".
 export const updateStatus = mutation({
   args: {
     id: v.id("registrations"),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
-      v.literal("rejected")
+      v.literal("rejected"),
+      v.literal("waitlisted")
     ),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, { status: args.status });
+    await ctx.db.patch(args.id, { status: args.status === "waitlisted" ? "pending" : args.status });
     return args.id;
   },
 });

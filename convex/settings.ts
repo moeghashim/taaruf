@@ -39,3 +39,28 @@ export const set = mutation({
     }
   },
 });
+
+// Compatibility for older deployed bundles that still read registration slot caps.
+// Event capacity is authoritative, so these caps are intentionally non-limiting.
+export const getSlotLimits = query({
+  args: {},
+  handler: async () => {
+    return {
+      maleSlots: 1000,
+      femaleSlots: 1000,
+    };
+  },
+});
+
+export const updateSlotLimits = mutation({
+  args: {
+    maleSlots: v.number(),
+    femaleSlots: v.number(),
+  },
+  handler: async () => {
+    return {
+      maleSlots: 1000,
+      femaleSlots: 1000,
+    };
+  },
+});
