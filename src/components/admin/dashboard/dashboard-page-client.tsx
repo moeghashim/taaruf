@@ -5,7 +5,6 @@ import Link from "next/link";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
 import { Sparkline } from "@/components/admin/primitives/sparkline";
-import { Donut } from "@/components/admin/primitives/donut";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
 import { WhoCell } from "@/components/admin/primitives/who-cell";
 import { Ico } from "@/components/admin/primitives/icons";
@@ -127,10 +126,10 @@ export function DashboardPageClient() {
           <Sparkline data={[1, 2, 3, 4, 5, 6, completedProfiles, completedProfiles]} color="var(--accent-2)" />
         </div>
         <div className="stat">
-          <h4>Waitlisted</h4>
+          <h4>Event waitlist</h4>
           <div className="big">{data.counts.waitlisted}</div>
           <div className="sub">
-            <span>Across both genders</span>
+            <span>Across event registrations</span>
           </div>
           <Sparkline data={[0, 0, 1, 1, 2, 2, data.counts.waitlisted, data.counts.waitlisted]} color="var(--gold)" />
         </div>
@@ -180,7 +179,7 @@ export function DashboardPageClient() {
 
         <div className="panel">
           <div className="panel-head">
-            <h3>Registration pool</h3>
+            <h3>Applicant pool</h3>
             <Link href="/admin/profiles" className="btn btn-sm btn-ghost">
               View
             </Link>
@@ -194,21 +193,27 @@ export function DashboardPageClient() {
               alignItems: "center",
             }}
           >
-            <div>
-              <Donut
-                value={Math.min(data.counts.female, data.slotLimits.female)}
-                max={data.slotLimits.female}
-                label="Sisters"
-              />
-            </div>
-            <div>
-              <Donut
-                value={Math.min(data.counts.male, data.slotLimits.male)}
-                max={data.slotLimits.male}
-                label="Brothers"
-                color="var(--accent-2)"
-              />
-            </div>
+            {[
+              { label: "Sisters", value: data.counts.female, color: "var(--rose)" },
+              { label: "Brothers", value: data.counts.male, color: "var(--accent-2)" },
+            ].map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  border: "1px solid var(--line)",
+                  borderRadius: 8,
+                  padding: 18,
+                  background: "var(--panel)",
+                }}
+              >
+                <div style={{ fontSize: 11, color: "var(--mute)", marginBottom: 6 }}>
+                  {item.label}
+                </div>
+                <div style={{ fontSize: 34, lineHeight: 1, fontWeight: 650, color: item.color }}>
+                  {item.value}
+                </div>
+              </div>
+            ))}
           </div>
           <div
             style={{
@@ -219,10 +224,9 @@ export function DashboardPageClient() {
               color: "var(--mute)",
             }}
           >
-            <span>Cap: {data.slotLimits.female} sisters · {data.slotLimits.male} brothers</span>
+            <span>Registration capacity is managed per event.</span>
             <span className="mono">
-              {Math.max(0, data.slotLimits.female - data.counts.female)} sister seats ·{" "}
-              {Math.max(0, data.slotLimits.male - data.counts.male)} brother seats left
+              {data.counts.approved} approved · {data.counts.pending} pending
             </span>
           </div>
         </div>

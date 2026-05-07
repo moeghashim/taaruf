@@ -234,6 +234,26 @@ export const getPublicActive = query({
   },
 });
 
+export const getWaitlistedRegistrationIds = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("eventRegistrations")
+      .withIndex("by_registrationStatus", (q) => q.eq("registrationStatus", "waitlisted"))
+      .take(1000);
+
+    const activeRegistrationIds = new Set<Id<"registrations">>();
+    for (const row of rows) {
+      const event = await ctx.db.get(row.eventId);
+      if (event && event.status !== "completed" && event.status !== "cancelled") {
+        activeRegistrationIds.add(row.registrationId);
+      }
+    }
+
+    return [...activeRegistrationIds];
+  },
+});
+
 export const getDetail = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {

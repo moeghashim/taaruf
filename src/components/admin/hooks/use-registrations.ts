@@ -16,24 +16,21 @@ function useAllRegistrations() {
 
 /**
  * Single source of truth for the admin Profiles surface — wraps the
- * Convex queries + mutations that the legacy admin-dashboard.tsx used,
- * plus the derived state (waitlist computation, registration numbers,
- * counts, filter helpers) so each page can stay focused on rendering.
+ * Convex queries + mutations plus the derived state (event waitlist ids,
+ * registration numbers, counts, filter helpers) so each page can stay
+ * focused on rendering.
  */
 export function useRegistrations() {
   const registrationsRaw = useAllRegistrations();
-  const slotLimits = useQuery(api.settings.getSlotLimits);
+  const eventWaitlistedRegistrationIds = useQuery(api.events.getWaitlistedRegistrationIds);
 
   const updateStatusMutation = useMutation(api.registrations.updateStatus);
   const deleteMutation = useMutation(api.registrations.deleteRegistration);
   const updateNotesMutation = useMutation(api.registrations.updateAdminNotes);
-  const updateSlotsMutation = useMutation(api.settings.updateSlotLimits);
 
   const registrations = useMemo(() => registrationsRaw ?? [], [registrationsRaw]);
-  const isLoading = registrationsRaw === undefined;
-
-  const maleLimit = slotLimits?.maleSlots ?? 40;
-  const femaleLimit = slotLimits?.femaleSlots ?? 40;
+  const isLoading =
+    registrationsRaw === undefined || eventWaitlistedRegistrationIds === undefined;
 
   const sortedRegistrations = useMemo(
     () => [...registrations].sort((a, b) => a._creationTime - b._creationTime),
@@ -45,16 +42,10 @@ export function useRegistrations() {
     [sortedRegistrations]
   );
 
-  const waitlistIds = useMemo(() => {
-    const males = sortedRegistrations.filter((r) => r.gender === "male" && r.status !== "rejected");
-    const females = sortedRegistrations.filter(
-      (r) => r.gender === "female" && r.status !== "rejected"
-    );
-    const ids = new Set<string>();
-    males.slice(maleLimit).forEach((r) => ids.add(r._id));
-    females.slice(femaleLimit).forEach((r) => ids.add(r._id));
-    return ids;
-  }, [sortedRegistrations, maleLimit, femaleLimit]);
+  const waitlistIds = useMemo(
+    () => new Set<string>((eventWaitlistedRegistrationIds ?? []).map((id) => String(id))),
+    [eventWaitlistedRegistrationIds]
+  );
 
   const counts = useMemo(
     () => ({
@@ -108,9 +99,6 @@ export function useRegistrations() {
   const updateAdminNotes = (id: string, adminNotes: string) =>
     updateNotesMutation({ id: id as Id<"registrations">, adminNotes });
 
-  const updateSlotLimits = (maleSlots: number, femaleSlots: number) =>
-    updateSlotsMutation({ maleSlots, femaleSlots });
-
   return {
     isLoading,
     registrations,
@@ -118,13 +106,11 @@ export function useRegistrations() {
     registrationNumbers,
     waitlistIds,
     counts,
-    slotLimits: { male: maleLimit, female: femaleLimit, raw: slotLimits },
     filterRegistrations,
     actions: {
       updateStatus,
       deleteRegistration,
       updateAdminNotes,
-      updateSlotLimits,
     },
   };
 }

@@ -152,8 +152,7 @@ export default defineSchema({
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
-      v.literal("rejected"),
-      v.literal("waitlisted")
+      v.literal("rejected")
     ),
     searchStatus: v.optional(searchStatus),
     searchStatusNote: v.optional(v.string()),
@@ -266,6 +265,7 @@ export default defineSchema({
   })
     .index("by_eventId", ["eventId"])
     .index("by_registrationId", ["registrationId"])
+    .index("by_registrationStatus", ["registrationStatus"])
     .index("by_eventId_and_registrationId", ["eventId", "registrationId"])
     .index("by_eventId_and_gender", ["eventId", "gender"])
     .index("by_eventId_and_registrationStatus", ["eventId", "registrationStatus"])

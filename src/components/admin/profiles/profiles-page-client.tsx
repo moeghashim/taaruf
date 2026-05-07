@@ -37,7 +37,7 @@ const TAB_DEFS: Array<{ id: FilterStatus; label: string }> = [
   { id: "approved", label: "Approved" },
   { id: "pending", label: "Pending" },
   { id: "rejected", label: "Rejected" },
-  { id: "waitlisted", label: "Waitlisted" },
+  { id: "waitlisted", label: "Event waitlist" },
 ];
 
 const PROFILE_STATUS_DEFS: Array<{ id: FilterProfileCompletionStatus; label: string }> = [

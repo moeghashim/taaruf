@@ -284,7 +284,7 @@ export function ProfileDetail({
           borderTop: "1px solid var(--line-2)",
         }}
       >
-        {(profile.status === "pending" || isWaitlisted) && (
+        {profile.status === "pending" && (
           <>
             <button
               className="btn btn-primary"

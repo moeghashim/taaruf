@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { Pill } from "@/components/admin/primitives/status-pill";
-import { useRegistrations } from "@/components/admin/hooks/use-registrations";
 import { api } from "../../../../convex/_generated/api";
 
 type FixResult =
@@ -12,21 +11,12 @@ type FixResult =
   | { ok: false; error: string };
 
 /**
- * Settings surface — re-skinned slot-cap controls, payment
- * reconciliation, and admin display name editor. All actions hit
+ * Settings surface — payment reconciliation and admin display name editor. All actions hit
  * Convex mutations or the existing /api/admin/fix-payments route.
  */
 export function SettingsPageClient() {
-  const data = useRegistrations();
   const adminNameValue = useQuery(api.settings.get, { key: "admin_name" });
   const setSetting = useMutation(api.settings.set);
-
-  // Slot caps
-  const [maleSlots, setMaleSlots] = useState<string>("");
-  const [femaleSlots, setFemaleSlots] = useState<string>("");
-  const [savingSlots, setSavingSlots] = useState(false);
-  const [slotsSavedAt, setSlotsSavedAt] = useState<number | null>(null);
-  const [slotsError, setSlotsError] = useState<string | null>(null);
 
   // Admin name
   const [adminName, setAdminName] = useState("");
@@ -37,14 +27,6 @@ export function SettingsPageClient() {
   const [fixingPayments, setFixingPayments] = useState(false);
   const [fixResult, setFixResult] = useState<FixResult | null>(null);
 
-  // Hydrate inputs once the queries resolve.
-  useEffect(() => {
-    if (data.slotLimits.raw) {
-      setMaleSlots(String(data.slotLimits.raw.maleSlots));
-      setFemaleSlots(String(data.slotLimits.raw.femaleSlots));
-    }
-  }, [data.slotLimits.raw]);
-
   useEffect(() => {
     if (typeof adminNameValue === "string") {
       setAdminName(adminNameValue);
@@ -53,30 +35,7 @@ export function SettingsPageClient() {
     }
   }, [adminNameValue]);
 
-  const slotsDirty =
-    !!data.slotLimits.raw &&
-    (Number(maleSlots) !== data.slotLimits.raw.maleSlots ||
-      Number(femaleSlots) !== data.slotLimits.raw.femaleSlots);
-
   const nameDirty = adminName.trim() !== (typeof adminNameValue === "string" ? adminNameValue : "");
-
-  const saveSlots = async () => {
-    if (!slotsDirty) return;
-    const m = Number(maleSlots);
-    const f = Number(femaleSlots);
-    if (!Number.isFinite(m) || m < 0 || !Number.isFinite(f) || f < 0) {
-      setSlotsError("Slot caps must be non-negative numbers.");
-      return;
-    }
-    setSlotsError(null);
-    setSavingSlots(true);
-    try {
-      await data.actions.updateSlotLimits(m, f);
-      setSlotsSavedAt(Date.now());
-    } finally {
-      setSavingSlots(false);
-    }
-  };
 
   const saveName = async () => {
     if (!nameDirty) return;
@@ -150,7 +109,7 @@ export function SettingsPageClient() {
     <>
       <PageHead
         title={<><em>Settings</em></>}
-        subtitle="Slot caps, payment reconciliation, and admin display name."
+        subtitle="Payment reconciliation and admin display name."
       />
 
       <div style={{ display: "grid", gap: 20 }}>
@@ -187,73 +146,6 @@ export function SettingsPageClient() {
                 {savingName ? "Saving…" : "Save name"}
               </button>
             </div>
-          </div>
-        </div>
-
-        {/* Slot caps */}
-        <div className="panel">
-          <div className="panel-head">
-            <h3>Registration slot caps</h3>
-            {slotsSavedAt && Date.now() - slotsSavedAt < 4000 && <Pill tone="green">Saved</Pill>}
-          </div>
-          <div style={{ padding: 20 }}>
-            <p style={{ color: "var(--mute)", marginBottom: 16, fontSize: 13 }}>
-              Maximum non-rejected registrations per side. Anyone past the cap is auto-waitlisted
-              based on registration order.
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 480 }}>
-              <div>
-                <label htmlFor="female-slots" style={fieldLabel}>
-                  Sister cap
-                </label>
-                <input
-                  id="female-slots"
-                  type="number"
-                  min={0}
-                  value={femaleSlots}
-                  onChange={(e) => setFemaleSlots(e.target.value)}
-                  style={inputStyle}
-                />
-                <div style={{ fontSize: 11, color: "var(--mute)", marginTop: 6 }} className="mono">
-                  {data.counts.female} registered
-                </div>
-              </div>
-              <div>
-                <label htmlFor="male-slots" style={fieldLabel}>
-                  Brother cap
-                </label>
-                <input
-                  id="male-slots"
-                  type="number"
-                  min={0}
-                  value={maleSlots}
-                  onChange={(e) => setMaleSlots(e.target.value)}
-                  style={inputStyle}
-                />
-                <div style={{ fontSize: 11, color: "var(--mute)", marginTop: 6 }} className="mono">
-                  {data.counts.male} registered
-                </div>
-              </div>
-            </div>
-            <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                className="btn btn-primary"
-                onClick={saveSlots}
-                disabled={!slotsDirty || savingSlots}
-              >
-                {savingSlots ? "Saving…" : "Save caps"}
-              </button>
-              {data.counts.waitlisted > 0 && (
-                <span style={{ color: "var(--mute)", fontSize: 12 }}>
-                  {data.counts.waitlisted} currently waitlisted
-                </span>
-              )}
-            </div>
-            {slotsError && (
-              <p className="notice error" style={{ marginTop: 12 }}>
-                {slotsError}
-              </p>
-            )}
           </div>
         </div>
 

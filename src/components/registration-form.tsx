@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 import { Ico } from "@/components/admin/primitives/icons";
@@ -63,9 +63,6 @@ export function RegistrationForm() {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const stats = useQuery(api.registrations.getStats) as
-    | { maleCount: number; femaleCount: number; maleLimit: number; femaleLimit: number }
-    | undefined;
   const generateUploadUrl = useMutation(api.registrations.generateImageUploadUrl);
 
   const form = useForm({
@@ -136,9 +133,6 @@ export function RegistrationForm() {
       }
     },
   });
-
-  const isMaleFull = !!(stats && stats.maleCount >= stats.maleLimit);
-  const isFemaleFull = !!(stats && stats.femaleCount >= stats.femaleLimit);
 
   const hijabLabel = useMemo(
     () =>
@@ -284,8 +278,8 @@ export function RegistrationForm() {
                   onBlur={field.handleBlur}
                 >
                   <option value="">Select gender</option>
-                  <option value="male">Male{isMaleFull ? " (Waitlist)" : ""}</option>
-                  <option value="female">Female{isFemaleFull ? " (Waitlist)" : ""}</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
                 </select>
                 {field.state.meta.errors?.length > 0 && (
                   <p className="field-error">{field.state.meta.errors.join(", ")}</p>
@@ -687,16 +681,6 @@ export function RegistrationForm() {
             </div>
           )}
         </form.Field>
-
-        {(isMaleFull || isFemaleFull) && (
-          <p className="notice warning">
-            {isMaleFull && isFemaleFull
-              ? "Registration is full for both genders. New registrations will be placed on a waitlist."
-              : isMaleFull
-              ? "Male registration is full. New male registrations will be placed on a waitlist."
-              : "Female registration is full. New female registrations will be placed on a waitlist."}
-          </p>
-        )}
 
         {submitError && <p className="notice error">{submitError}</p>}
 

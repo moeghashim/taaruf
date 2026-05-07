@@ -137,7 +137,7 @@ export const create = mutation({
     paymentStatus: v.optional(
       v.union(v.literal("pending"), v.literal("paid"), v.literal("failed"))
     ),
-    status: v.optional(v.union(v.literal("pending"), v.literal("waitlisted"))),
+    status: v.optional(v.literal("pending")),
     profileAccessToken: v.optional(v.string()),
     ethnicity: v.optional(v.string()),
     imageStorageIds: v.optional(v.array(v.id("_storage"))),
@@ -220,41 +220,13 @@ export const getAll = query({
   },
 });
 
-export const getStats = query({
-  args: {},
-  handler: async (ctx) => {
-    const allRegistrations = await ctx.db.query("registrations").collect();
-    const nonRejected = allRegistrations.filter((r) => r.status !== "rejected");
-
-    const maleCount = nonRejected.filter((r) => r.gender === "male").length;
-    const femaleCount = nonRejected.filter((r) => r.gender === "female").length;
-
-    const maleSetting = await ctx.db
-      .query("settings")
-      .withIndex("by_key", (q) => q.eq("key", "maleSlots"))
-      .first();
-    const femaleSetting = await ctx.db
-      .query("settings")
-      .withIndex("by_key", (q) => q.eq("key", "femaleSlots"))
-      .first();
-
-    return {
-      maleCount,
-      femaleCount,
-      maleLimit: maleSetting ? parseInt(maleSetting.value) : 40,
-      femaleLimit: femaleSetting ? parseInt(femaleSetting.value) : 40,
-    };
-  },
-});
-
 export const updateStatus = mutation({
   args: {
     id: v.id("registrations"),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
-      v.literal("rejected"),
-      v.literal("waitlisted")
+      v.literal("rejected")
     ),
   },
   handler: async (ctx, args) => {

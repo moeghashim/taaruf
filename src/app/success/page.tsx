@@ -83,19 +83,6 @@ function SuccessContent() {
       body: "Your payment could not be processed. Please try registering again.",
       action: { label: "Try again", href: "/register" },
     };
-  } else if (registration.status === "waitlisted") {
-    status = {
-      tone: "warning",
-      title: "You’re on the waitlist.",
-      body:
-        "Your payment has been received. All current slots are full, so you have been placed on our waitlist. We will notify you if a spot becomes available. If you are not accepted, you will receive a full refund.",
-      bullets: [
-        "Your spot on the waitlist is secured.",
-        "You will be contacted if a slot opens up.",
-        "Your payment will be applied to your registration.",
-      ],
-      action: { label: "Return to home", href: "/" },
-    };
   } else {
     status = {
       tone: "success",
