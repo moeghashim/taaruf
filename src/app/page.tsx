@@ -1,8 +1,45 @@
 import Link from "next/link";
+import { api } from "../../convex/_generated/api";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
+import { getConvexClient } from "@/lib/convex";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+type PublicEvent = {
+  _id: string;
+  title: string;
+  eventCode: string;
+  location: string;
+  startsAt: number;
+  maleAvailable: number;
+  femaleAvailable: number;
+  maleWaitlisted: boolean;
+  femaleWaitlisted: boolean;
+};
+
+function formatEventDate(timestamp: number) {
+  return new Date(timestamp).toLocaleString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+async function getActiveEvents(): Promise<PublicEvent[]> {
+  try {
+    return await getConvexClient().query(api.events.getPublicActive, {});
+  } catch (error) {
+    console.error("Failed to load public events", error);
+    return [];
+  }
+}
+
+export default async function Home() {
+  const activeEvents = await getActiveEvents();
+
   return (
     <main data-admin className="min-h-screen">
       <div className="applicant-home">
@@ -70,6 +107,51 @@ export default function Home() {
               supported, healthy, and pleasing to Allah.
             </p>
           </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <h3>Active events</h3>
+              <p>Upcoming 1Plus1 match events currently open for applicant registration.</p>
+            </div>
+          </div>
+          {activeEvents.length ? (
+            <div className="applicant-home-events">
+              {activeEvents.map((event) => (
+                <article key={event._id} className="applicant-home-event">
+                  <div>
+                    <div className="pill-row">
+                      <span className="pill green">{event.eventCode}</span>
+                    </div>
+                    <h4>{event.title}</h4>
+                    <p>{formatEventDate(event.startsAt)} · {event.location}</p>
+                  </div>
+                  <div className="applicant-home-event-slots">
+                    <span className={`pill ${event.femaleWaitlisted ? "gold" : "green"}`}>
+                      Sisters {event.femaleWaitlisted ? "waitlist" : `${event.femaleAvailable} open`}
+                    </span>
+                    <span className={`pill ${event.maleWaitlisted ? "gold" : "green"}`}>
+                      Brothers {event.maleWaitlisted ? "waitlist" : `${event.maleAvailable} open`}
+                    </span>
+                  </div>
+                  <div className="applicant-home-event-actions">
+                    <Link href="/register" className="btn btn-primary">
+                      Apply to attend
+                    </Link>
+                    <Link href="/login" className="btn">
+                      Already registered
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="applicant-home-empty">
+              <h4>No active events right now.</h4>
+              <p>New events will appear here when registration opens.</p>
+            </div>
+          )}
         </section>
 
         <section className="panel">
