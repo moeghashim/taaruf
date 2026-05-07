@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { PageHead } from "@/components/admin/layout/page-head";
+import { Ico } from "@/components/admin/primitives/icons";
 import { Pill } from "@/components/admin/primitives/status-pill";
 
 const eventStatuses = ["draft", "scheduled", "completed", "cancelled"] as const;
@@ -54,6 +55,7 @@ export function EventsPageClient() {
   const updateAttendanceStatus = useMutation(api.events.updateAttendanceStatus);
   const requestConfirmation = useMutation(api.events.requestConfirmation);
   const backfillApril = useMutation(api.events.backfillApril2026);
+  const createRef = useRef<HTMLElement | null>(null);
   const detailRef = useRef<HTMLElement | null>(null);
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -130,12 +132,30 @@ export function EventsPageClient() {
 
   return (
     <>
-      <PageHead title={<><em>Events</em></>} subtitle="Create events, manage registration, and check attendees in." />
+      <PageHead
+        title={<><em>Events</em></>}
+        subtitle="Create events, manage registration, and check attendees in."
+        actions={
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              createRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              window.setTimeout(() => {
+                createRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+              }, 250);
+            }}
+          >
+            {Ico.plus}
+            <span>New event</span>
+          </button>
+        }
+      />
 
       {message && <div className="panel" style={{ padding: 12, marginBottom: 16 }}>{message}</div>}
 
-      <div className="grid" style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 16 }}>
-        <section className="panel" style={{ padding: 16 }}>
+      <div className="admin-events-grid" style={{ display: "grid", gridTemplateColumns: "minmax(300px, 360px) minmax(0, 1fr)", gap: 16 }}>
+        <section ref={createRef} className="panel admin-events-create" style={{ padding: 16 }}>
           <h3 style={{ marginBottom: 12 }}>Create Event</h3>
           <form onSubmit={handleCreateEvent} style={{ display: "grid", gap: 10 }}>
             <label className="field">

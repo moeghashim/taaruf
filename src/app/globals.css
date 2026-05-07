@@ -1063,6 +1063,16 @@
   [data-admin] .page-head { flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 20px; }
   [data-admin] .page-head h1 { font-size: 30px; }
   [data-admin] .page-head p { font-size: 13px; }
+  [data-admin] .page-head .btn {
+    justify-content: center;
+    width: 100%;
+  }
+  [data-admin] .admin-events-grid {
+    grid-template-columns: 1fr !important;
+  }
+  [data-admin] .admin-events-create {
+    scroll-margin-top: 76px;
+  }
 
   [data-admin] .stats { grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
   [data-admin] .stat { padding: 14px 16px; }
