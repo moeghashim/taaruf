@@ -11,11 +11,15 @@
 import type * as applicantAuth from "../applicantAuth.js";
 import type * as applicantInterests from "../applicantInterests.js";
 import type * as applicantProfile from "../applicantProfile.js";
+import type * as crons from "../crons.js";
+import type * as eventRules from "../eventRules.js";
+import type * as events from "../events.js";
 import type * as interestRules from "../interestRules.js";
 import type * as interests from "../interests.js";
 import type * as matches from "../matches.js";
 import type * as migrations_profileCompletion from "../migrations/profileCompletion.js";
 import type * as profileShares from "../profileShares.js";
+import type * as registrationNumbers from "../registrationNumbers.js";
 import type * as registrations from "../registrations.js";
 import type * as settings from "../settings.js";
 
@@ -29,11 +33,15 @@ declare const fullApi: ApiFromModules<{
   applicantAuth: typeof applicantAuth;
   applicantInterests: typeof applicantInterests;
   applicantProfile: typeof applicantProfile;
+  crons: typeof crons;
+  eventRules: typeof eventRules;
+  events: typeof events;
   interestRules: typeof interestRules;
   interests: typeof interests;
   matches: typeof matches;
   "migrations/profileCompletion": typeof migrations_profileCompletion;
   profileShares: typeof profileShares;
+  registrationNumbers: typeof registrationNumbers;
   registrations: typeof registrations;
   settings: typeof settings;
 }>;

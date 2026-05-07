@@ -80,6 +80,7 @@ export default function AdminDashboard() {
   const [newInterest, setNewInterest] = useState({
     fromRegistrationId: "",
     toRegistrationId: "",
+    eventId: "",
     source: "admin_entered",
     rank: "",
     notes: "",
@@ -101,6 +102,8 @@ export default function AdminDashboard() {
   );
   const slotLimits = useQuery(api.settings.getSlotLimits);
   const interestsQuery = useQuery(api.interests.getAll);
+  const eventsQuery = useQuery(api.events.getAll);
+  const events = useMemo(() => eventsQuery || [], [eventsQuery]);
   const interests = useMemo(
     () =>
       [...(interestsQuery || [])]
@@ -456,8 +459,8 @@ export default function AdminDashboard() {
   }
 
   async function handleCreateInterest() {
-    if (!newInterest.fromRegistrationId || !newInterest.toRegistrationId) {
-      setInterestResult("Please choose both applicants.");
+    if (!newInterest.fromRegistrationId || !newInterest.toRegistrationId || !newInterest.eventId) {
+      setInterestResult("Please choose both applicants and an event.");
       return;
     }
 
@@ -469,6 +472,8 @@ export default function AdminDashboard() {
         fromRegistrationId: newInterest.fromRegistrationId as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         toRegistrationId: newInterest.toRegistrationId as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        eventId: newInterest.eventId as any,
         source: newInterest.source as "admin_entered" | "email" | "whatsapp" | "platform_submission",
         rank: newInterest.rank ? Number(newInterest.rank) : undefined,
         notes: newInterest.notes.trim() || undefined,
@@ -477,6 +482,7 @@ export default function AdminDashboard() {
       setNewInterest({
         fromRegistrationId: "",
         toRegistrationId: "",
+        eventId: "",
         source: "admin_entered",
         rank: "",
         notes: "",
@@ -1196,6 +1202,21 @@ export default function AdminDashboard() {
                       </div>
 
                       <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2 sm:col-span-2">
+                          <label className="text-sm font-medium">Event</label>
+                          <select
+                            value={newInterest.eventId}
+                            onChange={(e) => setNewInterest((current) => ({ ...current, eventId: e.target.value }))}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="">Select event</option>
+                            {events.map((event) => (
+                              <option key={event._id} value={event._id}>
+                                {event.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <div className="space-y-2">
                           <label className="text-sm font-medium">Source</label>
                           <select

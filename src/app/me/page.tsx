@@ -56,6 +56,36 @@ type DashboardData = {
   inbound: DashboardInterest[];
   outbound: DashboardInterest[];
   privateDocumented: DashboardInterest[];
+  eligibleInterestTargets: Array<{
+    registrationId: string;
+    applicantNumber: number | null;
+    firstName: string;
+  }>;
+};
+
+type ApplicantEventData = {
+  upcoming: Array<{
+    _id: string;
+    title: string;
+    location: string;
+    startsAt: number;
+    endsAt: number;
+    status: string;
+    registration: null | {
+      registrationStatus: string;
+      attendanceStatus: string;
+    };
+  }>;
+  history: Array<{
+    _id: string;
+    registrationStatus: string;
+    attendanceStatus: string;
+    event: null | {
+      title: string;
+      startsAt: number;
+      location: string;
+    };
+  }>;
 };
 
 type PrayerCommitment = "sometimes" | "strive_five" | "always_five" | "five_and_sunnah" | "";
@@ -547,6 +577,7 @@ function Section({
 export default function ApplicantDashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [applicantNumber, setApplicantNumber] = useState("");
@@ -609,11 +640,30 @@ export default function ApplicantDashboardPage() {
     void loadProfile();
   }, [loadProfile]);
 
+  const loadEvents = useCallback(async () => {
+    try {
+      const response = await fetch("/api/applicant/events", { cache: "no-store" });
+      if (response.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Failed to load events");
+      setEventsData(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [router]);
+
+  useEffect(() => {
+    void loadEvents();
+  }, [loadEvents]);
+
   const interestHint = useMemo(() => {
     if (!data) return "";
     return data.applicant.gender === "female"
-      ? "Document a male applicant number privately. This is visible only to you and admins before a match."
-      : "Submit a female applicant number to send a visible interest for her to review.";
+      ? "Document interest in an eligible male attendee. This is visible only to you and admins before a match."
+      : "Submit an eligible female attendee number to send a visible interest for her to review.";
   }, [data]);
 
   async function runAction(body: Record<string, unknown>) {
@@ -629,7 +679,7 @@ export default function ApplicantDashboardPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Action failed");
       setMessage(typeof payload.message === "string" ? payload.message : "Updated.");
-      await load();
+      await Promise.all([load(), loadEvents()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -642,6 +692,31 @@ export default function ApplicantDashboardPage() {
     const number = Number(applicantNumber);
     await runAction({ action: "submit_number", applicantNumber: number });
     setApplicantNumber("");
+  }
+
+  async function registerForEvent(eventId: string) {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/applicant/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "register", eventId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Event registration failed");
+      setMessage(
+        payload.result?.registrationStatus === "waitlisted"
+          ? "Event registration received. You are currently waitlisted."
+          : "Event registration received. Your attendance is pending approval."
+      );
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleImageUpload(files: FileList | null) {
@@ -922,6 +997,61 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
+            <section id="events" className="panel applicant-section">
+              <div className="panel-head">
+                <div>
+                  <h3>Events</h3>
+                  <p>Register for upcoming events and review your event history.</p>
+                </div>
+              </div>
+              <div className="interest-list">
+                {(eventsData?.upcoming || []).length ? (
+                  eventsData?.upcoming.map((event) => (
+                    <div key={event._id} className="interest-row" style={{ alignItems: "center" }}>
+                      <div className="interest-row-main">
+                        <h4>{event.title}</h4>
+                        <p>
+                          {formatDate(event.startsAt)} · {event.location}
+                        </p>
+                      </div>
+                      <div className="interest-row-meta">
+                        {event.registration ? (
+                          <StatusBadge value={event.registration.registrationStatus} />
+                        ) : (
+                          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => registerForEvent(event._id)}>
+                            Register
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="coming-soon compact">
+                    <div className="lede">No upcoming events.</div>
+                  </div>
+                )}
+              </div>
+              {(eventsData?.history || []).length > 0 && (
+                <div className="profile-review-box" style={{ marginTop: 16 }}>
+                  <h4>Event history</h4>
+                  <div className="interest-list">
+                    {eventsData?.history.map((row) => (
+                      <div key={row._id} className="interest-row">
+                        <div className="interest-row-main">
+                          <h4>{row.event?.title ?? "Event"}</h4>
+                          <p>{row.event ? `${formatDate(row.event.startsAt)} · ${row.event.location}` : "-"}</p>
+                        </div>
+                        <div className="interest-row-meta">
+                          <StatusBadge value={row.registrationStatus} />
+                          <StatusBadge value={row.attendanceStatus} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+
             <div className="panel interest-submit-panel">
               <div className="panel-head">
                 <div>
@@ -948,6 +1078,23 @@ export default function ApplicantDashboardPage() {
                   <span>{data.applicant.gender === "female" ? "Document Interest" : "Submit Interest"}</span>
                 </button>
               </form>
+              {data.eligibleInterestTargets.length > 0 && (
+                <div className="profile-review-box" style={{ marginTop: 16 }}>
+                  <h4>Eligible attendees</h4>
+                  <div className="pill-row">
+                    {data.eligibleInterestTargets.map((target) => (
+                      <button
+                        key={target.registrationId}
+                        type="button"
+                        className="btn"
+                        onClick={() => setApplicantNumber(String(target.applicantNumber ?? ""))}
+                      >
+                        #{target.applicantNumber ?? "-"} {target.firstName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {message && <p className="notice success">{message}</p>}

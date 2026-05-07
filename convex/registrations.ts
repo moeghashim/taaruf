@@ -2,7 +2,8 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { createInterestWithRules } from "./interestRules";
+import { createApplicantInterestWithRules } from "./interestRules";
+import { buildRegistrationNumberMaps } from "./registrationNumbers";
 
 const prayerCommitment = v.union(
   v.literal("sometimes"),
@@ -22,6 +23,13 @@ function normalizeInterestSubmissionNumbers(values?: number[]) {
   return [...new Set((values || []).filter((value) => Number.isInteger(value) && value > 0))].slice(0, 3);
 }
 
+async function nextApplicantNumber(ctx: MutationCtx) {
+  const registrations = await ctx.db.query("registrations").take(1000);
+  return registrations.reduce((max, registration, index) => {
+    return Math.max(max, registration.applicantNumber ?? index + 1);
+  }, 0) + 1;
+}
+
 async function syncSubmittedInterestNumbers(
   ctx: MutationCtx,
   registrationId: Id<"registrations">,
@@ -35,15 +43,14 @@ async function syncSubmittedInterestNumbers(
     throw new Error("Registration not found");
   }
 
-  const registrations = [...(await ctx.db.query("registrations").take(1000))].sort(
-    (a, b) => a._creationTime - b._creationTime
+  const { registrations, byNumber: registrationNumberMap } = buildRegistrationNumberMaps(
+    await ctx.db.query("registrations").take(1000)
   );
-  const registrationNumberMap = new Map(registrations.map((item, index) => [String(index + 1), item] as const));
 
   const targetIds = new Set<string>();
 
   for (const submittedNumber of normalizedNumbers) {
-    const target = registrationNumberMap.get(String(submittedNumber));
+    const target = registrationNumberMap.get(submittedNumber);
     if (target) {
       targetIds.add(String(target._id));
     }
@@ -59,7 +66,7 @@ async function syncSubmittedInterestNumbers(
     if (registration.gender === targetRegistration.gender) continue;
 
     try {
-      await createInterestWithRules(ctx, {
+      await createApplicantInterestWithRules(ctx, {
         fromRegistrationId: registration._id,
         toRegistrationId: targetRegistration._id,
         source: "platform_submission",
@@ -67,7 +74,10 @@ async function syncSubmittedInterestNumbers(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message !== "An open interest already exists for this applicant pair") {
+      if (
+        !message.startsWith("An open interest already exists") &&
+        !message.startsWith("Both applicants must have attended the same event")
+      ) {
         throw error;
       }
     }
@@ -146,6 +156,7 @@ export const create = mutation({
     const profileCompleted = hasCompletedProfile(args);
 
     return await ctx.db.insert("registrations", {
+      applicantNumber: await nextApplicantNumber(ctx),
       name: args.name,
       age: args.age,
       gender: args.gender,

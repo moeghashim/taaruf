@@ -98,9 +98,39 @@ const interestFlowEventActor = v.union(
   v.literal("admin"),
   v.literal("system")
 );
+const eventStatus = v.union(
+  v.literal("draft"),
+  v.literal("scheduled"),
+  v.literal("completed"),
+  v.literal("cancelled")
+);
+const eventRegistrationStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("waitlisted"),
+  v.literal("rejected"),
+  v.literal("cancelled")
+);
+const eventAttendanceStatus = v.union(
+  v.literal("not_checked_in"),
+  v.literal("attended"),
+  v.literal("no_show")
+);
+const eventEligibilityStatus = v.union(
+  v.literal("approved_member"),
+  v.literal("awaiting_background_check")
+);
+const eventRegistrationEmailKind = v.union(
+  v.literal("approved"),
+  v.literal("waitlisted"),
+  v.literal("confirmation_request"),
+  v.literal("cancelled"),
+  v.literal("reminder")
+);
 
 export default defineSchema({
   registrations: defineTable({
+    applicantNumber: v.optional(v.number()),
     name: v.string(),
     age: v.number(),
     gender: v.union(v.literal("male"), v.literal("female")),
@@ -154,6 +184,7 @@ export default defineSchema({
   })
     .index("by_gender", ["gender"])
     .index("by_status", ["status"])
+    .index("by_applicantNumber", ["applicantNumber"])
     .index("by_email", ["email"])
     .index("by_stripeSessionId", ["stripeSessionId"])
     .index("by_profileAccessToken", ["profileAccessToken"]),
@@ -161,6 +192,7 @@ export default defineSchema({
   interests: defineTable({
     fromRegistrationId: v.id("registrations"),
     toRegistrationId: v.id("registrations"),
+    eventId: v.id("events"),
     rank: v.optional(v.number()),
     source: interestSource,
     status: interestStatus,
@@ -179,9 +211,80 @@ export default defineSchema({
     .index("by_toRegistrationId", ["toRegistrationId"])
     .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
     .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])
+    .index("by_fromRegistrationId_and_toRegistrationId_and_eventId", ["fromRegistrationId", "toRegistrationId", "eventId"])
     .index("by_toRegistrationId_and_status", ["toRegistrationId", "status"])
     .index("by_status", ["status"])
+    .index("by_eventId", ["eventId"])
     .index("by_matchId", ["matchId"]),
+
+  events: defineTable({
+    title: v.string(),
+    eventCode: v.string(),
+    eventMonth: v.string(),
+    series: v.string(),
+    description: v.optional(v.string()),
+    location: v.string(),
+    startsAt: v.number(),
+    endsAt: v.number(),
+    status: eventStatus,
+    maleCapacity: v.number(),
+    femaleCapacity: v.number(),
+    registrationOpensAt: v.optional(v.number()),
+    registrationClosesAt: v.optional(v.number()),
+    interestSubmissionClosesAt: v.optional(v.number()),
+    adminNotes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_startsAt", ["startsAt"])
+    .index("by_series_and_eventMonth", ["series", "eventMonth"])
+    .index("by_series_and_startsAt", ["series", "startsAt"])
+    .index("by_eventCode", ["eventCode"]),
+
+  eventRegistrations: defineTable({
+    eventId: v.id("events"),
+    registrationId: v.id("registrations"),
+    gender: v.union(v.literal("male"), v.literal("female")),
+    registrationStatus: eventRegistrationStatus,
+    attendanceStatus: eventAttendanceStatus,
+    eligibilityStatus: eventEligibilityStatus,
+    confirmedAt: v.optional(v.number()),
+    confirmationRequestedAt: v.optional(v.number()),
+    confirmationExpiresAt: v.optional(v.number()),
+    waitlistCarryoverFromEventId: v.optional(v.id("events")),
+    approvedAt: v.optional(v.number()),
+    rejectedAt: v.optional(v.number()),
+    cancelledAt: v.optional(v.number()),
+    checkedInAt: v.optional(v.number()),
+    noShowMarkedAt: v.optional(v.number()),
+    registrationReceivedEmailSentAt: v.optional(v.number()),
+    registrationReceivedEmailError: v.optional(v.string()),
+    adminNotes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_registrationId", ["registrationId"])
+    .index("by_eventId_and_registrationId", ["eventId", "registrationId"])
+    .index("by_eventId_and_gender", ["eventId", "gender"])
+    .index("by_eventId_and_registrationStatus", ["eventId", "registrationStatus"])
+    .index("by_eventId_and_gender_and_registrationStatus", ["eventId", "gender", "registrationStatus"])
+    .index("by_registrationId_and_attendanceStatus", ["registrationId", "attendanceStatus"]),
+
+  eventRegistrationEmails: defineTable({
+    eventRegistrationId: v.id("eventRegistrations"),
+    eventId: v.id("events"),
+    registrationId: v.id("registrations"),
+    kind: eventRegistrationEmailKind,
+    sentAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventRegistrationId", ["eventRegistrationId"])
+    .index("by_eventRegistrationId_and_kind", ["eventRegistrationId", "kind"])
+    .index("by_eventId_and_kind", ["eventId", "kind"]),
 
   matches: defineTable({
     maleRegistrationId: v.id("registrations"),

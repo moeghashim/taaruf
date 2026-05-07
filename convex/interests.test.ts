@@ -14,8 +14,26 @@ async function createRegistration(
   completed = true
 ) {
   return await t.run(async (ctx) => {
-    return await ctx.db.insert("registrations", {
+    const existingEvent = (await ctx.db.query("events").take(10)).find((event) => event.eventCode === "apr26");
+    const now = Date.now();
+    const eventId = existingEvent?._id ?? await ctx.db.insert("events", {
+      title: "1Plus1 Match Event - Apr26",
+      eventCode: "apr26",
+      eventMonth: "2026-04",
+      series: "1plus1_match",
+      location: "ROIC",
+      startsAt: now - 60 * 60 * 1000,
+      endsAt: now - 30 * 60 * 1000,
+      status: "completed",
+      maleCapacity: 60,
+      femaleCapacity: 60,
+      interestSubmissionClosesAt: now + 60 * 60 * 1000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const registrationId = await ctx.db.insert("registrations", {
       name,
+      applicantNumber: (await ctx.db.query("registrations").take(1000)).length + 1,
       age: 30,
       gender,
       maritalStatus: "single",
@@ -37,6 +55,43 @@ async function createRegistration(
       shareableBio: `${name} bio text`,
       photoSharingPermission: "ask_me_first",
     });
+    await ctx.db.insert("eventRegistrations", {
+      eventId,
+      registrationId,
+      gender,
+      registrationStatus: "approved",
+      attendanceStatus: "attended",
+      eligibilityStatus: "approved_member",
+      approvedAt: now,
+      checkedInAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return registrationId;
+  });
+}
+
+async function getTestEvent(t: ReturnType<typeof convexTest>) {
+  return await t.run(async (ctx) => {
+    const event = (await ctx.db.query("events").take(10)).find((row) => row.eventCode === "apr26");
+    if (!event) throw new Error("Test event not found");
+    return event._id;
+  });
+}
+
+async function createAdminInterest(
+  t: ReturnType<typeof convexTest>,
+  args: {
+    fromRegistrationId: Id<"registrations">;
+    toRegistrationId: Id<"registrations">;
+    source: "admin_entered" | "email" | "whatsapp" | "platform_submission";
+    rank?: number;
+    notes?: string;
+  }
+) {
+  return await t.mutation(api.interests.create, {
+    ...args,
+    eventId: await getTestEvent(t),
   });
 }
 
@@ -76,7 +131,7 @@ describe("interest rules", () => {
     const incompleteFemale = await createRegistration(t, "Incomplete Female", "female", false);
 
     await expect(
-      t.mutation(api.interests.create, {
+      createAdminInterest(t, {
         fromRegistrationId: completedMale,
         toRegistrationId: incompleteFemale,
         source: "admin_entered",
@@ -87,7 +142,7 @@ describe("interest rules", () => {
     const completedFemale = await createRegistration(t, "Completed Female", "female");
 
     await expect(
-      t.mutation(api.interests.create, {
+      createAdminInterest(t, {
         fromRegistrationId: incompleteMale,
         toRegistrationId: completedFemale,
         source: "admin_entered",
@@ -102,24 +157,24 @@ describe("interest rules", () => {
       ["One", "Two", "Three", "Four"].map((name) => createRegistration(t, `Cap ${name}`, "female"))
     );
 
-    const first = await t.mutation(api.interests.create, {
+    const first = await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: recipients[0],
       source: "admin_entered",
     });
-    await t.mutation(api.interests.create, {
+    await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: recipients[1],
       source: "admin_entered",
     });
-    await t.mutation(api.interests.create, {
+    await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: recipients[2],
       source: "admin_entered",
     });
 
     await expect(
-      t.mutation(api.interests.create, {
+      createAdminInterest(t, {
         fromRegistrationId: male,
         toRegistrationId: recipients[3],
         source: "admin_entered",
@@ -130,7 +185,7 @@ describe("interest rules", () => {
       id: first,
       status: "declined",
     });
-    const replacement = await t.mutation(api.interests.create, {
+    const replacement = await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: recipients[3],
       source: "admin_entered",
@@ -146,14 +201,14 @@ describe("interest rules", () => {
     const male = await createRegistration(t, "Duplicate Male", "male");
     const female = await createRegistration(t, "Duplicate Female", "female");
 
-    const first = await t.mutation(api.interests.create, {
+    const first = await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: female,
       source: "admin_entered",
     });
 
     await expect(
-      t.mutation(api.interests.create, {
+      createAdminInterest(t, {
         fromRegistrationId: male,
         toRegistrationId: female,
         source: "admin_entered",
@@ -164,7 +219,7 @@ describe("interest rules", () => {
       id: first,
       status: "closed",
     });
-    const second = await t.mutation(api.interests.create, {
+    const second = await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: female,
       source: "admin_entered",
@@ -180,12 +235,12 @@ describe("interest rules", () => {
     const male = await createRegistration(t, "Mutual Male", "male");
     const female = await createRegistration(t, "Mutual Female", "female");
 
-    await t.mutation(api.interests.create, {
+    await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: female,
       source: "admin_entered",
     });
-    const reciprocal = await t.mutation(api.interests.create, {
+    const reciprocal = await createAdminInterest(t, {
       fromRegistrationId: female,
       toRegistrationId: male,
       source: "admin_entered",
@@ -215,7 +270,7 @@ describe("interest rules", () => {
     const queuedRequester = await createRegistration(t, "Queued Requester", "female");
     const queuedTarget = await createRegistration(t, "Queued Target", "female");
 
-    const interestId = await t.mutation(api.interests.create, {
+    const interestId = await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: female,
       source: "admin_entered",
@@ -224,7 +279,7 @@ describe("interest rules", () => {
       interestId,
     });
 
-    const activeAlternative = await t.mutation(api.interests.create, {
+    const activeAlternative = await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: queuedTarget,
       source: "admin_entered",
@@ -244,7 +299,7 @@ describe("interest rules", () => {
       status: "queued",
     });
 
-    const queuedInbound = await t.mutation(api.interests.create, {
+    const queuedInbound = await createAdminInterest(t, {
       fromRegistrationId: queuedRequester,
       toRegistrationId: male,
       source: "admin_entered",
@@ -274,7 +329,7 @@ describe("interest rules", () => {
     const t = convexTest(schema, modules);
     const male = await createRegistration(t, "Decline Male", "male");
     const female = await createRegistration(t, "Decline Female", "female");
-    const interestId = await t.mutation(api.interests.create, {
+    const interestId = await createAdminInterest(t, {
       fromRegistrationId: male,
       toRegistrationId: female,
       source: "admin_entered",
@@ -352,6 +407,50 @@ describe("interest rules", () => {
           flowStatus: "awaiting_inbound_response",
         },
       ],
+    });
+  });
+
+  test("number submission resolves explicit applicant numbers before legacy fallback numbers", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Numbered Male", "male");
+    const female = await createRegistration(t, "Numbered Female", "female");
+    const maleSession = await createSession(t, male);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(female, { applicantNumber: 3 });
+      await ctx.db.insert("registrations", {
+        name: "Legacy Unnumbered Male",
+        age: 30,
+        gender: "male",
+        maritalStatus: "single",
+        education: "College",
+        job: "Engineer",
+        email: "legacy.unnumbered.male@example.com",
+        phone: "555-0100",
+        paymentStatus: "paid",
+        status: "approved",
+        searchStatus: "active",
+        createdAt: Date.now(),
+        profileCompletionStatus: "completed",
+        ethnicity: "Arab",
+        prayerCommitment: "always_five",
+        hijabResponse: "open",
+        spouseRequirement1: "Legacy requirement one",
+        spouseRequirement2: "Legacy requirement two",
+        spouseRequirement3: "Legacy requirement three",
+        shareableBio: "Legacy bio text",
+        photoSharingPermission: "ask_me_first",
+      });
+    });
+
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: maleSession,
+      applicantNumber: 3,
+    });
+
+    await expect(getInterest(t, result.interestId)).resolves.toMatchObject({
+      fromRegistrationId: male,
+      toRegistrationId: female,
     });
   });
 

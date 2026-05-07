@@ -192,6 +192,128 @@ export async function sendApplicantMagicLoginEmail({
   }
 }
 
+export async function sendEventRegistrationReceivedEmail({
+  name,
+  email,
+  eventTitle,
+  registrationStatus,
+}: {
+  name: string;
+  email: string;
+  eventTitle: string;
+  registrationStatus: string;
+}): Promise<{ success: boolean; error?: string; id?: string }> {
+  try {
+    const resend = getResend();
+    const statusLine =
+      registrationStatus === "waitlisted"
+        ? "You are currently on the waitlist for this event."
+        : "Your event registration is pending admin approval.";
+
+    const result = await resend.emails.send({
+      from: defaultFrom,
+      to: email,
+      subject: `Event registration received: ${eventTitle}`,
+      text: `Assalamu Alaikum ${name},\n\nWe received your registration for ${eventTitle}.\n\n${statusLine}\n\nWe will notify you once your attendance is approved.\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
+          <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
+          <p style="line-height: 1.6;">We received your registration for <strong>${eventTitle}</strong>.</p>
+          <p style="line-height: 1.6;">${statusLine}</p>
+          <p style="line-height: 1.6;">We will notify you once your attendance is approved.</p>
+          <p style="line-height: 1.6; margin-top: 24px;">
+            Warmly,<br />
+            <strong>Bader & Danielle</strong><br />
+            <strong>1 Plus 1 Leads</strong>
+          </p>
+        </div>
+      `,
+    });
+
+    if (result.error) {
+      return { success: false, error: result.error.message };
+    }
+
+    return { success: true, id: result.data?.id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to send event registration received email:", message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendEventRegistrationStatusEmail({
+  name,
+  email,
+  eventTitle,
+  eventDate,
+  eventLocation,
+  kind,
+}: {
+  name: string;
+  email: string;
+  eventTitle: string;
+  eventDate: string;
+  eventLocation: string;
+  kind: "approved" | "waitlisted" | "confirmation_request" | "cancelled" | "reminder";
+}): Promise<{ success: boolean; error?: string; id?: string }> {
+  const copy = {
+    approved: {
+      subject: `Approved to attend: ${eventTitle}`,
+      body: `Your attendance has been approved for ${eventTitle}.`,
+    },
+    waitlisted: {
+      subject: `Waitlist update: ${eventTitle}`,
+      body: `You are currently waitlisted for ${eventTitle}. We will follow up if a spot becomes available.`,
+    },
+    confirmation_request: {
+      subject: `Please confirm: ${eventTitle}`,
+      body: `A spot may be available for ${eventTitle}. Please confirm your participation within 48 hours.`,
+    },
+    cancelled: {
+      subject: `Event registration cancelled: ${eventTitle}`,
+      body: `Your registration for ${eventTitle} has been cancelled.`,
+    },
+    reminder: {
+      subject: `Reminder: ${eventTitle}`,
+      body: `This is a reminder for ${eventTitle}.`,
+    },
+  }[kind];
+
+  try {
+    const resend = getResend();
+    const result = await resend.emails.send({
+      from: defaultFrom,
+      to: email,
+      subject: copy.subject,
+      text: `Assalamu Alaikum ${name},\n\n${copy.body}\n\nEvent: ${eventTitle}\nWhen: ${eventDate}\nLocation: ${eventLocation}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
+          <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
+          <p style="line-height: 1.6;">${copy.body}</p>
+          <p style="line-height: 1.6;">
+            <strong>Event:</strong> ${eventTitle}<br />
+            <strong>When:</strong> ${eventDate}<br />
+            <strong>Location:</strong> ${eventLocation}
+          </p>
+          <p style="line-height: 1.6; margin-top: 24px;">
+            Warmly,<br />
+            <strong>Bader & Danielle</strong><br />
+            <strong>1 Plus 1 Leads</strong>
+          </p>
+        </div>
+      `,
+    });
+
+    if (result.error) return { success: false, error: result.error.message };
+    return { success: true, id: result.data?.id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Failed to send event registration status email:", message);
+    return { success: false, error: message };
+  }
+}
+
 export async function sendInboundInterestReceivedEmail({
   name,
   email,
