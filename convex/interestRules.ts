@@ -1,5 +1,6 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { findEligibleSharedInterestEvent } from "./eventRules";
 
 export const openInterestStatuses = ["new", "queued", "active", "deferred"] as const;
 export const slotFreeingInterestStatuses = ["declined", "withdrawn", "closed", "converted_to_match"] as const;
@@ -82,12 +83,13 @@ export function deriveInterestType(fromGender: "male" | "female") {
 async function assertNoDuplicateOpenInterest(
   ctx: ReadCtx,
   fromRegistrationId: Id<"registrations">,
-  toRegistrationId: Id<"registrations">
+  toRegistrationId: Id<"registrations">,
+  eventId: Id<"events">
 ) {
   const existingInterests = await ctx.db
     .query("interests")
-    .withIndex("by_fromRegistrationId_and_toRegistrationId", (q) =>
-      q.eq("fromRegistrationId", fromRegistrationId).eq("toRegistrationId", toRegistrationId)
+    .withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", (q) =>
+      q.eq("fromRegistrationId", fromRegistrationId).eq("toRegistrationId", toRegistrationId).eq("eventId", eventId)
     )
     .take(20);
 
@@ -96,7 +98,7 @@ async function assertNoDuplicateOpenInterest(
   );
 
   if (duplicateOpenInterest) {
-    throw new Error("An open interest already exists for this applicant pair");
+    throw new Error("An open interest already exists for this applicant pair at this event");
   }
 }
 
@@ -135,7 +137,8 @@ export async function assertOpenInterestCap(
 export async function assertCanCreateInterest(
   ctx: ReadCtx,
   fromRegistrationId: Id<"registrations">,
-  toRegistrationId: Id<"registrations">
+  toRegistrationId: Id<"registrations">,
+  eventId: Id<"events">
 ) {
   if (fromRegistrationId === toRegistrationId) {
     throw new Error("Applicant cannot express interest in themselves");
@@ -148,7 +151,7 @@ export async function assertCanCreateInterest(
   assertProfileCompleted(fromRegistration, "Requester");
   assertProfileCompleted(toRegistration, "Recipient");
   await assertOpenInterestCap(ctx, fromRegistrationId);
-  await assertNoDuplicateOpenInterest(ctx, fromRegistrationId, toRegistrationId);
+  await assertNoDuplicateOpenInterest(ctx, fromRegistrationId, toRegistrationId, eventId);
 
   return {
     fromRegistration,
@@ -161,12 +164,13 @@ export async function assertCanCreateInterest(
 async function findReciprocalOpenInterest(
   ctx: ReadCtx,
   fromRegistrationId: Id<"registrations">,
-  toRegistrationId: Id<"registrations">
+  toRegistrationId: Id<"registrations">,
+  eventId: Id<"events">
 ) {
   const reciprocalInterests = await ctx.db
     .query("interests")
-    .withIndex("by_fromRegistrationId_and_toRegistrationId", (q) =>
-      q.eq("fromRegistrationId", fromRegistrationId).eq("toRegistrationId", toRegistrationId)
+    .withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", (q) =>
+      q.eq("fromRegistrationId", fromRegistrationId).eq("toRegistrationId", toRegistrationId).eq("eventId", eventId)
     )
     .take(20);
 
@@ -281,20 +285,28 @@ export async function createInterestWithRules(
   args: {
     fromRegistrationId: Id<"registrations">;
     toRegistrationId: Id<"registrations">;
+    eventId: Id<"events">;
     rank?: number;
     source: InterestSource;
     notes?: string;
   }
 ) {
+  const event = await ctx.db.get(args.eventId);
+  if (!event) {
+    throw new Error("Interest event not found");
+  }
+
   const { visibility, initialStatus } = await assertCanCreateInterest(
     ctx,
     args.fromRegistrationId,
-    args.toRegistrationId
+    args.toRegistrationId,
+    args.eventId
   );
   const now = Date.now();
   const interestId = await ctx.db.insert("interests", {
     fromRegistrationId: args.fromRegistrationId,
     toRegistrationId: args.toRegistrationId,
+    eventId: args.eventId,
     rank: args.rank,
     source: args.source,
     status: initialStatus,
@@ -318,7 +330,8 @@ export async function createInterestWithRules(
   const reciprocalInterest = await findReciprocalOpenInterest(
     ctx,
     args.toRegistrationId,
-    args.fromRegistrationId
+    args.fromRegistrationId,
+    args.eventId
   );
   if (!reciprocalInterest || reciprocalInterest.status === "queued") {
     return { interestId, matchId: null };
@@ -326,6 +339,27 @@ export async function createInterestWithRules(
 
   const matchId = await createMutualInterestMatch(ctx, interest, reciprocalInterest);
   return { interestId, matchId };
+}
+
+export async function createApplicantInterestWithRules(
+  ctx: MutationCtx,
+  args: {
+    fromRegistrationId: Id<"registrations">;
+    toRegistrationId: Id<"registrations">;
+    rank?: number;
+    source: InterestSource;
+    notes?: string;
+  }
+) {
+  const event = await findEligibleSharedInterestEvent(ctx, args.fromRegistrationId, args.toRegistrationId);
+  if (!event) {
+    throw new Error("Both applicants must have attended the same event within the active interest window");
+  }
+
+  return await createInterestWithRules(ctx, {
+    ...args,
+    eventId: event._id,
+  });
 }
 
 export async function activateInterestAndQueueCompetitors(

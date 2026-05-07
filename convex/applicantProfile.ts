@@ -2,7 +2,8 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { createInterestWithRules } from "./interestRules";
+import { createApplicantInterestWithRules } from "./interestRules";
+import { buildRegistrationNumberMaps } from "./registrationNumbers";
 
 const prayerCommitment = v.union(
   v.literal("sometimes"),
@@ -49,14 +50,13 @@ async function syncSubmittedInterestNumbers(
   const normalizedNumbers = normalizeInterestSubmissionNumbers(interestSubmissionNumbers);
   if (!normalizedNumbers.length) return;
 
-  const registrations = [...(await ctx.db.query("registrations").take(1000))].sort(
-    (a, b) => a._creationTime - b._creationTime
+  const { registrations, byNumber: registrationNumberMap } = buildRegistrationNumberMaps(
+    await ctx.db.query("registrations").take(1000)
   );
-  const registrationNumberMap = new Map(registrations.map((item, index) => [String(index + 1), item] as const));
   const targetIds = new Set<Id<"registrations">>();
 
   for (const submittedNumber of normalizedNumbers) {
-    const target = registrationNumberMap.get(String(submittedNumber));
+    const target = registrationNumberMap.get(submittedNumber);
     if (target) {
       targetIds.add(target._id);
     }
@@ -70,7 +70,7 @@ async function syncSubmittedInterestNumbers(
     if (registration.gender === targetRegistration.gender) continue;
 
     try {
-      await createInterestWithRules(ctx, {
+      await createApplicantInterestWithRules(ctx, {
         fromRegistrationId: registration._id,
         toRegistrationId: targetRegistration._id,
         source: "platform_submission",
@@ -78,7 +78,10 @@ async function syncSubmittedInterestNumbers(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message !== "An open interest already exists for this applicant pair") {
+      if (
+        !message.startsWith("An open interest already exists") &&
+        !message.startsWith("Both applicants must have attended the same event")
+      ) {
         throw error;
       }
     }

@@ -39,12 +39,14 @@ export const getAll = query({
         const fromRegistration = await ctx.db.get(interest.fromRegistrationId);
         const toRegistration = await ctx.db.get(interest.toRegistrationId);
         const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+        const event = interest.eventId ? await ctx.db.get(interest.eventId) : null;
 
         return {
           ...interest,
           fromRegistration,
           toRegistration,
           match,
+          event,
         };
       })
     );
@@ -55,6 +57,7 @@ export const create = mutation({
   args: {
     fromRegistrationId: v.id("registrations"),
     toRegistrationId: v.id("registrations"),
+    eventId: v.id("events"),
     rank: v.optional(v.number()),
     source: interestSource,
     notes: v.optional(v.string()),

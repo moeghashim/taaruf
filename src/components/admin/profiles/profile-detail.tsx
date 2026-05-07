@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
 import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
 import type { RegistrationDoc } from "@/components/admin/hooks/use-registrations";
@@ -54,6 +57,9 @@ export function ProfileDetail({
   onDelete,
   onClose,
 }: Props) {
+  const eventHistory = useQuery(api.events.getByRegistration, {
+    registrationId: profile._id as Id<"registrations">,
+  });
   const [notes, setNotes] = useState(profile.adminNotes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
   const [busyAction, setBusyAction] = useState<null | "approve" | "reject" | "delete">(null);
@@ -205,6 +211,42 @@ export function ProfileDetail({
           </div>
         </>
       )}
+
+      {sectionHeading("Events")}
+      <div style={{ display: "grid", gap: 8, marginBottom: 24 }}>
+        {eventHistory === undefined ? (
+          <div style={{ color: "var(--mute)", fontSize: 12 }}>Loading events...</div>
+        ) : eventHistory.length ? (
+          eventHistory.map((row) => (
+            <div
+              key={row._id}
+              style={{
+                border: "1px solid var(--line)",
+                borderRadius: 6,
+                padding: 10,
+                display: "grid",
+                gap: 6,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <strong style={{ fontSize: 13 }}>{row.event?.title ?? "Event"}</strong>
+                <span className="mono" style={{ color: "var(--mute)", fontSize: 11 }}>
+                  {formatDate(row.event?.startsAt)}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <StatusPill status={row.registrationStatus} />
+                <StatusPill status={row.attendanceStatus} />
+                <Pill tone={row.eligibilityStatus === "approved_member" ? "green" : "gold"}>
+                  {row.eligibilityStatus.replace(/_/g, " ")}
+                </Pill>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div style={{ color: "var(--mute)", fontSize: 12 }}>No event history yet.</div>
+        )}
+      </div>
 
       {sectionHeading("Admin notes")}
       <textarea

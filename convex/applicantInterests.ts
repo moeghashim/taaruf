@@ -3,11 +3,15 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
-  createInterestWithRules,
+  listEligibleInterestTargets,
+} from "./eventRules";
+import {
+  createApplicantInterestWithRules,
   createMatchFromInterest,
   demoteOpenInterestsInvolvingRegistration,
   promoteOldestQueuedForRegistration,
 } from "./interestRules";
+import { buildRegistrationNumberMaps } from "./registrationNumbers";
 
 const KEEP_OPEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -42,12 +46,7 @@ function requireApprovedForInterestAction(registration: Registration) {
 
 async function getRegistrationNumberMap(ctx: ReadCtx) {
   const registrations = await ctx.db.query("registrations").take(1000);
-  const sorted = [...registrations].sort((a, b) => a._creationTime - b._creationTime);
-  return {
-    registrations: sorted,
-    byId: new Map(sorted.map((registration, index) => [registration._id, index + 1] as const)),
-    byNumber: new Map(sorted.map((registration, index) => [index + 1, registration] as const)),
-  };
+  return buildRegistrationNumberMaps(registrations);
 }
 
 function initialFlowStatusForInterest(interest: Interest) {
@@ -221,6 +220,7 @@ export const getDashboard = query({
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const { byId } = await getRegistrationNumberMap(ctx);
+    const eligibleTargetIds = await listEligibleInterestTargets(ctx, registration);
     const inboundRows = await ctx.db
       .query("interests")
       .withIndex("by_toRegistrationId", (q) => q.eq("toRegistrationId", registration._id))
@@ -263,6 +263,17 @@ export const getDashboard = query({
       privateDocumented: await Promise.all(
         privateDocumented.map((interest) => serializeInterest(ctx, registration, interest, byId, "private"))
       ),
+      eligibleInterestTargets: await Promise.all(
+        [...eligibleTargetIds].map(async (registrationId) => {
+          const target = await ctx.db.get(registrationId);
+          if (!target) return null;
+          return {
+            registrationId: target._id,
+            applicantNumber: byId.get(target._id) ?? null,
+            firstName: target.name.trim().split(/\s+/)[0] || target.name,
+          };
+        })
+      ).then((rows) => rows.filter((row): row is NonNullable<typeof row> => Boolean(row))),
     };
   },
 });
@@ -282,7 +293,7 @@ export const submitInterestNumber = mutation({
     if (target._id === registration._id) throw new Error("Applicant cannot express interest in themselves");
     if (target.gender === registration.gender) throw new Error("Interest must be between opposite-gender applicants");
 
-    const result = await createInterestWithRules(ctx, {
+    const result = await createApplicantInterestWithRules(ctx, {
       fromRegistrationId: registration._id,
       toRegistrationId: target._id,
       source: "platform_submission",
