@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -54,6 +54,7 @@ export function EventsPageClient() {
   const updateAttendanceStatus = useMutation(api.events.updateAttendanceStatus);
   const requestConfirmation = useMutation(api.events.requestConfirmation);
   const backfillApril = useMutation(api.events.backfillApril2026);
+  const detailRef = useRef<HTMLElement | null>(null);
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const detail = useQuery(
@@ -74,6 +75,12 @@ export function EventsPageClient() {
   });
 
   const sortedEvents = useMemo(() => events || [], [events]);
+  const isBackfillReady = Boolean(backfillStatus?.readyToRequireInterestEventId);
+
+  useEffect(() => {
+    if (!detail?._id || detail._id !== selectedEventId) return;
+    detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [detail?._id, selectedEventId]);
 
   async function handleCreateEvent(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -169,17 +176,19 @@ export function EventsPageClient() {
             </div>
             <button className="btn btn-primary" type="submit">Create</button>
           </form>
-          <button
-            className="btn"
-            type="button"
-            style={{ marginTop: 12, width: "100%" }}
-            onClick={async () => {
-              const result = await backfillApril({});
-              setMessage(`Backfill complete. Created ${result.attendanceRows} attendance row(s), patched ${result.patchedInterests} interest(s).`);
-            }}
-          >
-            Run Apr26 Backfill
-          </button>
+          {backfillStatus && !isBackfillReady && (
+            <button
+              className="btn"
+              type="button"
+              style={{ marginTop: 12, width: "100%" }}
+              onClick={async () => {
+                const result = await backfillApril({});
+                setMessage(`Backfill complete. Created ${result.attendanceRows} attendance row(s), patched ${result.patchedInterests} interest(s).`);
+              }}
+            >
+              Run Apr26 Backfill
+            </button>
+          )}
           {backfillStatus && (
             <div style={{ marginTop: 12, fontSize: 12, color: "var(--ink-2)", display: "grid", gap: 4 }}>
               <div>Apr26 event: {backfillStatus.aprilEventExists ? "ready" : "missing"}</div>
@@ -220,7 +229,7 @@ export function EventsPageClient() {
       </div>
 
       {detail && (
-        <section className="panel" style={{ padding: 16, marginTop: 16 }}>
+        <section ref={detailRef} className="panel" style={{ padding: 16, marginTop: 16, scrollMarginTop: 96 }}>
           <div className="panel-head">
             <div>
               <h3>{detail.title}</h3>
@@ -235,6 +244,21 @@ export function EventsPageClient() {
               {eventStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
             </select>
           </div>
+          {(detail.status === "completed" || detail.status === "cancelled") && (
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                background: "var(--bg-tint)",
+                borderRadius: 6,
+                padding: "10px 12px",
+                color: "var(--ink-2)",
+                fontSize: 12,
+                marginBottom: 12,
+              }}
+            >
+              Notification actions are hidden for {detail.status} events.
+            </div>
+          )}
           <div className="interest-list">
             {detail.registrations.map((row) => (
               <div key={row._id} className="interest-row">
@@ -265,27 +289,31 @@ export function EventsPageClient() {
                   >
                     {attendanceStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
                   </select>
-                  <button type="button" className="btn" onClick={() => requestConfirmation({ eventRegistrationId: row._id })}>
-                    Request Confirm
-                  </button>
-                  <select
-                    value={emailKindByRegistration[row._id] ?? defaultEmailKind(row.registrationStatus)}
-                    onChange={(event) =>
-                      setEmailKindByRegistration((current) => ({
-                        ...current,
-                        [row._id]: event.target.value as (typeof emailKinds)[number],
-                      }))
-                    }
-                  >
-                    {emailKinds.map((kind) => <option key={kind} value={kind}>{titleize(kind)}</option>)}
-                  </select>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => sendEventEmail(row._id, emailKindByRegistration[row._id] ?? defaultEmailKind(row.registrationStatus))}
-                  >
-                    Send Email
-                  </button>
+                  {detail.status !== "completed" && detail.status !== "cancelled" && (
+                    <>
+                      <button type="button" className="btn" onClick={() => requestConfirmation({ eventRegistrationId: row._id })}>
+                        Request Confirm
+                      </button>
+                      <select
+                        value={emailKindByRegistration[row._id] ?? defaultEmailKind(row.registrationStatus)}
+                        onChange={(event) =>
+                          setEmailKindByRegistration((current) => ({
+                            ...current,
+                            [row._id]: event.target.value as (typeof emailKinds)[number],
+                          }))
+                        }
+                      >
+                        {emailKinds.map((kind) => <option key={kind} value={kind}>{titleize(kind)}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => sendEventEmail(row._id, emailKindByRegistration[row._id] ?? defaultEmailKind(row.registrationStatus))}
+                      >
+                        Send Email
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

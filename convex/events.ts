@@ -456,6 +456,11 @@ export const requestConfirmation = mutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
+    const event = await ctx.db.get(row.eventId);
+    if (!event) throw new Error("Event not found");
+    if (event.status === "completed" || event.status === "cancelled") {
+      throw new Error("Notification actions are locked for completed or cancelled events");
+    }
     const now = Date.now();
     await ctx.db.patch(row._id, {
       confirmationRequestedAt: now,
@@ -561,6 +566,9 @@ export const claimEventRegistrationEmail = mutation({
     if (!row) throw new Error("Event registration not found");
     const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(row.registrationId)]);
     if (!event || !registration) throw new Error("Event registration is missing related records");
+    if (event.status === "completed" || event.status === "cancelled") {
+      throw new Error("Notification actions are locked for completed or cancelled events");
+    }
 
     const existing = await ctx.db
       .query("eventRegistrationEmails")

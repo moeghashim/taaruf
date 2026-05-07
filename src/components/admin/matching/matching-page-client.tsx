@@ -24,6 +24,7 @@ type InterestRecord = Doc<"interests"> & {
   fromRegistration: RegistrationWithImages | null;
   toRegistration: RegistrationWithImages | null;
   match: Doc<"matches"> | null;
+  event: Doc<"events"> | null;
 };
 
 type MatchRecord = Doc<"matches"> & {
@@ -72,6 +73,11 @@ function formatDateTime(timestamp?: number) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function eventLabel(event: Doc<"events"> | null) {
+  if (!event) return "Unknown event";
+  return event.eventCode ? `${event.title} (${event.eventCode})` : event.title;
 }
 
 function isOpenInterest(status: InterestStatus) {
@@ -652,6 +658,19 @@ function InterestRow({
         </div>
       </td>
       <td>
+        <div style={{ display: "grid", gap: 6 }}>
+          <Pill tone={interest.event?.series === "manual_admin" ? "gold" : "green"}>
+            {interest.event?.eventCode ?? "event"}
+          </Pill>
+          <div style={{ color: "var(--ink-2)", fontSize: 12 }}>{interest.event?.title ?? "Unknown event"}</div>
+          {interest.event?.startsAt && (
+            <div className="mono" style={{ color: "var(--mute)", fontSize: 11 }}>
+              {formatDate(interest.event.startsAt)}
+            </div>
+          )}
+        </div>
+      </td>
+      <td>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           <StatusPill status={interest.status} />
           <StatusPill status={interest.adminStatus ?? "pending"} />
@@ -707,8 +726,17 @@ export function InterestsPageClient() {
   const [status, setStatus] = useState<InterestStatus | "all">("all");
   const [visibility, setVisibility] = useState<"all" | "internal_only" | "admin_actionable">("all");
   const [adminStatus, setAdminStatus] = useState<InterestAdminStatus | "all">("all");
+  const [eventFilter, setEventFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+
+  const eventOptions = useMemo(() => {
+    const byId = new Map<string, Doc<"events">>();
+    for (const interest of data.interests) {
+      if (interest.event) byId.set(interest.event._id, interest.event);
+    }
+    return [...byId.values()].sort((a, b) => b.startsAt - a.startsAt);
+  }, [data.interests]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -716,14 +744,23 @@ export function InterestsPageClient() {
       .filter((interest) => status === "all" || interest.status === status)
       .filter((interest) => visibility === "all" || interest.visibility === visibility)
       .filter((interest) => adminStatus === "all" || (interest.adminStatus ?? "pending") === adminStatus)
+      .filter((interest) => eventFilter === "all" || interest.eventId === eventFilter)
       .filter((interest) => {
         if (!q) return true;
-        return [interest.fromRegistration?.name, interest.toRegistration?.name, interest.notes, interest.source]
+        return [
+          interest.fromRegistration?.name,
+          interest.toRegistration?.name,
+          interest.notes,
+          interest.source,
+          interest.event?.title,
+          interest.event?.eventCode,
+          interest.event?.eventMonth,
+        ]
           .filter(Boolean)
           .some((value) => value!.toLowerCase().includes(q));
       })
       .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [adminStatus, data.interests, search, status, visibility]);
+  }, [adminStatus, data.interests, eventFilter, search, status, visibility]);
 
   return (
     <>
@@ -775,6 +812,27 @@ export function InterestsPageClient() {
                 {item === "all" ? "All admin" : titleize(item)}
               </button>
             ))}
+            <select
+              value={eventFilter}
+              onChange={(event) => setEventFilter(event.target.value)}
+              style={{
+                height: 34,
+                border: "1px solid var(--line)",
+                borderRadius: 6,
+                background: "var(--panel)",
+                padding: "0 9px",
+                fontSize: 12,
+                maxWidth: 260,
+              }}
+              aria-label="Filter by event"
+            >
+              <option value="all">All events</option>
+              {eventOptions.map((event) => (
+                <option key={event._id} value={event._id}>
+                  {eventLabel(event)}
+                </option>
+              ))}
+            </select>
             <span className="mono" style={{ marginLeft: "auto", color: "var(--mute)" }}>
               {filtered.length} shown
             </span>
@@ -786,6 +844,7 @@ export function InterestsPageClient() {
               <thead>
                 <tr>
                   <th>Applicants</th>
+                  <th>Event</th>
                   <th>Status</th>
                   <th>Change</th>
                   <th>Notes</th>
