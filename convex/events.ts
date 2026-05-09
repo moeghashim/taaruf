@@ -37,6 +37,11 @@ const eventRegistrationEmailKind = v.union(
   v.literal("cancelled"),
   v.literal("reminder")
 );
+const carryoverSourceStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("waitlisted")
+);
 
 type ReadCtx = QueryCtx | MutationCtx;
 type Gender = "male" | "female";
@@ -160,6 +165,87 @@ async function carryOverWaitlist(ctx: MutationCtx, event: Doc<"events">, overrid
   return { carried, previousEventId: previousEvent._id };
 }
 
+async function carryOverRegistrationsFromEvent(
+  ctx: MutationCtx,
+  args: {
+    sourceEventId: Id<"events">;
+    targetEvent: Doc<"events">;
+    sourceStatuses: Array<"pending" | "approved" | "waitlisted">;
+    overrideCapacity?: boolean;
+  }
+) {
+  if (args.sourceEventId === args.targetEvent._id) {
+    throw new Error("Choose a different source event");
+  }
+
+  const sourceEvent = await ctx.db.get(args.sourceEventId);
+  if (!sourceEvent) throw new Error("Source event not found");
+
+  let copied = 0;
+  let alreadyExists = 0;
+  let skippedCapacity = 0;
+  let skippedMissingRegistration = 0;
+
+  for (const sourceStatus of args.sourceStatuses) {
+    const rows = await ctx.db
+      .query("eventRegistrations")
+      .withIndex("by_eventId_and_registrationStatus", (q) =>
+        q.eq("eventId", sourceEvent._id).eq("registrationStatus", sourceStatus)
+      )
+      .take(500);
+
+    for (const row of rows.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime)) {
+      const registration = await ctx.db.get(row.registrationId);
+      if (!registration) {
+        skippedMissingRegistration += 1;
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("eventRegistrations")
+        .withIndex("by_eventId_and_registrationId", (q) =>
+          q.eq("eventId", args.targetEvent._id).eq("registrationId", registration._id)
+        )
+        .unique();
+      if (existing) {
+        alreadyExists += 1;
+        continue;
+      }
+
+      const status = args.overrideCapacity
+        ? "pending" as const
+        : await registrationStatusForCapacity(ctx, args.targetEvent, registration.gender);
+      if (status !== "pending") {
+        skippedCapacity += 1;
+        continue;
+      }
+
+      const now = Date.now();
+      await ctx.db.insert("eventRegistrations", {
+        eventId: args.targetEvent._id,
+        registrationId: registration._id,
+        gender: registration.gender,
+        registrationStatus: "pending",
+        attendanceStatus: "not_checked_in",
+        eligibilityStatus: deriveEligibilityStatus(registration),
+        waitlistCarryoverFromEventId: sourceEvent._id,
+        createdAt: now,
+        updatedAt: now,
+      });
+      copied += 1;
+    }
+  }
+
+  return {
+    copied,
+    alreadyExists,
+    skippedCapacity,
+    skippedMissingRegistration,
+    sourceEventId: sourceEvent._id,
+    targetEventId: args.targetEvent._id,
+  };
+}
+
 export const getAll = query({
   args: {},
   handler: async (ctx) => {
@@ -199,7 +285,10 @@ export const getPublicActive = query({
       .order("asc")
       .take(20);
 
-    const scheduledEvents = events.filter((event) => event.status === "scheduled").slice(0, 4);
+    const scheduledEvents = events
+      .filter((event) => event.status === "scheduled")
+      .sort((a, b) => a.startsAt - b.startsAt || b._creationTime - a._creationTime)
+      .slice(0, 4);
 
     return await Promise.all(
       scheduledEvents.map(async (event) => {
@@ -263,9 +352,26 @@ export const getDetail = query({
       .query("eventRegistrations")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
+    const linkedInterest = await ctx.db
+      .query("interests")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    const linkedEmail = await ctx.db
+      .query("eventRegistrationEmails")
+      .withIndex("by_eventId_and_kind", (q) => q.eq("eventId", args.eventId))
+      .first();
+    const deleteBlockedReason = rows.length
+      ? "Cannot delete an event after someone has signed up."
+      : linkedInterest
+        ? "Cannot delete an event linked to interest history."
+        : linkedEmail
+          ? "Cannot delete an event linked to email history."
+          : null;
     return {
       ...event,
       interestSubmissionClosesAt: interestSubmissionClosesAt(event),
+      canDelete: deleteBlockedReason === null,
+      deleteBlockedReason,
       registrations: await Promise.all(rows.map((row) => serializeEventRegistration(ctx, row))),
     };
   },
@@ -408,6 +514,70 @@ export const update = mutation({
       updatedAt: Date.now(),
     });
     return args.eventId;
+  },
+});
+
+export const deleteEvent = mutation({
+  args: {
+    eventId: v.id("events"),
+  },
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+
+    const existingRegistration = await ctx.db
+      .query("eventRegistrations")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (existingRegistration) {
+      throw new Error("Cannot delete an event after someone has signed up.");
+    }
+
+    const linkedInterest = await ctx.db
+      .query("interests")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (linkedInterest) {
+      throw new Error("Cannot delete an event linked to interest history.");
+    }
+
+    const linkedEmail = await ctx.db
+      .query("eventRegistrationEmails")
+      .withIndex("by_eventId_and_kind", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (linkedEmail) {
+      throw new Error("Cannot delete an event linked to email history.");
+    }
+
+    await ctx.db.delete(args.eventId);
+    return args.eventId;
+  },
+});
+
+export const carryOverRegistrations = mutation({
+  args: {
+    sourceEventId: v.id("events"),
+    targetEventId: v.id("events"),
+    sourceStatuses: v.array(carryoverSourceStatus),
+    overrideCapacity: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const targetEvent = await ctx.db.get(args.targetEventId);
+    if (!targetEvent) throw new Error("Target event not found");
+    if (targetEvent.status === "completed" || targetEvent.status === "cancelled") {
+      throw new Error("Cannot carry registrations into a completed or cancelled event");
+    }
+    const sourceStatuses = [...new Set(args.sourceStatuses)];
+    if (!sourceStatuses.length) {
+      throw new Error("Select at least one source status");
+    }
+
+    return await carryOverRegistrationsFromEvent(ctx, {
+      sourceEventId: args.sourceEventId,
+      targetEvent,
+      sourceStatuses,
+      overrideCapacity: args.overrideCapacity,
+    });
   },
 });
 

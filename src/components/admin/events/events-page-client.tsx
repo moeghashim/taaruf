@@ -12,6 +12,7 @@ const eventStatuses = ["draft", "scheduled", "completed", "cancelled"] as const;
 const registrationStatuses = ["pending", "approved", "waitlisted", "rejected", "cancelled"] as const;
 const attendanceStatuses = ["not_checked_in", "attended", "no_show"] as const;
 const emailKinds = ["approved", "waitlisted", "confirmation_request", "cancelled", "reminder"] as const;
+const carryoverStatuses = ["waitlisted", "pending", "approved"] as const;
 
 function titleize(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -51,9 +52,11 @@ export function EventsPageClient() {
   const backfillStatus = useQuery(api.events.verifyEventBackfill);
   const createEvent = useMutation(api.events.create);
   const updateEvent = useMutation(api.events.update);
+  const deleteEvent = useMutation(api.events.deleteEvent);
   const updateRegistrationStatus = useMutation(api.events.updateRegistrationStatus);
   const updateAttendanceStatus = useMutation(api.events.updateAttendanceStatus);
   const requestConfirmation = useMutation(api.events.requestConfirmation);
+  const carryOverRegistrations = useMutation(api.events.carryOverRegistrations);
   const backfillApril = useMutation(api.events.backfillApril2026);
   const createRef = useRef<HTMLElement | null>(null);
   const detailRef = useRef<HTMLElement | null>(null);
@@ -65,6 +68,11 @@ export function EventsPageClient() {
   );
   const [message, setMessage] = useState<string | null>(null);
   const [emailKindByRegistration, setEmailKindByRegistration] = useState<Record<string, (typeof emailKinds)[number]>>({});
+  const [carryoverSourceEventId, setCarryoverSourceEventId] = useState<string>("");
+  const [selectedCarryoverStatuses, setSelectedCarryoverStatuses] = useState<Array<(typeof carryoverStatuses)[number]>>([
+    "waitlisted",
+    "pending",
+  ]);
   const [form, setForm] = useState({
     startsAt: "",
     endsAt: "",
@@ -128,6 +136,32 @@ export function EventsPageClient() {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Failed to send email");
     setMessage(payload.alreadySent ? "Email was already sent." : "Email sent.");
+  }
+
+  async function handleCarryover() {
+    if (!detail?._id || !carryoverSourceEventId) return;
+    const result = await carryOverRegistrations({
+      sourceEventId: carryoverSourceEventId as Id<"events">,
+      targetEventId: detail._id,
+      sourceStatuses: selectedCarryoverStatuses,
+    });
+    setMessage(
+      `Backfill complete. Copied ${result.copied}, already existed ${result.alreadyExists}, skipped for capacity ${result.skippedCapacity}.`
+    );
+  }
+
+  async function handleDeleteEvent() {
+    if (!detail?._id) return;
+    if (!window.confirm(`Delete ${detail.title}? This cannot be undone.`)) return;
+
+    try {
+      await deleteEvent({ eventId: detail._id });
+      setSelectedEventId(null);
+      setCarryoverSourceEventId("");
+      setMessage("Event deleted.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
   return (
@@ -238,6 +272,7 @@ export function EventsPageClient() {
                 </div>
                 <div className="interest-row-meta">
                   <Pill>{titleize(event.status)}</Pill>
+                  {event.status === "scheduled" && event.startsAt >= Date.now() && <Pill tone="green">Homepage</Pill>}
                   <span className="mono">
                     M {event.counts.malePending + event.counts.maleApproved}/{event.maleCapacity} · F {event.counts.femalePending + event.counts.femaleApproved}/{event.femaleCapacity}
                   </span>
@@ -255,15 +290,42 @@ export function EventsPageClient() {
               <h3>{detail.title}</h3>
               <p>{formatDateTime(detail.startsAt)} · {detail.location}</p>
             </div>
-            <select
-              value={detail.status}
-              onChange={(event) =>
-                updateEvent({ eventId: detail._id, status: event.target.value as (typeof eventStatuses)[number] })
-              }
-            >
-              {eventStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
-            </select>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <select
+                value={detail.status}
+                onChange={(event) =>
+                  updateEvent({ eventId: detail._id, status: event.target.value as (typeof eventStatuses)[number] })
+                }
+              >
+                {eventStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
+              </select>
+              <button
+                type="button"
+                className="btn"
+                disabled={!detail.canDelete}
+                title={detail.deleteBlockedReason ?? "Delete event"}
+                style={detail.canDelete ? { color: "var(--color-destructive)", borderColor: "var(--color-destructive)" } : undefined}
+                onClick={handleDeleteEvent}
+              >
+                Delete
+              </button>
+            </div>
           </div>
+          {!detail.canDelete && detail.deleteBlockedReason && (
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                background: "var(--bg-tint)",
+                borderRadius: 6,
+                padding: "10px 12px",
+                color: "var(--ink-2)",
+                fontSize: 12,
+                marginBottom: 12,
+              }}
+            >
+              {detail.deleteBlockedReason}
+            </div>
+          )}
           {(detail.status === "completed" || detail.status === "cancelled") && (
             <div
               style={{
@@ -277,6 +339,70 @@ export function EventsPageClient() {
               }}
             >
               Notification actions are hidden for {detail.status} events.
+            </div>
+          )}
+          {detail.status !== "completed" && detail.status !== "cancelled" && (
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                background: "var(--paper)",
+                borderRadius: 6,
+                padding: 12,
+                marginBottom: 12,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div>
+                <h4 style={{ marginBottom: 4 }}>Backfill from another event</h4>
+                <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
+                  Copy applicants from an older or duplicate event into this event as pending registrations.
+                </p>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 10, alignItems: "end" }}>
+                <label className="field">
+                  <span>Source event</span>
+                  <select
+                    value={carryoverSourceEventId}
+                    onChange={(event) => setCarryoverSourceEventId(event.target.value)}
+                  >
+                    <option value="">Select event</option>
+                    {sortedEvents
+                      .filter((event) => event._id !== detail._id)
+                      .map((event) => (
+                        <option key={event._id} value={event._id}>
+                          {event.title} · {formatDateTime(event.startsAt)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!carryoverSourceEventId || selectedCarryoverStatuses.length === 0}
+                  onClick={handleCarryover}
+                >
+                  Backfill
+                </button>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                {carryoverStatuses.map((status) => (
+                  <label key={status} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedCarryoverStatuses.includes(status)}
+                      onChange={(event) =>
+                        setSelectedCarryoverStatuses((current) =>
+                          event.target.checked
+                            ? [...new Set([...current, status])]
+                            : current.filter((value) => value !== status)
+                        )
+                      }
+                    />
+                    <span>{titleize(status)}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           )}
           <div className="interest-list">
