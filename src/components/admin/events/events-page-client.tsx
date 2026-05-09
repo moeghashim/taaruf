@@ -68,6 +68,8 @@ export function EventsPageClient() {
   );
   const [message, setMessage] = useState<string | null>(null);
   const [emailKindByRegistration, setEmailKindByRegistration] = useState<Record<string, (typeof emailKinds)[number]>>({});
+  const [registrationStatusFilter, setRegistrationStatusFilter] = useState<"all" | (typeof registrationStatuses)[number]>("all");
+  const [registrationSearch, setRegistrationSearch] = useState("");
   const [carryoverSourceEventId, setCarryoverSourceEventId] = useState<string>("");
   const [selectedCarryoverStatuses, setSelectedCarryoverStatuses] = useState<Array<(typeof carryoverStatuses)[number]>>([
     "waitlisted",
@@ -86,6 +88,20 @@ export function EventsPageClient() {
 
   const sortedEvents = useMemo(() => events || [], [events]);
   const isBackfillReady = Boolean(backfillStatus?.readyToRequireInterestEventId);
+  const filteredRegistrations = useMemo(() => {
+    const normalizedSearch = registrationSearch.trim().toLowerCase();
+    return (detail?.registrations ?? []).filter((row) => {
+      const statusMatches =
+        registrationStatusFilter === "all" || row.registrationStatus === registrationStatusFilter;
+      if (!statusMatches) return false;
+      if (!normalizedSearch) return true;
+
+      const applicantNumber = row.registration?.applicantNumber;
+      const applicantNumberText = applicantNumber === undefined ? "" : String(applicantNumber);
+      const name = row.registration?.name?.toLowerCase() ?? "";
+      return name.includes(normalizedSearch) || applicantNumberText.includes(normalizedSearch);
+    });
+  }, [detail?.registrations, registrationSearch, registrationStatusFilter]);
 
   useEffect(() => {
     if (!detail?._id || detail._id !== selectedEventId) return;
@@ -162,6 +178,11 @@ export function EventsPageClient() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  function clearRegistrationFilters() {
+    setRegistrationStatusFilter("all");
+    setRegistrationSearch("");
   }
 
   return (
@@ -405,12 +426,58 @@ export function EventsPageClient() {
               </div>
             </div>
           )}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(180px, 240px) minmax(220px, 1fr) auto",
+              gap: 10,
+              alignItems: "end",
+              marginBottom: 12,
+            }}
+          >
+            <label className="field">
+              <span>Registration status</span>
+              <select
+                value={registrationStatusFilter}
+                onChange={(event) =>
+                  setRegistrationStatusFilter(event.target.value as typeof registrationStatusFilter)
+                }
+              >
+                <option value="all">All statuses</option>
+                {registrationStatuses.map((status) => (
+                  <option key={status} value={status}>{titleize(status)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Name or applicant #</span>
+              <input
+                value={registrationSearch}
+                onChange={(event) => setRegistrationSearch(event.target.value)}
+                placeholder="Search name or number"
+              />
+            </label>
+            <button
+              type="button"
+              className="btn"
+              disabled={registrationStatusFilter === "all" && registrationSearch.trim() === ""}
+              onClick={clearRegistrationFilters}
+            >
+              Clear
+            </button>
+          </div>
+          <div style={{ color: "var(--ink-2)", fontSize: 12, marginBottom: 8 }}>
+            Showing {filteredRegistrations.length} of {detail.registrations.length} registration(s).
+          </div>
           <div className="interest-list">
-            {detail.registrations.map((row) => (
+            {filteredRegistrations.map((row) => (
               <div key={row._id} className="interest-row">
                 <div className="interest-row-main">
                   <h4>{row.registration?.name ?? "Unknown applicant"}</h4>
-                  <p>{titleize(row.gender)} · {row.registration?.email ?? "-"}</p>
+                  <p>
+                    {row.registration?.applicantNumber ? `#${row.registration.applicantNumber} · ` : ""}
+                    {titleize(row.gender)} · {row.registration?.email ?? "-"}
+                  </p>
                 </div>
                 <div className="interest-row-meta">
                   <select
