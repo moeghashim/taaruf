@@ -581,6 +581,42 @@ export const carryOverRegistrations = mutation({
   },
 });
 
+export const movePendingToWaitlist = mutation({
+  args: {
+    eventId: v.id("events"),
+  },
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+    if (event.status === "completed" || event.status === "cancelled") {
+      throw new Error("Cannot move registrations for a completed or cancelled event");
+    }
+
+    const rows = await ctx.db
+      .query("eventRegistrations")
+      .withIndex("by_eventId_and_registrationStatus", (q) =>
+        q.eq("eventId", args.eventId).eq("registrationStatus", "pending")
+      )
+      .take(500);
+
+    const now = Date.now();
+    for (const row of rows) {
+      await ctx.db.patch(row._id, {
+        registrationStatus: "waitlisted",
+        confirmedAt: undefined,
+        confirmationRequestedAt: undefined,
+        confirmationExpiresAt: undefined,
+        updatedAt: now,
+      });
+    }
+
+    return {
+      eventId: args.eventId,
+      moved: rows.length,
+    };
+  },
+});
+
 export const registerForEvent = mutation({
   args: {
     sessionHash: v.string(),

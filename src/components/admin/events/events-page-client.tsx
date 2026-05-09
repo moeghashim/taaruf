@@ -57,6 +57,7 @@ export function EventsPageClient() {
   const updateAttendanceStatus = useMutation(api.events.updateAttendanceStatus);
   const requestConfirmation = useMutation(api.events.requestConfirmation);
   const carryOverRegistrations = useMutation(api.events.carryOverRegistrations);
+  const movePendingToWaitlist = useMutation(api.events.movePendingToWaitlist);
   const backfillApril = useMutation(api.events.backfillApril2026);
   const createRef = useRef<HTMLElement | null>(null);
   const detailRef = useRef<HTMLElement | null>(null);
@@ -68,12 +69,13 @@ export function EventsPageClient() {
   );
   const [message, setMessage] = useState<string | null>(null);
   const [emailKindByRegistration, setEmailKindByRegistration] = useState<Record<string, (typeof emailKinds)[number]>>({});
+  const [broadcastEmailKind, setBroadcastEmailKind] = useState<(typeof emailKinds)[number]>("reminder");
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [registrationStatusFilter, setRegistrationStatusFilter] = useState<"all" | (typeof registrationStatuses)[number]>("all");
   const [registrationSearch, setRegistrationSearch] = useState("");
   const [carryoverSourceEventId, setCarryoverSourceEventId] = useState<string>("");
   const [selectedCarryoverStatuses, setSelectedCarryoverStatuses] = useState<Array<(typeof carryoverStatuses)[number]>>([
     "waitlisted",
-    "pending",
   ]);
   const [form, setForm] = useState({
     startsAt: "",
@@ -88,6 +90,10 @@ export function EventsPageClient() {
 
   const sortedEvents = useMemo(() => events || [], [events]);
   const isBackfillReady = Boolean(backfillStatus?.readyToRequireInterestEventId);
+  const pendingRegistrationCount = useMemo(
+    () => (detail?.registrations ?? []).filter((row) => row.registrationStatus === "pending").length,
+    [detail?.registrations]
+  );
   const filteredRegistrations = useMemo(() => {
     const normalizedSearch = registrationSearch.trim().toLowerCase();
     return (detail?.registrations ?? []).filter((row) => {
@@ -164,6 +170,59 @@ export function EventsPageClient() {
     setMessage(
       `Backfill complete. Copied ${result.copied}, already existed ${result.alreadyExists}, skipped for capacity ${result.skippedCapacity}.`
     );
+  }
+
+  async function handleMovePendingToWaitlist() {
+    if (!detail?._id || pendingRegistrationCount === 0) return;
+    if (
+      !window.confirm(
+        `Move ${pendingRegistrationCount} pending registration(s) for ${detail.title} to the waitlist? They can then be backfilled into a new event.`
+      )
+    ) {
+      return;
+    }
+
+    const result = await movePendingToWaitlist({ eventId: detail._id });
+    setRegistrationStatusFilter("waitlisted");
+    setMessage(`Moved ${result.moved} pending registration(s) to the waitlist.`);
+  }
+
+  async function handleBroadcastEmail() {
+    if (!detail?._id || detail.registrations.length === 0 || isBroadcasting) return;
+    if (
+      !window.confirm(
+        `Broadcast ${titleize(broadcastEmailKind)} email to all ${detail.registrations.length} applicant(s) on ${detail.title}?`
+      )
+    ) {
+      return;
+    }
+
+    setIsBroadcasting(true);
+    let sent = 0;
+    let alreadySent = 0;
+    let failed = 0;
+
+    for (const row of detail.registrations) {
+      try {
+        const response = await fetch("/api/admin/event-registration-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventRegistrationId: row._id, kind: broadcastEmailKind }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Failed to send email");
+        if (payload.alreadySent) {
+          alreadySent += 1;
+        } else {
+          sent += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+    }
+
+    setIsBroadcasting(false);
+    setMessage(`Broadcast complete. Sent ${sent}, already sent ${alreadySent}, failed ${failed}.`);
   }
 
   async function handleDeleteEvent() {
@@ -375,9 +434,56 @@ export function EventsPageClient() {
               }}
             >
               <div>
-                <h4 style={{ marginBottom: 4 }}>Backfill from another event</h4>
+                <h4 style={{ marginBottom: 4 }}>Event list actions</h4>
                 <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
-                  Copy applicants from an older or duplicate event into this event as pending registrations.
+                  Move the current pending list to waitlist before opening a new event, or broadcast an event email to every applicant on this event.
+                </p>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "end" }}>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={pendingRegistrationCount === 0}
+                  onClick={handleMovePendingToWaitlist}
+                >
+                  Move Pending to Waitlist ({pendingRegistrationCount})
+                </button>
+                <label className="field" style={{ minWidth: 220 }}>
+                  <span>Broadcast email</span>
+                  <select
+                    value={broadcastEmailKind}
+                    onChange={(event) => setBroadcastEmailKind(event.target.value as (typeof emailKinds)[number])}
+                  >
+                    {emailKinds.map((kind) => <option key={kind} value={kind}>{titleize(kind)}</option>)}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={isBroadcasting || detail.registrations.length === 0}
+                  onClick={handleBroadcastEmail}
+                >
+                  {isBroadcasting ? "Broadcasting..." : `Broadcast to All (${detail.registrations.length})`}
+                </button>
+              </div>
+            </div>
+          )}
+          {detail.status !== "completed" && detail.status !== "cancelled" && (
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                background: "var(--paper)",
+                borderRadius: 6,
+                padding: 12,
+                marginBottom: 12,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div>
+                <h4 style={{ marginBottom: 4 }}>Backfill waitlist from another event</h4>
+                <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
+                  Copy waitlisted applicants from an older or duplicate event into this event as pending registrations.
                 </p>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 10, alignItems: "end" }}>
@@ -403,7 +509,7 @@ export function EventsPageClient() {
                   disabled={!carryoverSourceEventId || selectedCarryoverStatuses.length === 0}
                   onClick={handleCarryover}
                 >
-                  Backfill
+                  Backfill Waitlist
                 </button>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>

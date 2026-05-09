@@ -179,4 +179,44 @@ describe("events", () => {
     );
     expect(targetRows.some((row) => row.registrationId === sourceMaleId)).toBe(false);
   });
+
+  test("moves pending event registrations to waitlisted for future backfill", async () => {
+    const t = convexTest(schema, modules);
+    const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const { eventId, pendingMaleId, approvedFemaleId } = await t.run(async (ctx) => {
+      const eventId = await insertEvent(ctx, "Move Pending", "move-pending", startsAt, 60);
+      const pendingMaleId = await insertRegistration(ctx, "Pending Male", "male");
+      const approvedFemaleId = await insertRegistration(ctx, "Approved Female", "female");
+
+      await insertEventRegistration(ctx, eventId, pendingMaleId, "male", "pending");
+      await insertEventRegistration(ctx, eventId, approvedFemaleId, "female", "approved");
+
+      return { eventId, pendingMaleId, approvedFemaleId };
+    });
+
+    await expect(t.mutation(api.events.movePendingToWaitlist, { eventId })).resolves.toMatchObject({
+      eventId,
+      moved: 1,
+    });
+
+    const rows = await t.run(async (ctx) => {
+      return await ctx.db
+        .query("eventRegistrations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+        .take(10);
+    });
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          registrationId: pendingMaleId,
+          registrationStatus: "waitlisted",
+        }),
+        expect.objectContaining({
+          registrationId: approvedFemaleId,
+          registrationStatus: "approved",
+        }),
+      ])
+    );
+  });
 });
