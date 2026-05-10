@@ -127,6 +127,10 @@ const eventRegistrationEmailKind = v.union(
   v.literal("cancelled"),
   v.literal("reminder")
 );
+const eventWaitlistStatus = v.union(
+  v.literal("active"),
+  v.literal("removed")
+);
 
 export default defineSchema({
   registrations: defineTable({
@@ -271,6 +275,26 @@ export default defineSchema({
     .index("by_eventId_and_registrationStatus", ["eventId", "registrationStatus"])
     .index("by_eventId_and_gender_and_registrationStatus", ["eventId", "gender", "registrationStatus"])
     .index("by_registrationId_and_attendanceStatus", ["registrationId", "attendanceStatus"]),
+
+  eventWaitlistEntries: defineTable({
+    eventId: v.id("events"),
+    registrationId: v.id("registrations"),
+    gender: v.union(v.literal("male"), v.literal("female")),
+    status: eventWaitlistStatus,
+    sourceEventId: v.optional(v.id("events")),
+    sourceEventRegistrationId: v.optional(v.id("eventRegistrations")),
+    removedAt: v.optional(v.number()),
+    adminNotes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_registrationId", ["registrationId"])
+    .index("by_eventId_and_registrationId", ["eventId", "registrationId"])
+    .index("by_eventId_and_status", ["eventId", "status"])
+    .index("by_eventId_and_gender_and_status", ["eventId", "gender", "status"])
+    .index("by_status", ["status"])
+    .index("by_registrationId_and_status", ["registrationId", "status"]),
 
   eventRegistrationEmails: defineTable({
     eventRegistrationId: v.id("eventRegistrations"),

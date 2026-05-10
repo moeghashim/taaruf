@@ -180,41 +180,91 @@ describe("events", () => {
     expect(targetRows.some((row) => row.registrationId === sourceMaleId)).toBe(false);
   });
 
-  test("moves pending event registrations to waitlisted for future backfill", async () => {
+  test("moves event applicants to the Apr26 waitlist without changing Apr26 attendance", async () => {
     const t = convexTest(schema, modules);
     const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
-    const { eventId, pendingMaleId, approvedFemaleId } = await t.run(async (ctx) => {
-      const eventId = await insertEvent(ctx, "Move Pending", "move-pending", startsAt, 60);
-      const pendingMaleId = await insertRegistration(ctx, "Pending Male", "male");
-      const approvedFemaleId = await insertRegistration(ctx, "Approved Female", "female");
+    const { aprilEventId, mayEventId, targetEventId, attendedMaleId, newFemaleId } = await t.run(async (ctx) => {
+      const aprilEventId = await insertEvent(ctx, "1Plus1 Match Event - Apr26", "apr26", startsAt - 30 * 24 * 60 * 60 * 1000, 60);
+      await ctx.db.patch(aprilEventId, { eventMonth: "2026-04", status: "completed" });
+      const mayEventId = await insertEvent(ctx, "1 Plus 1 Match Session 2", "may17", startsAt, 60);
+      const targetEventId = await insertEvent(ctx, "New Target", "new-target", startsAt + 30 * 24 * 60 * 60 * 1000, 60);
+      const attendedMaleId = await insertRegistration(ctx, "Attended Male", "male");
+      const newFemaleId = await insertRegistration(ctx, "New Female", "female");
 
-      await insertEventRegistration(ctx, eventId, pendingMaleId, "male", "pending");
-      await insertEventRegistration(ctx, eventId, approvedFemaleId, "female", "approved");
+      const aprilAttendanceId = await insertEventRegistration(ctx, aprilEventId, attendedMaleId, "male", "approved");
+      await ctx.db.patch(aprilAttendanceId, { attendanceStatus: "attended" });
+      await insertEventRegistration(ctx, mayEventId, attendedMaleId, "male", "pending");
+      await insertEventRegistration(ctx, mayEventId, newFemaleId, "female", "approved");
 
-      return { eventId, pendingMaleId, approvedFemaleId };
+      return { aprilEventId, mayEventId, targetEventId, attendedMaleId, newFemaleId };
     });
 
-    await expect(t.mutation(api.events.movePendingToWaitlist, { eventId })).resolves.toMatchObject({
-      eventId,
-      moved: 1,
+    await expect(t.mutation(api.events.moveEventRegistrationsToAprilWaitlist, { eventId: mayEventId })).resolves.toMatchObject({
+      eventId: mayEventId,
+      aprilEventId,
+      moved: 2,
+      removedFromSource: 2,
     });
 
-    const rows = await t.run(async (ctx) => {
+    const afterMove = await t.run(async (ctx) => {
+      const mayRows = await ctx.db
+        .query("eventRegistrations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", mayEventId))
+        .take(10);
+      const waitlistRows = await ctx.db
+        .query("eventWaitlistEntries")
+        .withIndex("by_eventId_and_status", (q) => q.eq("eventId", aprilEventId).eq("status", "active"))
+        .take(10);
+      const aprilAttendance = await ctx.db
+        .query("eventRegistrations")
+        .withIndex("by_eventId_and_registrationId", (q) =>
+          q.eq("eventId", aprilEventId).eq("registrationId", attendedMaleId)
+        )
+        .unique();
+      return { mayRows, waitlistRows, aprilAttendance };
+    });
+
+    expect(afterMove.mayRows).toHaveLength(0);
+    expect(afterMove.waitlistRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ registrationId: attendedMaleId, status: "active" }),
+        expect.objectContaining({ registrationId: newFemaleId, status: "active" }),
+      ])
+    );
+    expect(afterMove.aprilAttendance).toMatchObject({
+      registrationId: attendedMaleId,
+      registrationStatus: "approved",
+      attendanceStatus: "attended",
+    });
+
+    await expect(t.mutation(api.events.carryOverRegistrations, {
+      sourceEventId: aprilEventId,
+      targetEventId,
+      sourceStatuses: ["waitlisted"],
+    })).resolves.toMatchObject({
+      copied: 2,
+      alreadyExists: 0,
+      skippedCapacity: 0,
+    });
+
+    const targetRows = await t.run(async (ctx) => {
       return await ctx.db
         .query("eventRegistrations")
-        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+        .withIndex("by_eventId", (q) => q.eq("eventId", targetEventId))
         .take(10);
     });
 
-    expect(rows).toEqual(
+    expect(targetRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          registrationId: pendingMaleId,
-          registrationStatus: "waitlisted",
+          registrationId: attendedMaleId,
+          registrationStatus: "pending",
+          waitlistCarryoverFromEventId: aprilEventId,
         }),
         expect.objectContaining({
-          registrationId: approvedFemaleId,
-          registrationStatus: "approved",
+          registrationId: newFemaleId,
+          registrationStatus: "pending",
+          waitlistCarryoverFromEventId: aprilEventId,
         }),
       ])
     );

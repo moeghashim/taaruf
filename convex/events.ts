@@ -3,9 +3,11 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
+  APRIL_2026_EVENT_CODE,
   DEFAULT_EVENT_CAPACITY,
   DEFAULT_EVENT_SERIES,
   deriveEligibilityStatus,
+  getEventByCode,
   getOrCreateApril2026Event,
   getOrCreateManualAdminEvent,
   interestSubmissionClosesAt,
@@ -113,7 +115,37 @@ async function serializeEventRegistration(ctx: ReadCtx, row: Doc<"eventRegistrat
   return { ...row, event, registration };
 }
 
+async function serializeEventWaitlistEntry(ctx: ReadCtx, row: Doc<"eventWaitlistEntries">) {
+  const [event, registration, sourceEvent] = await Promise.all([
+    ctx.db.get(row.eventId),
+    ctx.db.get(row.registrationId),
+    row.sourceEventId ? ctx.db.get(row.sourceEventId) : Promise.resolve(null),
+  ]);
+  return { ...row, event, registration, sourceEvent };
+}
+
+async function getActiveEventWaitlistEntries(ctx: ReadCtx, eventId: Id<"events">) {
+  return await ctx.db
+    .query("eventWaitlistEntries")
+    .withIndex("by_eventId_and_status", (q) => q.eq("eventId", eventId).eq("status", "active"))
+    .take(500);
+}
+
 async function carryOverWaitlist(ctx: MutationCtx, event: Doc<"events">, overrideCapacity = false) {
+  const aprilEvent = await getEventByCode(ctx, APRIL_2026_EVENT_CODE);
+  if (aprilEvent && aprilEvent._id !== event._id) {
+    const aprilWaitlist = await getActiveEventWaitlistEntries(ctx, aprilEvent._id);
+    if (aprilWaitlist.length > 0) {
+      const result = await carryOverRegistrationsFromEvent(ctx, {
+        sourceEventId: aprilEvent._id,
+        targetEvent: event,
+        sourceStatuses: ["waitlisted"],
+        overrideCapacity,
+      });
+      return { carried: result.copied, previousEventId: aprilEvent._id };
+    }
+  }
+
   const previousEvents = await ctx.db
     .query("events")
     .withIndex("by_series_and_startsAt", (q) => q.eq("series", event.series))
@@ -185,8 +217,60 @@ async function carryOverRegistrationsFromEvent(
   let alreadyExists = 0;
   let skippedCapacity = 0;
   let skippedMissingRegistration = 0;
+  const seenSourceRegistrationIds = new Set<string>();
+
+  async function copyRegistration(registrationId: Id<"registrations">, waitlistCarryoverFromEventId: Id<"events">) {
+    if (seenSourceRegistrationIds.has(registrationId)) return;
+    seenSourceRegistrationIds.add(registrationId);
+
+    const registration = await ctx.db.get(registrationId);
+    if (!registration) {
+      skippedMissingRegistration += 1;
+      return;
+    }
+
+    const existing = await ctx.db
+      .query("eventRegistrations")
+      .withIndex("by_eventId_and_registrationId", (q) =>
+        q.eq("eventId", args.targetEvent._id).eq("registrationId", registration._id)
+      )
+      .unique();
+    if (existing) {
+      alreadyExists += 1;
+      return;
+    }
+
+    const status = args.overrideCapacity
+      ? "pending" as const
+      : await registrationStatusForCapacity(ctx, args.targetEvent, registration.gender);
+    if (status !== "pending") {
+      skippedCapacity += 1;
+      return;
+    }
+
+    const now = Date.now();
+    await ctx.db.insert("eventRegistrations", {
+      eventId: args.targetEvent._id,
+      registrationId: registration._id,
+      gender: registration.gender,
+      registrationStatus: "pending",
+      attendanceStatus: "not_checked_in",
+      eligibilityStatus: deriveEligibilityStatus(registration),
+      waitlistCarryoverFromEventId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    copied += 1;
+  }
 
   for (const sourceStatus of args.sourceStatuses) {
+    if (sourceStatus === "waitlisted") {
+      const waitlistRows = await getActiveEventWaitlistEntries(ctx, sourceEvent._id);
+      for (const row of waitlistRows.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime)) {
+        await copyRegistration(row.registrationId, sourceEvent._id);
+      }
+    }
+
     const rows = await ctx.db
       .query("eventRegistrations")
       .withIndex("by_eventId_and_registrationStatus", (q) =>
@@ -195,44 +279,7 @@ async function carryOverRegistrationsFromEvent(
       .take(500);
 
     for (const row of rows.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime)) {
-      const registration = await ctx.db.get(row.registrationId);
-      if (!registration) {
-        skippedMissingRegistration += 1;
-        continue;
-      }
-
-      const existing = await ctx.db
-        .query("eventRegistrations")
-        .withIndex("by_eventId_and_registrationId", (q) =>
-          q.eq("eventId", args.targetEvent._id).eq("registrationId", registration._id)
-        )
-        .unique();
-      if (existing) {
-        alreadyExists += 1;
-        continue;
-      }
-
-      const status = args.overrideCapacity
-        ? "pending" as const
-        : await registrationStatusForCapacity(ctx, args.targetEvent, registration.gender);
-      if (status !== "pending") {
-        skippedCapacity += 1;
-        continue;
-      }
-
-      const now = Date.now();
-      await ctx.db.insert("eventRegistrations", {
-        eventId: args.targetEvent._id,
-        registrationId: registration._id,
-        gender: registration.gender,
-        registrationStatus: "pending",
-        attendanceStatus: "not_checked_in",
-        eligibilityStatus: deriveEligibilityStatus(registration),
-        waitlistCarryoverFromEventId: sourceEvent._id,
-        createdAt: now,
-        updatedAt: now,
-      });
-      copied += 1;
+      await copyRegistration(row.registrationId, sourceEvent._id);
     }
   }
 
@@ -256,16 +303,19 @@ export const getAll = query({
           .query("eventRegistrations")
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(500);
+        const activeWaitlist = await getActiveEventWaitlistEntries(ctx, event._id);
         return {
           ...event,
           interestSubmissionClosesAt: interestSubmissionClosesAt(event),
           counts: {
             malePending: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "pending").length,
             maleApproved: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "approved").length,
-            maleWaitlisted: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "waitlisted").length,
+            maleWaitlisted: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "waitlisted").length +
+              activeWaitlist.filter((row) => row.gender === "male").length,
             femalePending: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "pending").length,
             femaleApproved: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "approved").length,
-            femaleWaitlisted: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "waitlisted").length,
+            femaleWaitlisted: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "waitlisted").length +
+              activeWaitlist.filter((row) => row.gender === "female").length,
             attended: registrations.filter((row) => row.attendanceStatus === "attended").length,
             noShow: registrations.filter((row) => row.attendanceStatus === "no_show").length,
           },
@@ -332,6 +382,14 @@ export const getWaitlistedRegistrationIds = query({
       .take(1000);
 
     const activeRegistrationIds = new Set<Id<"registrations">>();
+    const waitlistEntries = await ctx.db
+      .query("eventWaitlistEntries")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .take(1000);
+    for (const row of waitlistEntries) {
+      activeRegistrationIds.add(row.registrationId);
+    }
+
     for (const row of rows) {
       const event = await ctx.db.get(row.eventId);
       if (event && event.status !== "completed" && event.status !== "cancelled") {
@@ -352,6 +410,7 @@ export const getDetail = query({
       .query("eventRegistrations")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
+    const waitlistRows = await getActiveEventWaitlistEntries(ctx, args.eventId);
     const linkedInterest = await ctx.db
       .query("interests")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
@@ -364,15 +423,18 @@ export const getDetail = query({
       ? "Cannot delete an event after someone has signed up."
       : linkedInterest
         ? "Cannot delete an event linked to interest history."
-        : linkedEmail
-          ? "Cannot delete an event linked to email history."
-          : null;
+          : linkedEmail
+            ? "Cannot delete an event linked to email history."
+            : waitlistRows.length
+              ? "Cannot delete an event with waitlisted applicants."
+              : null;
     return {
       ...event,
       interestSubmissionClosesAt: interestSubmissionClosesAt(event),
       canDelete: deleteBlockedReason === null,
       deleteBlockedReason,
       registrations: await Promise.all(rows.map((row) => serializeEventRegistration(ctx, row))),
+      waitlistEntries: await Promise.all(waitlistRows.map((row) => serializeEventWaitlistEntry(ctx, row))),
     };
   },
 });
@@ -549,6 +611,14 @@ export const deleteEvent = mutation({
       throw new Error("Cannot delete an event linked to email history.");
     }
 
+    const activeWaitlistEntry = await ctx.db
+      .query("eventWaitlistEntries")
+      .withIndex("by_eventId_and_status", (q) => q.eq("eventId", args.eventId).eq("status", "active"))
+      .first();
+    if (activeWaitlistEntry) {
+      throw new Error("Cannot delete an event with waitlisted applicants.");
+    }
+
     await ctx.db.delete(args.eventId);
     return args.eventId;
   },
@@ -581,38 +651,93 @@ export const carryOverRegistrations = mutation({
   },
 });
 
-export const movePendingToWaitlist = mutation({
+export const moveEventRegistrationsToAprilWaitlist = mutation({
   args: {
     eventId: v.id("events"),
   },
   handler: async (ctx, args) => {
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
-    if (event.status === "completed" || event.status === "cancelled") {
-      throw new Error("Cannot move registrations for a completed or cancelled event");
+    if (event.eventCode === APRIL_2026_EVENT_CODE) {
+      throw new Error("Apr26 is already the waitlist event");
     }
 
+    const aprilEvent = await getOrCreateApril2026Event(ctx);
     const rows = await ctx.db
       .query("eventRegistrations")
-      .withIndex("by_eventId_and_registrationStatus", (q) =>
-        q.eq("eventId", args.eventId).eq("registrationStatus", "pending")
-      )
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
 
     const now = Date.now();
+    let moved = 0;
+    let alreadyWaitlisted = 0;
+    let removedFromSource = 0;
+    let skippedMissingRegistration = 0;
+    let deletedEmailRecords = 0;
+
     for (const row of rows) {
-      await ctx.db.patch(row._id, {
-        registrationStatus: "waitlisted",
-        confirmedAt: undefined,
-        confirmationRequestedAt: undefined,
-        confirmationExpiresAt: undefined,
-        updatedAt: now,
-      });
+      const registration = await ctx.db.get(row.registrationId);
+      if (!registration) {
+        skippedMissingRegistration += 1;
+        continue;
+      }
+
+      const existingWaitlistEntry = await ctx.db
+        .query("eventWaitlistEntries")
+        .withIndex("by_eventId_and_registrationId", (q) =>
+          q.eq("eventId", aprilEvent._id).eq("registrationId", registration._id)
+        )
+        .unique();
+
+      if (existingWaitlistEntry) {
+        if (existingWaitlistEntry.status === "active") {
+          alreadyWaitlisted += 1;
+        } else {
+          await ctx.db.patch(existingWaitlistEntry._id, {
+            status: "active",
+            gender: registration.gender,
+            sourceEventId: event._id,
+            sourceEventRegistrationId: row._id,
+            removedAt: undefined,
+            updatedAt: now,
+          });
+          moved += 1;
+        }
+      } else {
+        await ctx.db.insert("eventWaitlistEntries", {
+          eventId: aprilEvent._id,
+          registrationId: registration._id,
+          gender: registration.gender,
+          status: "active",
+          sourceEventId: event._id,
+          sourceEventRegistrationId: row._id,
+          createdAt: now,
+          updatedAt: now,
+        });
+        moved += 1;
+      }
+
+      const linkedEmails = await ctx.db
+        .query("eventRegistrationEmails")
+        .withIndex("by_eventRegistrationId", (q) => q.eq("eventRegistrationId", row._id))
+        .take(20);
+      for (const linkedEmail of linkedEmails) {
+        await ctx.db.delete(linkedEmail._id);
+        deletedEmailRecords += 1;
+      }
+
+      await ctx.db.delete(row._id);
+      removedFromSource += 1;
     }
 
     return {
       eventId: args.eventId,
-      moved: rows.length,
+      aprilEventId: aprilEvent._id,
+      moved,
+      alreadyWaitlisted,
+      removedFromSource,
+      skippedMissingRegistration,
+      deletedEmailRecords,
     };
   },
 });

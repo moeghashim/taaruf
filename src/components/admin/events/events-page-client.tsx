@@ -57,7 +57,7 @@ export function EventsPageClient() {
   const updateAttendanceStatus = useMutation(api.events.updateAttendanceStatus);
   const requestConfirmation = useMutation(api.events.requestConfirmation);
   const carryOverRegistrations = useMutation(api.events.carryOverRegistrations);
-  const movePendingToWaitlist = useMutation(api.events.movePendingToWaitlist);
+  const moveEventRegistrationsToAprilWaitlist = useMutation(api.events.moveEventRegistrationsToAprilWaitlist);
   const backfillApril = useMutation(api.events.backfillApril2026);
   const createRef = useRef<HTMLElement | null>(null);
   const detailRef = useRef<HTMLElement | null>(null);
@@ -90,10 +90,12 @@ export function EventsPageClient() {
 
   const sortedEvents = useMemo(() => events || [], [events]);
   const isBackfillReady = Boolean(backfillStatus?.readyToRequireInterestEventId);
-  const pendingRegistrationCount = useMemo(
-    () => (detail?.registrations ?? []).filter((row) => row.registrationStatus === "pending").length,
+  const eventRegistrationCount = useMemo(
+    () => detail?.registrations.length ?? 0,
     [detail?.registrations]
   );
+  const waitlistEntryCount = detail?.waitlistEntries.length ?? 0;
+  const isAprilWaitlistEvent = detail?.eventCode === "apr26";
   const filteredRegistrations = useMemo(() => {
     const normalizedSearch = registrationSearch.trim().toLowerCase();
     return (detail?.registrations ?? []).filter((row) => {
@@ -172,19 +174,21 @@ export function EventsPageClient() {
     );
   }
 
-  async function handleMovePendingToWaitlist() {
-    if (!detail?._id || pendingRegistrationCount === 0) return;
+  async function handleMoveEventRegistrationsToAprilWaitlist() {
+    if (!detail?._id || eventRegistrationCount === 0 || isAprilWaitlistEvent) return;
     if (
       !window.confirm(
-        `Move ${pendingRegistrationCount} pending registration(s) for ${detail.title} to the waitlist? They can then be backfilled into a new event.`
+        `Move all ${eventRegistrationCount} applicant(s) from ${detail.title} to the Apr26 waitlist and remove them from this event?`
       )
     ) {
       return;
     }
 
-    const result = await movePendingToWaitlist({ eventId: detail._id });
-    setRegistrationStatusFilter("waitlisted");
-    setMessage(`Moved ${result.moved} pending registration(s) to the waitlist.`);
+    const result = await moveEventRegistrationsToAprilWaitlist({ eventId: detail._id });
+    setRegistrationStatusFilter("all");
+    setMessage(
+      `Moved ${result.moved} applicant(s) to the Apr26 waitlist. Removed ${result.removedFromSource} from this event. Already waitlisted ${result.alreadyWaitlisted}.`
+    );
   }
 
   async function handleBroadcastEmail() {
@@ -356,6 +360,9 @@ export function EventsPageClient() {
                   <span className="mono">
                     M {event.counts.malePending + event.counts.maleApproved}/{event.maleCapacity} · F {event.counts.femalePending + event.counts.femaleApproved}/{event.femaleCapacity}
                   </span>
+                  {event.counts.maleWaitlisted + event.counts.femaleWaitlisted > 0 && (
+                    <span className="mono">WL {event.counts.maleWaitlisted + event.counts.femaleWaitlisted}</span>
+                  )}
                 </div>
               </button>
             ))}
@@ -436,17 +443,18 @@ export function EventsPageClient() {
               <div>
                 <h4 style={{ marginBottom: 4 }}>Event list actions</h4>
                 <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
-                  Move the current pending list to waitlist before opening a new event, or broadcast an event email to every applicant on this event.
+                  Move this event roster to the Apr26 waitlist before backfilling a new event, or broadcast an event email to every applicant on this event.
                 </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "end" }}>
                 <button
                   type="button"
                   className="btn"
-                  disabled={pendingRegistrationCount === 0}
-                  onClick={handleMovePendingToWaitlist}
+                  disabled={eventRegistrationCount === 0 || isAprilWaitlistEvent}
+                  title={isAprilWaitlistEvent ? "Apr26 is already the waitlist event" : undefined}
+                  onClick={handleMoveEventRegistrationsToAprilWaitlist}
                 >
-                  Move Pending to Waitlist ({pendingRegistrationCount})
+                  Move Event Applicants to Apr26 Waitlist ({eventRegistrationCount})
                 </button>
                 <label className="field" style={{ minWidth: 220 }}>
                   <span>Broadcast email</span>
@@ -483,7 +491,7 @@ export function EventsPageClient() {
               <div>
                 <h4 style={{ marginBottom: 4 }}>Backfill waitlist from another event</h4>
                 <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
-                  Copy waitlisted applicants from an older or duplicate event into this event as pending registrations.
+                  Copy active waitlist entries, including the Apr26 waitlist, into this event as pending registrations.
                 </p>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 10, alignItems: "end" }}>
@@ -528,6 +536,43 @@ export function EventsPageClient() {
                     />
                     <span>{titleize(status)}</span>
                   </label>
+                ))}
+              </div>
+            </div>
+          )}
+          {waitlistEntryCount > 0 && (
+            <div
+              style={{
+                border: "1px solid var(--line)",
+                background: "var(--paper)",
+                borderRadius: 6,
+                padding: 12,
+                marginBottom: 12,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div>
+                <h4 style={{ marginBottom: 4 }}>Event Waitlist ({waitlistEntryCount})</h4>
+                <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
+                  These applicants are available to backfill into another scheduled event.
+                </p>
+              </div>
+              <div className="interest-list">
+                {detail.waitlistEntries.map((entry) => (
+                  <div key={entry._id} className="interest-row">
+                    <div className="interest-row-main">
+                      <h4>{entry.registration?.name ?? "Unknown applicant"}</h4>
+                      <p>
+                        {entry.registration?.applicantNumber ? `#${entry.registration.applicantNumber} · ` : ""}
+                        {titleize(entry.gender)} · {entry.registration?.email ?? "-"}
+                      </p>
+                    </div>
+                    <div className="interest-row-meta">
+                      <Pill tone="gold">Waitlist</Pill>
+                      {entry.sourceEvent && <span>{entry.sourceEvent.title}</span>}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
