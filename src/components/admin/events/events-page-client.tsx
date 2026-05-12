@@ -132,13 +132,15 @@ export function EventsPageClient() {
       location: form.location.trim(),
       startsAt,
       endsAt,
-      status: "scheduled",
+      status: "draft",
       maleCapacity: Number(form.maleCapacity),
       femaleCapacity: Number(form.femaleCapacity),
       carryOverWaitlist: true,
     });
     setSelectedEventId(result.eventId);
-    setMessage(`Event created. Carryover added ${result.carryover?.carried ?? 0} waitlisted applicant(s).`);
+    setMessage(
+      `Draft event created. Carryover added ${result.carryover?.carried ?? 0} waitlisted applicant(s). Publish it when you're ready for applicants to see it.`
+    );
     setForm({
       startsAt: "",
       endsAt: "",
@@ -355,7 +357,7 @@ export function EventsPageClient() {
                   <p>{formatDateTime(event.startsAt)} · {event.location}</p>
                 </div>
                 <div className="interest-row-meta">
-                  <Pill>{titleize(event.status)}</Pill>
+                  <Pill tone={event.status === "draft" ? "amber" : "plain"}>{titleize(event.status)}</Pill>
                   {event.status === "scheduled" && event.startsAt >= Date.now() && <Pill tone="green">Homepage</Pill>}
                   <span className="mono">
                     M {event.counts.malePending + event.counts.maleApproved}/{event.maleCapacity} · F {event.counts.femalePending + event.counts.femaleApproved}/{event.femaleCapacity}
@@ -378,6 +380,25 @@ export function EventsPageClient() {
               <p>{formatDateTime(detail.startsAt)} · {detail.location}</p>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {(detail.status === "draft" || detail.status === "scheduled") && (
+                <button
+                  type="button"
+                  className={detail.status === "draft" ? "btn btn-primary" : "btn"}
+                  onClick={() =>
+                    updateEvent({
+                      eventId: detail._id,
+                      status: detail.status === "draft" ? "scheduled" : "draft",
+                    })
+                  }
+                  title={
+                    detail.status === "draft"
+                      ? "Make this event visible to applicants"
+                      : "Hide this event from applicants"
+                  }
+                >
+                  {detail.status === "draft" ? "Publish" : "Unpublish"}
+                </button>
+              )}
               <select
                 value={detail.status}
                 onChange={(event) =>
