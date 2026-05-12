@@ -498,3 +498,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/lib/applicant-session.ts
   - src/lib/email.ts
   - progress.md
+## 2026-05-12T16:34:03.000Z
+- Trigger: commit
+- Learning: Admins need interest visibility directly inside the applicant profile drawer, not just in the interests tab. A compact snapshot plus inbound/outbound cards reduces tab switching during review.
+- Context: feat(admin): surface interest statuses in profile drawer
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - src/components/admin/profiles/profile-detail.tsx
+  - progress.md

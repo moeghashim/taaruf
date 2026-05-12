@@ -280,9 +280,16 @@ export const getByRegistration = query({
       .withIndex("by_toRegistrationId", (q) => q.eq("toRegistrationId", args.registrationId))
       .collect();
 
+    const enrich = async (interest: (typeof outbound)[number]) => ({
+      ...interest,
+      fromRegistration: await ctx.db.get(interest.fromRegistrationId),
+      toRegistration: await ctx.db.get(interest.toRegistrationId),
+      match: interest.matchId ? await ctx.db.get(interest.matchId) : null,
+    });
+
     return {
-      outbound,
-      inbound,
+      outbound: await Promise.all(outbound.map(enrich)),
+      inbound: await Promise.all(inbound.map(enrich)),
     };
   },
 });
