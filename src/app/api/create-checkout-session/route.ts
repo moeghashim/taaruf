@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       shareableBio,
       photoSharingPermission,
       imageStorageIds,
+      eventCode,
     } = body;
 
     // Validate required fields
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/register?canceled=true`,
+      cancel_url: `${appUrl}/register${eventCode ? `/${encodeURIComponent(eventCode)}` : ""}?canceled=true`,
     });
 
     const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -100,6 +101,7 @@ export async function POST(request: NextRequest) {
       stripeSessionId: session.id,
       paymentStatus: "pending",
       status: "pending",
+      eventCode,
     });
 
     return NextResponse.json({ url: session.url });

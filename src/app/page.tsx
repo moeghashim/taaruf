@@ -136,7 +136,7 @@ export default async function Home() {
                     </span>
                   </div>
                   <div className="applicant-home-event-actions">
-                    <Link href="/register" className="btn btn-primary">
+                    <Link href={`/register/${encodeURIComponent(event.eventCode)}`} className="btn btn-primary">
                       Apply to attend
                     </Link>
                     <Link href="/login" className="btn">

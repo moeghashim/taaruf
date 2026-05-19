@@ -267,6 +267,17 @@ export function EventsPageClient() {
     setRegistrationSearch("");
   }
 
+  function registrationLinkFor(eventCode: string) {
+    if (typeof window === "undefined") return `/register/${encodeURIComponent(eventCode)}`;
+    return `${window.location.origin}/register/${encodeURIComponent(eventCode)}`;
+  }
+
+  async function copyRegistrationLink(eventCode: string) {
+    const link = registrationLinkFor(eventCode);
+    await navigator.clipboard.writeText(link);
+    setMessage(`Registration link copied: ${link}`);
+  }
+
   return (
     <>
       <PageHead
@@ -435,6 +446,27 @@ export function EventsPageClient() {
                 Delete
               </button>
             </div>
+          </div>
+          <div
+            style={{
+              border: "1px solid var(--line)",
+              background: "var(--paper)",
+              borderRadius: 6,
+              padding: "10px 12px",
+              color: "var(--ink-2)",
+              fontSize: 12,
+              marginBottom: 12,
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+            }}
+          >
+            <span className="mono">{registrationLinkFor(detail.eventCode)}</span>
+            <button type="button" className="btn btn-sm" onClick={() => copyRegistrationLink(detail.eventCode)}>
+              Copy registration link
+            </button>
           </div>
           <div
             style={{

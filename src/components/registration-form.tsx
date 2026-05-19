@@ -18,6 +18,14 @@ interface UploadedImage {
   name: string;
 }
 
+interface RegistrationEvent {
+  eventCode: string;
+  title: string;
+  location: string;
+  startsAt: number;
+  endsAt: number;
+}
+
 interface RegistrationFormData {
   name: string;
   age: number;
@@ -57,7 +65,26 @@ const photoSharingOptions = [
   { value: "ask_me_first", label: "Ask me first" },
 ] as const;
 
-export function RegistrationForm() {
+function formatEventDateRange(event: RegistrationEvent) {
+  const start = new Date(event.startsAt);
+  const end = new Date(event.endsAt);
+  return [
+    start.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    }),
+    start.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }) + " - " + end.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  ].join(", ");
+}
+
+export function RegistrationForm({ event }: { event?: RegistrationEvent | null }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -116,6 +143,7 @@ export function RegistrationForm() {
             shareableBio: value.basicBio,
             photoSharingPermission: value.photoSharingPermission,
             imageStorageIds: uploadedImages.map((image) => image.storageId),
+            eventCode: event?.eventCode,
           }),
         });
 
@@ -197,8 +225,12 @@ export function RegistrationForm() {
     <section className="panel applicant-register-form">
       <div className="panel-head">
         <div>
-          <h3>Application</h3>
-          <p>$10 registration fee — paid via Stripe at the next step.</p>
+          <h3>{event ? "Application for " + event.title : "Application"}</h3>
+          <p>
+            {event
+              ? formatEventDateRange(event) + " · " + event.location + " · $10 registration fee paid via Stripe at the next step."
+              : "$10 registration fee — paid via Stripe at the next step."}
+          </p>
         </div>
       </div>
       <form

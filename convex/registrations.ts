@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { deriveEligibilityStatus, getEventByCode } from "./eventRules";
 import { createApplicantInterestWithRules } from "./interestRules";
 import { buildRegistrationNumberMaps } from "./registrationNumbers";
 
@@ -28,6 +29,50 @@ async function nextApplicantNumber(ctx: MutationCtx) {
   return registrations.reduce((max, registration, index) => {
     return Math.max(max, registration.applicantNumber ?? index + 1);
   }, 0) + 1;
+}
+
+async function countCapacityUsed(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  gender: "male" | "female"
+) {
+  let count = 0;
+  for (const status of ["pending", "approved"] as const) {
+    const rows = await ctx.db
+      .query("eventRegistrations")
+      .withIndex("by_eventId_and_gender_and_registrationStatus", (q) =>
+        q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status)
+      )
+      .take(500);
+    count += rows.length;
+  }
+  return count;
+}
+
+async function eventRegistrationStatusForCapacity(
+  ctx: MutationCtx,
+  event: Doc<"events">,
+  gender: "male" | "female"
+) {
+  const capacity = gender === "male" ? event.maleCapacity : event.femaleCapacity;
+  const used = await countCapacityUsed(ctx, event._id, gender);
+  return used < capacity ? "pending" as const : "waitlisted" as const;
+}
+
+async function validatePublicEventRegistration(ctx: MutationCtx, eventCode: string) {
+  const event = await getEventByCode(ctx, eventCode.trim());
+  if (!event) throw new Error("Event not found");
+  if (event.status !== "scheduled") throw new Error("Event registration is not open");
+
+  const now = Date.now();
+  if (event.registrationOpensAt && event.registrationOpensAt > now) {
+    throw new Error("Event registration is not open yet");
+  }
+  if (event.registrationClosesAt && event.registrationClosesAt < now) {
+    throw new Error("Event registration is closed");
+  }
+
+  return event;
 }
 
 async function syncSubmittedInterestNumbers(
@@ -150,12 +195,14 @@ export const create = mutation({
     photoSharingPermission: v.optional(photoSharingPermission),
     interestSubmission: v.optional(v.string()),
     interestSubmissionNumbers: v.optional(v.array(v.number())),
+    eventCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     const profileCompleted = hasCompletedProfile(args);
+    const event = args.eventCode ? await validatePublicEventRegistration(ctx, args.eventCode) : null;
 
-    return await ctx.db.insert("registrations", {
+    const registrationId = await ctx.db.insert("registrations", {
       applicantNumber: await nextApplicantNumber(ctx),
       name: args.name,
       age: args.age,
@@ -189,6 +236,24 @@ export const create = mutation({
       interestSubmission: args.interestSubmission?.trim() || undefined,
       interestSubmissionNumbers: normalizeInterestSubmissionNumbers(args.interestSubmissionNumbers),
     });
+
+    if (event) {
+      const registration = await ctx.db.get(registrationId);
+      if (!registration) throw new Error("Registration not found after creation");
+      const registrationStatus = await eventRegistrationStatusForCapacity(ctx, event, registration.gender);
+      await ctx.db.insert("eventRegistrations", {
+        eventId: event._id,
+        registrationId,
+        gender: registration.gender,
+        registrationStatus,
+        attendanceStatus: "not_checked_in",
+        eligibilityStatus: deriveEligibilityStatus(registration),
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return registrationId;
   },
 });
 

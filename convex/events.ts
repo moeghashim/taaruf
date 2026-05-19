@@ -373,6 +373,45 @@ export const getPublicActive = query({
   },
 });
 
+export const getPublicByCode = query({
+  args: { eventCode: v.string() },
+  handler: async (ctx, args) => {
+    const event = await getEventByCode(ctx, args.eventCode.trim());
+    if (!event || event.status !== "scheduled") return null;
+
+    const now = Date.now();
+    if (event.registrationOpensAt && event.registrationOpensAt > now) return null;
+    if (event.registrationClosesAt && event.registrationClosesAt < now) return null;
+
+    const registrations = await ctx.db
+      .query("eventRegistrations")
+      .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+      .take(500);
+    const maleUsed = registrations.filter(
+      (row) => row.gender === "male" && (row.registrationStatus === "pending" || row.registrationStatus === "approved")
+    ).length;
+    const femaleUsed = registrations.filter(
+      (row) => row.gender === "female" && (row.registrationStatus === "pending" || row.registrationStatus === "approved")
+    ).length;
+
+    return {
+      _id: event._id,
+      title: event.title,
+      eventCode: event.eventCode,
+      eventMonth: event.eventMonth,
+      location: event.location,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      maleCapacity: event.maleCapacity,
+      femaleCapacity: event.femaleCapacity,
+      maleAvailable: Math.max(event.maleCapacity - maleUsed, 0),
+      femaleAvailable: Math.max(event.femaleCapacity - femaleUsed, 0),
+      maleWaitlisted: maleUsed >= event.maleCapacity,
+      femaleWaitlisted: femaleUsed >= event.femaleCapacity,
+    };
+  },
+});
+
 export const getWaitlistedRegistrationIds = query({
   args: {},
   handler: async (ctx) => {
