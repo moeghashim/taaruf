@@ -96,6 +96,23 @@ export function EventsPageClient() {
   );
   const waitlistEntryCount = detail?.waitlistEntries.length ?? 0;
   const isAprilWaitlistEvent = detail?.eventCode === "apr26";
+  const detailStats = useMemo(() => {
+    const registrations = detail?.registrations ?? [];
+    const waitlistEntries = detail?.waitlistEntries ?? [];
+    const waitlistedRegistrations = registrations.filter((row) => row.registrationStatus === "waitlisted").length;
+
+    return {
+      total: registrations.length + waitlistEntries.length,
+      approved: registrations.filter((row) => row.registrationStatus === "approved").length,
+      pending: registrations.filter((row) => row.registrationStatus === "pending").length,
+      rejected: registrations.filter((row) => row.registrationStatus === "rejected").length,
+      waitlisted: waitlistedRegistrations + waitlistEntries.length,
+      male: registrations.filter((row) => row.gender === "male").length +
+        waitlistEntries.filter((row) => row.gender === "male").length,
+      female: registrations.filter((row) => row.gender === "female").length +
+        waitlistEntries.filter((row) => row.gender === "female").length,
+    };
+  }, [detail?.registrations, detail?.waitlistEntries]);
   const filteredRegistrations = useMemo(() => {
     const normalizedSearch = registrationSearch.trim().toLowerCase();
     return (detail?.registrations ?? []).filter((row) => {
@@ -419,6 +436,38 @@ export function EventsPageClient() {
               </button>
             </div>
           </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+              gap: 8,
+              marginBottom: 12,
+            }}
+          >
+            {[
+              ["Total", detailStats.total],
+              ["Approved", detailStats.approved],
+              ["Pending", detailStats.pending],
+              ["Rejected", detailStats.rejected],
+              ["Waitlisted", detailStats.waitlisted],
+              ["Male", detailStats.male],
+              ["Female", detailStats.female],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  border: "1px solid var(--line)",
+                  background: "var(--paper)",
+                  borderRadius: 6,
+                  padding: "10px 12px",
+                  minHeight: 62,
+                }}
+              >
+                <div style={{ color: "var(--ink-2)", fontSize: 11, textTransform: "uppercase" }}>{label}</div>
+                <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>{value}</div>
+              </div>
+            ))}
+          </div>
           {!detail.canDelete && detail.deleteBlockedReason && (
             <div
               style={{
@@ -590,6 +639,9 @@ export function EventsPageClient() {
                       </p>
                     </div>
                     <div className="interest-row-meta">
+                      {entry.registration?.applicantNumber && (
+                        <span className="mono">#{entry.registration.applicantNumber}</span>
+                      )}
                       <Pill tone="gold">Waitlist</Pill>
                       {entry.sourceEvent && <span>{entry.sourceEvent.title}</span>}
                     </div>
@@ -652,6 +704,9 @@ export function EventsPageClient() {
                   </p>
                 </div>
                 <div className="interest-row-meta">
+                  {row.registration?.applicantNumber && (
+                    <span className="mono">#{row.registration.applicantNumber}</span>
+                  )}
                   <select
                     value={row.registrationStatus}
                     onChange={(event) =>
