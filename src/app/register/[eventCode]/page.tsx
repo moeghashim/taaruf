@@ -42,13 +42,13 @@ export default async function EventRegisterPage({ params }: PageProps) {
     <main data-admin className="min-h-screen">
       <div className="applicant-register">
         <header className="applicant-register-head">
-          <div className="brand compact">
+          <div className="brand compact applicant-register-brand">
             <LogoMark />
             <div>
               <div className="brand-name">Taaruf</div>
               <div className="brand-tag">Event registration</div>
             </div>
-            <Link className="btn btn-ghost btn-sm applicant-register-signin" href="/login">
+            <Link className="btn btn-primary applicant-register-signin" href="/login">
               Sign in
             </Link>
           </div>

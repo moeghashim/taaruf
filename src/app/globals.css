@@ -974,6 +974,16 @@
 [data-admin] .applicant-register-head { display: grid; gap: 18px; }
 [data-admin] .applicant-register-head .brand { border: 0; padding: 0; margin: 0; }
 [data-admin] .applicant-register-head .page-head { margin-bottom: 0; }
+[data-admin] .applicant-register-brand { width: 100%; align-items: center; gap: 14px; }
+[data-admin] .applicant-register-signin {
+  margin-left: auto;
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+[data-admin] .applicant-register-existing { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+[data-admin] .applicant-register-existing a { color: var(--accent); font-weight: 500; text-decoration: underline; }
 [data-admin] .applicant-register-intro {
   padding: 22px 24px;
   display: grid;
