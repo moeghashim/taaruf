@@ -543,3 +543,14 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/registrations.ts
   - convex/registrations.test.ts
   - progress.md
+## 2026-05-20T02:00:00.000Z
+- Trigger: make the applicant-number invariant unmissable for future agents
+- Learning: A correct implementation isn't enough — future agents (and humans) need to see the rule before they touch the code. Surfaced the invariant in three reinforcing places: a top-level "Invariants — do not break" section in AGENTS.md, a comment on the `applicantNumber` field in the schema, and a header comment on convex/registrations.ts. Also added a defensive `by_applicantNumber` collision check inside `nextApplicantNumber` so any future regression that lets the counter drift throws at the DB boundary instead of inserting a duplicate.
+- Context: docs+enforce(registrations): make applicant-number invariant visible to agents and enforced at DB boundary
+- Branch: main
+- Actor: Moe Ghashim <moe@bannaa.co>
+- Changed Paths:
+  - AGENTS.md
+  - convex/registrations.ts
+  - convex/schema.ts
+  - progress.md

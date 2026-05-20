@@ -1,3 +1,9 @@
+// INVARIANT (see AGENTS.md): `registrations.applicantNumber` is a permanent
+// public identifier. Once assigned it is never patched and never re-used —
+// not even after deleteRegistration. The `create` mutation here is the only
+// production code path that writes the field. Do not add another, and do not
+// patch the field after insert.
+
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -26,11 +32,15 @@ function normalizeInterestSubmissionNumbers(values?: number[]) {
 
 const APPLICANT_NUMBER_HWM_KEY = "applicantNumberHighWaterMark";
 
-// Applicant numbers are permanent identifiers: once assigned they are never
-// re-used, even if the underlying registration is deleted. We persist a
-// monotonic high-water-mark in `settings` so deletes can't roll the counter
-// backward. Live registrations are still scanned defensively to recover from
-// any out-of-band insert that didn't go through this helper.
+// INVARIANT (see AGENTS.md): applicant numbers are permanent. Once assigned
+// they are never patched and never re-used, even if the underlying
+// registration is deleted. A monotonic high-water-mark in `settings` (key
+// `applicantNumberHighWaterMark`) keeps the counter from rolling backward on
+// delete. Live registrations are still scanned defensively to recover from
+// any out-of-band insert that didn't go through this helper, and the chosen
+// number is asserted unused via the `by_applicantNumber` index before we
+// hand it back — so any future bug that lets the counter drift cannot
+// silently produce a duplicate.
 async function nextApplicantNumber(ctx: MutationCtx) {
   const hwmRow = await ctx.db
     .query("settings")
@@ -51,6 +61,16 @@ async function nextApplicantNumber(ctx: MutationCtx) {
 
   const previousHwm = Math.max(Number.isFinite(persistedHwm) ? persistedHwm : 0, liveMax);
   const nextNumber = previousHwm + 1;
+
+  const collision = await ctx.db
+    .query("registrations")
+    .withIndex("by_applicantNumber", (q) => q.eq("applicantNumber", nextNumber))
+    .first();
+  if (collision) {
+    throw new Error(
+      `Applicant number invariant violated: number ${nextNumber} is already assigned (registration ${collision._id}). Refusing to reuse.`
+    );
+  }
 
   if (hwmRow) {
     await ctx.db.patch(hwmRow._id, { value: String(nextNumber) });

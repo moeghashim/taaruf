@@ -134,6 +134,10 @@ const eventWaitlistStatus = v.union(
 
 export default defineSchema({
   registrations: defineTable({
+    // INVARIANT: permanent identifier. Once assigned, never patched and never
+    // reused — not even after deleteRegistration. Allocation goes through
+    // nextApplicantNumber in convex/registrations.ts, backed by the
+    // `applicantNumberHighWaterMark` row in `settings`. See AGENTS.md.
     applicantNumber: v.optional(v.number()),
     name: v.string(),
     age: v.number(),
