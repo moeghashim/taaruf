@@ -24,11 +24,44 @@ function normalizeInterestSubmissionNumbers(values?: number[]) {
   return [...new Set((values || []).filter((value) => Number.isInteger(value) && value > 0))].slice(0, 3);
 }
 
+const APPLICANT_NUMBER_HWM_KEY = "applicantNumberHighWaterMark";
+
+// Applicant numbers are permanent identifiers: once assigned they are never
+// re-used, even if the underlying registration is deleted. We persist a
+// monotonic high-water-mark in `settings` so deletes can't roll the counter
+// backward. Live registrations are still scanned defensively to recover from
+// any out-of-band insert that didn't go through this helper.
 async function nextApplicantNumber(ctx: MutationCtx) {
-  const registrations = await ctx.db.query("registrations").take(1000);
-  return registrations.reduce((max, registration, index) => {
-    return Math.max(max, registration.applicantNumber ?? index + 1);
-  }, 0) + 1;
+  const hwmRow = await ctx.db
+    .query("settings")
+    .withIndex("by_key", (q) => q.eq("key", APPLICANT_NUMBER_HWM_KEY))
+    .first();
+  const persistedHwm = hwmRow ? Number.parseInt(hwmRow.value, 10) : 0;
+
+  let liveMax = 0;
+  for await (const registration of ctx.db.query("registrations")) {
+    if (
+      typeof registration.applicantNumber === "number" &&
+      Number.isInteger(registration.applicantNumber) &&
+      registration.applicantNumber > liveMax
+    ) {
+      liveMax = registration.applicantNumber;
+    }
+  }
+
+  const previousHwm = Math.max(Number.isFinite(persistedHwm) ? persistedHwm : 0, liveMax);
+  const nextNumber = previousHwm + 1;
+
+  if (hwmRow) {
+    await ctx.db.patch(hwmRow._id, { value: String(nextNumber) });
+  } else {
+    await ctx.db.insert("settings", {
+      key: APPLICANT_NUMBER_HWM_KEY,
+      value: String(nextNumber),
+    });
+  }
+
+  return nextNumber;
 }
 
 async function countCapacityUsed(
@@ -580,6 +613,8 @@ export const deleteRegistration = mutation({
   args: {
     id: v.id("registrations"),
   },
+  // The persisted high-water-mark in settings is intentionally left untouched
+  // so the deleted applicant number can never be re-issued to a new registration.
   handler: async (ctx, args) => {
     await ctx.db.delete(args.id);
     return args.id;

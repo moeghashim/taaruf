@@ -533,3 +533,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/register/[eventCode]/page.tsx
   - src/components/registration-form.tsx
   - progress.md
+## 2026-05-20T01:00:00.000Z
+- Trigger: applicant-number stability concern
+- Learning: Applicant numbers are permanent IDs that should never be re-issued, even when a registration is deleted. The previous `nextApplicantNumber` derived the next value from the live max only, so deleting the most recent registration would have given that number to the next sign-up. Switched to a monotonic high-water-mark persisted in the `settings` table (key `applicantNumberHighWaterMark`); the helper still scans live registrations defensively to recover from any out-of-band insert, but the counter can only move forward. Added a registrations test file pinning the invariant.
+- Context: feat(registrations): permanent applicant numbers backed by a persistent HWM counter
+- Branch: main
+- Actor: Moe Ghashim <moe@bannaa.co>
+- Changed Paths:
+  - convex/registrations.ts
+  - convex/registrations.test.ts
+  - progress.md
