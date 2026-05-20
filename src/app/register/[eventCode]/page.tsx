@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { api } from "../../../../convex/_generated/api";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
@@ -19,10 +20,23 @@ async function getEvent(eventCode: string) {
   }
 }
 
+function stripEventCodePrefix(title: string, eventCode: string) {
+  const code = eventCode.trim();
+  if (!code) return title.trim();
+  const trimmed = title.trim();
+  if (trimmed.toLowerCase().startsWith(code.toLowerCase())) {
+    return trimmed.slice(code.length).replace(/^[\s\-–—:·]+/, "").trim() || trimmed;
+  }
+  return trimmed;
+}
+
 export default async function EventRegisterPage({ params }: PageProps) {
   const { eventCode } = await params;
   const event = await getEvent(decodeURIComponent(eventCode));
   if (!event) notFound();
+
+  const displayTitle = stripEventCodePrefix(event.title, event.eventCode);
+  const displayEvent = { ...event, title: displayTitle };
 
   return (
     <main data-admin className="min-h-screen">
@@ -34,13 +48,20 @@ export default async function EventRegisterPage({ params }: PageProps) {
               <div className="brand-name">Taaruf</div>
               <div className="brand-tag">Event registration</div>
             </div>
+            <Link className="btn btn-ghost btn-sm applicant-register-signin" href="/login">
+              Sign in
+            </Link>
           </div>
           <div className="page-head">
             <div>
               <h1>
-                Register for <em>{event.title}</em>
+                Register for <em>{displayTitle}</em>
               </h1>
               <p>Submit your profile once. Your application will be attached to this event automatically.</p>
+              <p className="applicant-register-existing">
+                Already registered?{" "}
+                <Link href="/login">Sign in to your applicant portal</Link>.
+              </p>
             </div>
           </div>
         </header>
@@ -64,7 +85,7 @@ export default async function EventRegisterPage({ params }: PageProps) {
           </p>
         </section>
 
-        <RegistrationForm event={event} />
+        <RegistrationForm event={displayEvent} />
       </div>
     </main>
   );

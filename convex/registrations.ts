@@ -202,6 +202,23 @@ export const create = mutation({
     const profileCompleted = hasCompletedProfile(args);
     const event = args.eventCode ? await validatePublicEventRegistration(ctx, args.eventCode) : null;
 
+    const trimmedEmail = args.email.trim();
+    const lowercasedEmail = trimmedEmail.toLowerCase();
+    const existingByEmail =
+      (await ctx.db
+        .query("registrations")
+        .withIndex("by_email", (q) => q.eq("email", trimmedEmail))
+        .first()) ??
+      (lowercasedEmail !== trimmedEmail
+        ? await ctx.db
+            .query("registrations")
+            .withIndex("by_email", (q) => q.eq("email", lowercasedEmail))
+            .first()
+        : null);
+    if (existingByEmail) {
+      throw new Error("An applicant is already registered with this email.");
+    }
+
     const registrationId = await ctx.db.insert("registrations", {
       applicantNumber: await nextApplicantNumber(ctx),
       name: args.name,
@@ -496,6 +513,25 @@ export const updatePaymentStatus = mutation({
     });
 
     return registration._id;
+  },
+});
+
+export const getByEmail = query({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const trimmed = args.email.trim();
+    if (!trimmed) return null;
+    const lowercased = trimmed.toLowerCase();
+    const byTrimmed = await ctx.db
+      .query("registrations")
+      .withIndex("by_email", (q) => q.eq("email", trimmed))
+      .first();
+    if (byTrimmed) return byTrimmed;
+    if (lowercased === trimmed) return null;
+    return await ctx.db
+      .query("registrations")
+      .withIndex("by_email", (q) => q.eq("email", lowercased))
+      .first();
   },
 });
 

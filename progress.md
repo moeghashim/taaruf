@@ -507,3 +507,29 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - src/components/admin/profiles/profile-detail.tsx
   - progress.md
+## 2026-05-17T01:01:54.350Z
+- Trigger: meeting follow-up
+- Learning: The 2026-05-15 meeting tasks need to be split into small approval-ready cards, each with an explicit e2e acceptance check, before implementation starts.
+- Context: public kanban board for 15-05-26 meeting notes
+- Branch: main
+- Actor: Codex
+- Changed Paths:
+  - src/app/kanban/15-05-26/page.tsx
+  - src/app/kanban/15-05-26/tasks.ts
+  - e2e/kanban.spec.ts
+  - playwright.config.ts
+  - package.json
+  - package-lock.json
+  - progress.md
+## 2026-05-20T00:00:00.000Z
+- Trigger: applicant feedback on /register/May26
+- Learning: Event titles that embed the event code ("May26 Pre-Mariage Workshop") create a confusing duplicate date next to the formatted start/end range. Stripping the eventCode prefix at render time keeps admin-set titles intact while showing a single authoritative date on the public page. Also: the /register page lacked a clear "I'm already in the program" path, and the checkout endpoint happily started a Stripe session for an already-registered email instead of redirecting them to login.
+- Context: feat(register): add sign-in link, block duplicate emails before checkout, clean event-title date duplication
+- Branch: main
+- Actor: Moe Ghashim <moe@bannaa.co>
+- Changed Paths:
+  - convex/registrations.ts
+  - src/app/api/create-checkout-session/route.ts
+  - src/app/register/[eventCode]/page.tsx
+  - src/components/registration-form.tsx
+  - progress.md

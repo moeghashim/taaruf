@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -90,6 +91,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
   const generateUploadUrl = useMutation(api.registrations.generateImageUploadUrl);
 
   const form = useForm({
@@ -121,6 +123,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
       setIsSubmitting(true);
       setUploadError(null);
       setSubmitError(null);
+      setEmailAlreadyRegistered(false);
       try {
         const response = await fetch("/api/create-checkout-session", {
           method: "POST",
@@ -148,6 +151,13 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
         });
 
         const data = await response.json();
+
+        if (response.status === 409 && data?.code === "email_already_registered") {
+          setEmailAlreadyRegistered(true);
+          setSubmitError(null);
+          setIsSubmitting(false);
+          return;
+        }
 
         if (!response.ok) {
           throw new Error(data.error || "Failed to create checkout session");
@@ -451,7 +461,10 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
                   id={field.name}
                   type="email"
                   value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
+                  onChange={(e) => {
+                    field.handleChange(e.target.value);
+                    if (emailAlreadyRegistered) setEmailAlreadyRegistered(false);
+                  }}
                   onBlur={field.handleBlur}
                   placeholder="you@example.com"
                 />
@@ -714,12 +727,19 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
           )}
         </form.Field>
 
+        {emailAlreadyRegistered && (
+          <p className="notice warn">
+            That email is already registered with 1Plus1.{" "}
+            <Link href="/login">Sign in to your applicant portal</Link> instead — your existing
+            registration covers this event.
+          </p>
+        )}
         {submitError && <p className="notice error">{submitError}</p>}
 
         <button
           type="submit"
           className="btn btn-primary full"
-          disabled={isSubmitting || uploadingImage}
+          disabled={isSubmitting || uploadingImage || emailAlreadyRegistered}
         >
           {Ico.heart}
           <span>{isSubmitting ? "Redirecting to payment..." : "Proceed to payment ($10)"}</span>

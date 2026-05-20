@@ -43,6 +43,29 @@ export async function POST(request: NextRequest) {
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
       || "http://localhost:3000";
 
+    const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
+    if (!convexUrl) {
+      return NextResponse.json(
+        { error: "Convex URL not configured" },
+        { status: 500 }
+      );
+    }
+    const { ConvexHttpClient } = await import("convex/browser");
+    const convexClient = new ConvexHttpClient(convexUrl);
+
+    const existing = await convexClient.query(api.registrations.getByEmail, {
+      email: String(email).trim(),
+    });
+    if (existing) {
+      return NextResponse.json(
+        {
+          error: "An applicant is already registered with this email.",
+          code: "email_already_registered",
+        },
+        { status: 409 }
+      );
+    }
+
     // Create Stripe Checkout session
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
@@ -66,16 +89,6 @@ export async function POST(request: NextRequest) {
       success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/register${eventCode ? `/${encodeURIComponent(eventCode)}` : ""}?canceled=true`,
     });
-
-    const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
-    if (!convexUrl) {
-      return NextResponse.json(
-        { error: "Convex URL not configured" },
-        { status: 500 }
-      );
-    }
-    const { ConvexHttpClient } = await import("convex/browser");
-    const convexClient = new ConvexHttpClient(convexUrl);
 
     // Save registration to Convex
     await convexClient.mutation(api.registrations.create, {
