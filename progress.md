@@ -554,3 +554,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - convex/registrations.ts
   - convex/schema.ts
   - progress.md
+## 2026-05-20T03:00:00.000Z
+- Trigger: deploy backlog + standing authorization request from user
+- Learning: The Convex deployment names are inverted from what's intuitive: `clever-meerkat-940` is set as `CONVEX_DEPLOYMENT` and labeled "dev" in `.env.local` but is actually the deployment serving `www.1plus1match.com` (it has all the real applicants). `tidy-panda-370` is labeled "prod" but currently holds only a single MIGRATION_TEST row. Both should always be kept in lockstep with `main`. Pushed both, smoke-tested the new `registrations:getByEmail` query against prod, and codified the user's standing "don't ask before deploying Convex" authorization in AGENTS.md plus a feedback memory.
+- Context: deploy+docs(convex): push outstanding changes to both deployments and document auto-deploy rule
+- Branch: main
+- Actor: Moe Ghashim <moe@bannaa.co>
+- Changed Paths:
+  - AGENTS.md
+  - progress.md

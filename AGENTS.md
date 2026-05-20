@@ -6,6 +6,21 @@ When working on Convex code, **always read `convex/_generated/ai/guidelines.md` 
 Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
 <!-- convex-ai-end -->
 
+## Deployment
+
+### Auto-deploy Convex when needed — do not ask
+
+The user has standing authorization: **whenever a change touches anything under `convex/` (functions, schema, crons, http routes, generated `ai/` files), deploy it as part of finishing the task.** Do not stop to ask, and do not leave Convex out-of-sync with `main`.
+
+How to deploy:
+
+- Dev deployment (`clever-meerkat-940`, set via `CONVEX_DEPLOYMENT` in `.env.local`) — this is the deployment actually serving `www.1plus1match.com`. Push with `npx convex dev --once`.
+- Prod deployment (`tidy-panda-370`) — currently effectively unused, but keep it in sync. Push with `npx convex deploy --yes` (the `--yes` skips the interactive prompt, which the agent terminal can't answer).
+
+Order doesn't matter; do both. After deploy, smoke-test at least one of the changed functions with `npx convex run <module>:<fn> '<json-args>'` (add `--prod` for prod) so you have evidence it's live, and mention the deployment in the final summary so the user knows it landed.
+
+The only time to pause and ask is if a deploy would run a **destructive or non-reversible data operation** — e.g. a schema change that drops a field, a migration mutation that rewrites existing rows, or a backfill that can't be undone. In that case, stop and confirm before deploying.
+
 ## Invariants — do not break
 
 ### Applicant numbers are permanent and never reused
