@@ -23,18 +23,19 @@ The only time to pause and ask is if a deploy would run a **destructive or non-r
 
 ## Invariants — do not break
 
-### Applicant numbers are permanent and never reused
+### Public applicant numbers are permanent and never reused
 
-`registrations.applicantNumber` is a permanent public identifier. Once a registration is created and a number is assigned, that number must never change and must never be reissued to any other registration — not even if the original registration is deleted.
+`registrations.publicApplicantNumber` is the permanent public identifier humans use as "Applicant #". Once a registration is created and a number is assigned, that number must never change and must never be reissued to any other registration — not even if the original registration is deleted.
 
 How this is enforced:
 
-- **Issuance.** Only [convex/registrations.ts](convex/registrations.ts)'s `nextApplicantNumber` helper allocates new numbers. It reads a monotonic high-water-mark from the `settings` table (key `applicantNumberHighWaterMark`), takes `max(persistedHwm, liveMax) + 1`, and patches the HWM in the same mutation. The counter only moves up.
+- **Issuance.** Only [convex/registrations.ts](convex/registrations.ts)'s `nextPublicApplicantNumber` helper allocates new public numbers. It reads a monotonic high-water-mark from the `settings` table (key `publicApplicantNumberHighWaterMark`), takes `max(persistedHwm, liveMax, liveCount) + 1`, and patches the HWM in the same mutation. The counter only moves up.
 - **Deletion.** `deleteRegistration` deliberately leaves the HWM untouched. A deleted applicant's number is permanently retired.
-- **Immutability.** No mutation should ever patch `applicantNumber` on an existing row. The `create` mutation is the only production code path that writes it.
+- **Immutability.** No mutation should ever patch `publicApplicantNumber` on an existing row after the one-time creation-order backfill. The `create` mutation is the normal production code path that writes it.
+- **Legacy field.** `registrations.applicantNumber` is deprecated/internal compatibility data. Do not show it to admins or applicants as "Applicant #".
 - **Tests.** See [convex/registrations.test.ts](convex/registrations.test.ts). Do not weaken these — if you need to evolve the rule, talk to the user first.
 
-If you are about to: introduce an admin endpoint that edits `applicantNumber`, recompute numbers from scratch, "fix gaps" left by deletions, or migrate the field — **stop and ask**. Those are all violations of this invariant.
+If you are about to: introduce an admin endpoint that edits `publicApplicantNumber`, recompute numbers from scratch, "fix gaps" left by deletions, or migrate the field — **stop and ask**. Those are all violations of this invariant.
 
 ### Email uniqueness on registration
 

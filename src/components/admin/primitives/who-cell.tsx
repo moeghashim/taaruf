@@ -1,6 +1,8 @@
 type Props = {
   name: string;
   gender: "male" | "female";
+  /** Permanent backend applicant number, shown with the name when available. */
+  applicantNumber?: number | null;
   /** Sub-text under the name. Typically "{age} · {city}" or an email. */
   sub?: string;
   /** Optional profile thumbnail URL from Convex storage. */
@@ -21,7 +23,7 @@ function initials(name: string) {
  * Avatar + name + sub-text used in admin tables and queue cards.
  * Avatar tints by gender and falls back to initials when no image is available.
  */
-export function WhoCell({ name, gender, sub, imageUrl }: Props) {
+export function WhoCell({ name, gender, applicantNumber, sub, imageUrl }: Props) {
   return (
     <div className={`who ${gender === "female" ? "f" : "m"}`}>
       <div className="av">
@@ -36,7 +38,12 @@ export function WhoCell({ name, gender, sub, imageUrl }: Props) {
         )}
       </div>
       <div>
-        <div className="name">{name}</div>
+        <div className="name">
+          {typeof applicantNumber === "number" ? (
+            <span className="applicant-number">Applicant #{applicantNumber}</span>
+          ) : null}
+          {name}
+        </div>
         {sub && <div className="sub">{sub}</div>}
       </div>
     </div>

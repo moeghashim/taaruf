@@ -134,11 +134,14 @@ const eventWaitlistStatus = v.union(
 
 export default defineSchema({
   registrations: defineTable({
-    // INVARIANT: permanent identifier. Once assigned, never patched and never
-    // reused — not even after deleteRegistration. Allocation goes through
-    // nextApplicantNumber in convex/registrations.ts, backed by the
-    // `applicantNumberHighWaterMark` row in `settings`. See AGENTS.md.
+    // Legacy/internal identifier. Keep for compatibility, but human-facing
+    // applicant references should use publicApplicantNumber.
     applicantNumber: v.optional(v.number()),
+    // INVARIANT: public human-facing identifier. Once assigned, never patched
+    // and never reused, even after deleteRegistration. Allocation goes through
+    // nextPublicApplicantNumber in convex/registrations.ts, backed by the
+    // `publicApplicantNumberHighWaterMark` row in `settings`. See AGENTS.md.
+    publicApplicantNumber: v.optional(v.number()),
     name: v.string(),
     age: v.number(),
     gender: v.union(v.literal("male"), v.literal("female")),
@@ -146,7 +149,10 @@ export default defineSchema({
     education: v.string(),
     job: v.string(),
     email: v.string(),
+    emailCanonical: v.optional(v.string()),
     phone: v.string(),
+    phoneCanonical: v.optional(v.string()),
+    nameCanonical: v.optional(v.string()),
     describeYourself: v.optional(v.string()),
     lookingFor: v.optional(v.string()),
     backgroundCheck: v.optional(v.string()),
@@ -192,7 +198,11 @@ export default defineSchema({
     .index("by_gender", ["gender"])
     .index("by_status", ["status"])
     .index("by_applicantNumber", ["applicantNumber"])
+    .index("by_publicApplicantNumber", ["publicApplicantNumber"])
     .index("by_email", ["email"])
+    .index("by_emailCanonical", ["emailCanonical"])
+    .index("by_phoneCanonical", ["phoneCanonical"])
+    .index("by_nameCanonical", ["nameCanonical"])
     .index("by_stripeSessionId", ["stripeSessionId"])
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
@@ -312,6 +322,7 @@ export default defineSchema({
   })
     .index("by_eventRegistrationId", ["eventRegistrationId"])
     .index("by_eventRegistrationId_and_kind", ["eventRegistrationId", "kind"])
+    .index("by_registrationId", ["registrationId"])
     .index("by_eventId_and_kind", ["eventId", "kind"]),
 
   matches: defineTable({

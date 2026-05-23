@@ -72,8 +72,12 @@ type ApplicantEventData = {
     endsAt: number;
     status: string;
     registration: null | {
+      _id: string;
       registrationStatus: string;
       attendanceStatus: string;
+      confirmedAt?: number;
+      confirmationRequestedAt?: number;
+      confirmationExpiresAt?: number;
     };
   }>;
   history: Array<{
@@ -204,6 +208,22 @@ function formatDate(timestamp: number | null) {
 
 function StatusBadge({ value }: { value: string }) {
   return <Pill tone={statusTone[value] ?? "plain"}>{titleize(value)}</Pill>;
+}
+
+function canConfirmEventRegistration(registration: NonNullable<ApplicantEventData["upcoming"][number]["registration"]>) {
+  const confirmationWindowExpired = Boolean(
+    registration.confirmationRequestedAt &&
+      registration.confirmationExpiresAt &&
+      registration.confirmationExpiresAt < Date.now()
+  );
+
+  return Boolean(
+      !registration.confirmedAt &&
+      !confirmationWindowExpired &&
+      (registration.registrationStatus === "pending" ||
+        registration.registrationStatus === "waitlisted" ||
+        registration.registrationStatus === "approved")
+  );
 }
 
 function viewerFinalApprovalFor(interest: DashboardInterest) {
@@ -719,6 +739,27 @@ export default function ApplicantDashboardPage() {
     }
   }
 
+  async function confirmEventParticipation(eventRegistrationId: string) {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/applicant/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "confirm", eventRegistrationId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Event confirmation failed");
+      setMessage("Your participation has been confirmed.");
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleImageUpload(files: FileList | null) {
     if (!files?.length) return;
 
@@ -1016,7 +1057,21 @@ export default function ApplicantDashboardPage() {
                       </div>
                       <div className="interest-row-meta">
                         {event.registration ? (
-                          <StatusBadge value={event.registration.registrationStatus} />
+                          <>
+                            <StatusBadge value={event.registration.registrationStatus} />
+                            {event.registration.confirmedAt ? (
+                              <StatusBadge value="confirmed" />
+                            ) : canConfirmEventRegistration(event.registration) ? (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={busy}
+                                onClick={() => confirmEventParticipation(event.registration!._id)}
+                              >
+                                Confirm
+                              </button>
+                            ) : null}
+                          </>
                         ) : (
                           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => registerForEvent(event._id)}>
                             Register

@@ -102,7 +102,7 @@ export function ProfileDetail({
   }, [profile._id, profile.adminNotes]);
 
   const facts: Fact[] = [
-    { label: "Registration #", value: registrationNumber ?? "—" },
+    { label: "Applicant #", value: registrationNumber ?? "—" },
     { label: "Marital status", value: profile.maritalStatus || "—" },
     { label: "Education", value: profile.education || "—" },
     { label: "Occupation", value: profile.job || "—" },

@@ -18,6 +18,7 @@ import type * as interestRules from "../interestRules.js";
 import type * as interests from "../interests.js";
 import type * as matches from "../matches.js";
 import type * as migrations_profileCompletion from "../migrations/profileCompletion.js";
+import type * as migrations_publicApplicantNumbers from "../migrations/publicApplicantNumbers.js";
 import type * as profileShares from "../profileShares.js";
 import type * as registrationNumbers from "../registrationNumbers.js";
 import type * as registrations from "../registrations.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   interests: typeof interests;
   matches: typeof matches;
   "migrations/profileCompletion": typeof migrations_profileCompletion;
+  "migrations/publicApplicantNumbers": typeof migrations_publicApplicantNumbers;
   profileShares: typeof profileShares;
   registrationNumbers: typeof registrationNumbers;
   registrations: typeof registrations;

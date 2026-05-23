@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     const { ConvexHttpClient } = await import("convex/browser");
     const convexClient = new ConvexHttpClient(convexUrl);
 
-    const existing = await convexClient.query(api.registrations.getByEmail, {
+    const existing = eventCode ? null : await convexClient.query(api.registrations.getByEmail, {
       email: String(email).trim(),
     });
     if (existing) {
@@ -120,6 +120,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    if (/already registered with this email/i.test(errorMessage)) {
+      return NextResponse.json(
+        {
+          error: "An applicant is already registered with this email.",
+          code: "email_already_registered",
+        },
+        { status: 409 }
+      );
+    }
+
     console.error("Checkout session error:", errorMessage);
     return NextResponse.json(
       { error: "Failed to create checkout session", details: errorMessage },

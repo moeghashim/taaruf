@@ -30,11 +30,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await request.json();
+    const convex = getConvexClient();
+    if (body.action === "confirm") {
+      if (!body.eventRegistrationId) {
+        return NextResponse.json({ error: "eventRegistrationId is required" }, { status: 400 });
+      }
+      const eventRegistrationId = await convex.mutation(api.events.confirmParticipation, {
+        sessionHash,
+        eventRegistrationId: body.eventRegistrationId,
+      });
+      return NextResponse.json({ success: true, result: { eventRegistrationId } });
+    }
+
     if (body.action !== "register" || !body.eventId) {
       return NextResponse.json({ error: "eventId is required" }, { status: 400 });
     }
 
-    const convex = getConvexClient();
     const result = await convex.mutation(api.events.registerForEvent, {
       sessionHash,
       eventId: body.eventId,

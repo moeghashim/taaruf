@@ -66,6 +66,9 @@ const photoSharingOptions = [
   { value: "ask_me_first", label: "Ask me first" },
 ] as const;
 
+const duplicateEmailMessage =
+  "That email is already registered with an existing 1Plus1 applicant account.";
+
 function formatEventDateRange(event: RegistrationEvent) {
   const start = new Date(event.startsAt);
   const end = new Date(event.endsAt);
@@ -728,8 +731,8 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
         </form.Field>
 
         {emailAlreadyRegistered && (
-          <p className="notice warn">
-            That email is already registered with 1Plus1.{" "}
+          <p className="notice warning" role="alert" aria-live="polite">
+            {duplicateEmailMessage}{" "}
             <Link href="/login">Sign in to your applicant portal</Link> instead — your existing
             registration covers this event.
           </p>

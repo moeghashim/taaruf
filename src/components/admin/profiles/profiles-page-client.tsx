@@ -78,7 +78,7 @@ export function ProfilesPageClient({
 
   const exportCsv = () => {
     const headers = [
-      "Number",
+      "Applicant Number",
       "Name",
       "Age",
       "Gender",
@@ -212,7 +212,7 @@ export function ProfilesPageClient({
           <table>
             <thead>
               <tr>
-                <th>#</th>
+                <th>Applicant #</th>
                 <th>Member</th>
                 <th>Age</th>
                 <th>Background</th>
@@ -228,7 +228,13 @@ export function ProfilesPageClient({
                     {data.registrationNumbers.get(r._id)}
                   </td>
                   <td>
-                    <WhoCell name={r.name} gender={r.gender} sub={r.email} imageUrl={r.imageUrls?.[0]} />
+                    <WhoCell
+                      name={r.name}
+                      gender={r.gender}
+                      applicantNumber={data.registrationNumbers.get(r._id)}
+                      sub={r.email}
+                      imageUrl={r.imageUrls?.[0]}
+                    />
                   </td>
                   <td>{r.age}</td>
                   <td style={{ fontSize: 12 }}>
@@ -269,6 +275,7 @@ export function ProfilesPageClient({
               <WhoCell
                 name={openProfile.name}
                 gender={openProfile.gender}
+                applicantNumber={data.registrationNumbers.get(openProfile._id)}
                 sub={`${openProfile.age} · ${openProfile.gender === "female" ? "Sister" : "Brother"}`}
                 imageUrl={openProfile.imageUrls?.[0]}
               />

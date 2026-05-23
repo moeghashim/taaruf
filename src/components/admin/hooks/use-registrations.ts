@@ -38,7 +38,17 @@ export function useRegistrations() {
   );
 
   const registrationNumbers = useMemo(
-    () => new Map(sortedRegistrations.map((r, i) => [r._id, i + 1])),
+    () =>
+      new Map(
+        sortedRegistrations.map((r, i) => [
+          r._id,
+          typeof r.publicApplicantNumber === "number" &&
+          Number.isInteger(r.publicApplicantNumber) &&
+          r.publicApplicantNumber > 0
+            ? r.publicApplicantNumber
+            : i + 1,
+        ])
+      ),
     [sortedRegistrations]
   );
 
@@ -81,10 +91,12 @@ export function useRegistrations() {
       }
       if (search.trim()) {
         const q = search.toLowerCase();
+        const applicantNumber = registrationNumbers.get(reg._id);
         return (
           reg.name.toLowerCase().includes(q) ||
           reg.email.toLowerCase().includes(q) ||
-          (reg.phone && reg.phone.includes(q))
+          (reg.phone && reg.phone.includes(q)) ||
+          (applicantNumber !== undefined && String(applicantNumber).includes(q))
         );
       }
       return true;

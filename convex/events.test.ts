@@ -84,6 +84,19 @@ async function insertEventRegistration(
   });
 }
 
+async function createSession(t: ReturnType<typeof convexTest>, registrationId: Id<"registrations">) {
+  const sessionHash = `session-${registrationId}`;
+  await t.run(async (ctx) => {
+    await ctx.db.insert("applicantSessions", {
+      registrationId,
+      sessionHash,
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      createdAt: Date.now(),
+    });
+  });
+  return sessionHash;
+}
+
 describe("events", () => {
   test("deletes an event that has no signups", async () => {
     const t = convexTest(schema, modules);
@@ -125,7 +138,7 @@ describe("events", () => {
 
     const active = await t.query(api.events.getPublicActive, {});
 
-    expect(active.map((event) => event.eventCode).slice(0, 2)).toEqual(["newer", "older"]);
+    expect((active as Array<{ eventCode: string }>).map((event) => event.eventCode).slice(0, 2)).toEqual(["newer", "older"]);
   });
 
   test("backfills selected source event registrations into a target event as pending", async () => {
@@ -268,5 +281,118 @@ describe("events", () => {
         }),
       ])
     );
+  });
+
+  test("lets applicants confirm participation without an admin request", async () => {
+    const t = convexTest(schema, modules);
+    const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const { eventRegistrationId, registrationId } = await t.run(async (ctx) => {
+      const eventId = await insertEvent(ctx, "Confirmation Event", "confirm", startsAt, 60);
+      const registrationId = await insertRegistration(ctx, "Confirming Applicant", "female");
+      const eventRegistrationId = await insertEventRegistration(ctx, eventId, registrationId, "female", "pending");
+      return { eventRegistrationId, registrationId };
+    });
+    const sessionHash = await createSession(t, registrationId);
+
+    await expect(t.mutation(api.events.confirmParticipation, { sessionHash, eventRegistrationId })).resolves.toBe(
+      eventRegistrationId
+    );
+
+    const row = await t.run(async (ctx) => await ctx.db.get(eventRegistrationId));
+    expect(row?.confirmedAt).toEqual(expect.any(Number));
+  });
+
+  test("lets approved applicants confirm participation", async () => {
+    const t = convexTest(schema, modules);
+    const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const { eventRegistrationId, registrationId } = await t.run(async (ctx) => {
+      const eventId = await insertEvent(ctx, "Approved Confirmation Event", "approved-confirm", startsAt, 60);
+      const registrationId = await insertRegistration(ctx, "Approved Applicant", "male");
+      const eventRegistrationId = await insertEventRegistration(ctx, eventId, registrationId, "male", "approved");
+      return { eventRegistrationId, registrationId };
+    });
+    const sessionHash = await createSession(t, registrationId);
+
+    await expect(t.mutation(api.events.confirmParticipation, { sessionHash, eventRegistrationId })).resolves.toBe(
+      eventRegistrationId
+    );
+
+    const row = await t.run(async (ctx) => await ctx.db.get(eventRegistrationId));
+    expect(row?.confirmedAt).toEqual(expect.any(Number));
+  });
+
+  test("lets admins mark an event registration confirmed", async () => {
+    const t = convexTest(schema, modules);
+    const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const eventRegistrationId = await t.run(async (ctx) => {
+      const eventId = await insertEvent(ctx, "Admin Confirm Event", "admin-confirm", startsAt, 60);
+      const registrationId = await insertRegistration(ctx, "Admin Confirmed Applicant", "female");
+      return await insertEventRegistration(ctx, eventId, registrationId, "female", "pending");
+    });
+
+    await expect(
+      t.mutation(api.events.updateRegistrationConfirmation, { eventRegistrationId, confirmed: true })
+    ).resolves.toBe(eventRegistrationId);
+
+    const row = await t.run(async (ctx) => await ctx.db.get(eventRegistrationId));
+    expect(row).toMatchObject({
+      registrationStatus: "approved",
+      approvedAt: expect.any(Number),
+      confirmedAt: expect.any(Number),
+    });
+  });
+
+  test("does not mark event registration email sent until delivery succeeds", async () => {
+    const t = convexTest(schema, modules);
+    const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const eventRegistrationId = await t.run(async (ctx) => {
+      const eventId = await insertEvent(ctx, "Email Claim Event", "email-claim", startsAt, 60);
+      const registrationId = await insertRegistration(ctx, "Email Claim Applicant", "female");
+      return await insertEventRegistration(ctx, eventId, registrationId, "female", "approved");
+    });
+
+    const claim = await t.mutation(api.events.claimEventRegistrationEmail, {
+      eventRegistrationId,
+      kind: "confirmation_request",
+    });
+
+    expect(claim).toMatchObject({ claimed: true, alreadySent: false });
+
+    const beforeSuccess = await t.run(async (ctx) => {
+      return await ctx.db
+        .query("eventRegistrationEmails")
+        .withIndex("by_eventRegistrationId_and_kind", (q) =>
+          q.eq("eventRegistrationId", eventRegistrationId).eq("kind", "confirmation_request")
+        )
+        .unique();
+    });
+    expect(beforeSuccess?.sentAt).toBeUndefined();
+
+    await t.mutation(api.events.recordEventRegistrationEmailSuccess, {
+      emailId: claim.emailId as Id<"eventRegistrationEmails">,
+    });
+
+    const afterSuccess = await t.run(async (ctx) => await ctx.db.get(claim.emailId as Id<"eventRegistrationEmails">));
+    expect(afterSuccess?.sentAt).toEqual(expect.any(Number));
+  });
+
+  test("blocks applicant confirmation after a requested confirmation window expires", async () => {
+    const t = convexTest(schema, modules);
+    const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const { eventRegistrationId, registrationId } = await t.run(async (ctx) => {
+      const eventId = await insertEvent(ctx, "Expired Confirmation Event", "expired-confirm", startsAt, 60);
+      const registrationId = await insertRegistration(ctx, "Expired Applicant", "female");
+      const eventRegistrationId = await insertEventRegistration(ctx, eventId, registrationId, "female", "pending");
+      await ctx.db.patch(eventRegistrationId, {
+        confirmationRequestedAt: Date.now() - 72 * 60 * 60 * 1000,
+        confirmationExpiresAt: Date.now() - 24 * 60 * 60 * 1000,
+      });
+      return { eventRegistrationId, registrationId };
+    });
+    const sessionHash = await createSession(t, registrationId);
+
+    await expect(
+      t.mutation(api.events.confirmParticipation, { sessionHash, eventRegistrationId })
+    ).rejects.toThrow("Confirmation window has expired");
   });
 });

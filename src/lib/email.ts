@@ -249,6 +249,7 @@ export async function sendEventRegistrationStatusEmail({
   eventDate,
   eventLocation,
   kind,
+  applicantPortalUrl,
 }: {
   name: string;
   email: string;
@@ -256,6 +257,7 @@ export async function sendEventRegistrationStatusEmail({
   eventDate: string;
   eventLocation: string;
   kind: "approved" | "waitlisted" | "confirmation_request" | "cancelled" | "reminder";
+  applicantPortalUrl?: string;
 }): Promise<{ success: boolean; error?: string; id?: string }> {
   const copy = {
     approved: {
@@ -268,7 +270,7 @@ export async function sendEventRegistrationStatusEmail({
     },
     confirmation_request: {
       subject: `Please confirm: ${eventTitle}`,
-      body: `A spot may be available for ${eventTitle}. Please confirm your participation within 48 hours.`,
+      body: `A spot is available for ${eventTitle}. Please confirm your spot within the next 24 hours.`,
     },
     cancelled: {
       subject: `Event registration cancelled: ${eventTitle}`,
@@ -279,6 +281,27 @@ export async function sendEventRegistrationStatusEmail({
       body: `This is a reminder for ${eventTitle}.`,
     },
   }[kind];
+  const portalAction =
+    kind === "reminder"
+      ? "Confirm your registration"
+      : kind === "confirmation_request"
+        ? "Confirm your spot"
+        : "Open your profile";
+  const portalText = applicantPortalUrl
+    ? `\n\n${portalAction}: ${applicantPortalUrl}`
+    : "";
+  const portalHtml = applicantPortalUrl
+    ? `
+          <p style="margin: 24px 0;">
+            <a href="${applicantPortalUrl}" style="display: inline-block; background: #0f766e; color: white; text-decoration: none; padding: 12px 18px; border-radius: 8px; font-weight: 600;">
+              ${portalAction}
+            </a>
+          </p>
+          <p style="color: #6b7280; line-height: 1.6; font-size: 14px;">
+            If the button above does not work, copy and paste this link into your browser:<br />
+            <span style="word-break: break-all;">${applicantPortalUrl}</span>
+          </p>`
+    : "";
 
   try {
     const resend = getResend();
@@ -286,7 +309,7 @@ export async function sendEventRegistrationStatusEmail({
       from: defaultFrom,
       to: email,
       subject: copy.subject,
-      text: `Assalamu Alaikum ${name},\n\n${copy.body}\n\nEvent: ${eventTitle}\nWhen: ${eventDate}\nLocation: ${eventLocation}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      text: `Assalamu Alaikum ${name},\n\n${copy.body}\n\nEvent: ${eventTitle}\nWhen: ${eventDate}\nLocation: ${eventLocation}${portalText}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
           <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
@@ -296,6 +319,7 @@ export async function sendEventRegistrationStatusEmail({
             <strong>When:</strong> ${eventDate}<br />
             <strong>Location:</strong> ${eventLocation}
           </p>
+${portalHtml}
           <p style="line-height: 1.6; margin-top: 24px;">
             Warmly,<br />
             <strong>Bader & Danielle</strong><br />

@@ -884,6 +884,29 @@ export const updateAttendanceStatus = mutation({
   },
 });
 
+export const updateRegistrationConfirmation = mutation({
+  args: {
+    eventRegistrationId: v.id("eventRegistrations"),
+    confirmed: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.eventRegistrationId);
+    if (!row) throw new Error("Event registration not found");
+    if (row.registrationStatus === "rejected" || row.registrationStatus === "cancelled") {
+      throw new Error("Rejected or cancelled event registrations cannot be confirmed");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(row._id, {
+      registrationStatus: args.confirmed ? "approved" : row.registrationStatus,
+      approvedAt: args.confirmed ? row.approvedAt ?? now : row.approvedAt,
+      confirmedAt: args.confirmed ? row.confirmedAt ?? now : undefined,
+      updatedAt: now,
+    });
+    return row._id;
+  },
+});
+
 export const requestConfirmation = mutation({
   args: {
     eventRegistrationId: v.id("eventRegistrations"),
@@ -915,6 +938,19 @@ export const confirmParticipation = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
+    if (row.confirmedAt) {
+      return row._id;
+    }
+    if (row.confirmationRequestedAt && row.confirmationExpiresAt && row.confirmationExpiresAt < Date.now()) {
+      throw new Error("Confirmation window has expired");
+    }
+    if (
+      row.registrationStatus !== "pending" &&
+      row.registrationStatus !== "waitlisted" &&
+      row.registrationStatus !== "approved"
+    ) {
+      throw new Error("This event registration cannot be confirmed");
+    }
     await ctx.db.patch(row._id, {
       confirmedAt: Date.now(),
       updatedAt: Date.now(),
@@ -995,6 +1031,7 @@ export const claimEventRegistrationEmail = mutation({
   args: {
     eventRegistrationId: v.id("eventRegistrations"),
     kind: eventRegistrationEmailKind,
+    force: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.eventRegistrationId);
@@ -1011,7 +1048,7 @@ export const claimEventRegistrationEmail = mutation({
         q.eq("eventRegistrationId", row._id).eq("kind", args.kind)
       )
       .unique();
-    if (existing?.sentAt) {
+    if (existing?.sentAt && !args.force) {
       return { claimed: false, alreadySent: true };
     }
 
@@ -1025,7 +1062,6 @@ export const claimEventRegistrationEmail = mutation({
       updatedAt: now,
     });
     await ctx.db.patch(emailId, {
-      sentAt: now,
       error: undefined,
       updatedAt: now,
     });
@@ -1041,6 +1077,19 @@ export const claimEventRegistrationEmail = mutation({
       eventLocation: event.location,
       kind: args.kind,
     };
+  },
+});
+
+export const recordEventRegistrationEmailSuccess = mutation({
+  args: {
+    emailId: v.id("eventRegistrationEmails"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.emailId, {
+      sentAt: Date.now(),
+      error: undefined,
+      updatedAt: Date.now(),
+    });
   },
 });
 

@@ -34,6 +34,7 @@ async function createRegistration(
     const registrationId = await ctx.db.insert("registrations", {
       name,
       applicantNumber: (await ctx.db.query("registrations").take(1000)).length + 1,
+      publicApplicantNumber: (await ctx.db.query("registrations").take(1000)).length + 1,
       age: 30,
       gender,
       maritalStatus: "single",
@@ -410,14 +411,14 @@ describe("interest rules", () => {
     });
   });
 
-  test("number submission resolves explicit applicant numbers before legacy fallback numbers", async () => {
+  test("number submission resolves public applicant numbers before legacy fallback numbers", async () => {
     const t = convexTest(schema, modules);
     const male = await createRegistration(t, "Numbered Male", "male");
     const female = await createRegistration(t, "Numbered Female", "female");
     const maleSession = await createSession(t, male);
 
     await t.run(async (ctx) => {
-      await ctx.db.patch(female, { applicantNumber: 3 });
+      await ctx.db.patch(female, { publicApplicantNumber: 3 });
       await ctx.db.insert("registrations", {
         name: "Legacy Unnumbered Male",
         age: 30,

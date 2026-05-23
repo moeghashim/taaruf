@@ -1,8 +1,7 @@
-// INVARIANT (see AGENTS.md): `registrations.applicantNumber` is a permanent
-// public identifier. Once assigned it is never patched and never re-used —
-// not even after deleteRegistration. The `create` mutation here is the only
-// production code path that writes the field. Do not add another, and do not
-// patch the field after insert.
+// INVARIANT (see AGENTS.md): `registrations.publicApplicantNumber` is the
+// permanent public identifier. Once assigned it is never patched and never
+// re-used, not even after deleteRegistration. The `create` mutation and the
+// one-time backfill are the only production code paths that write the field.
 
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -30,7 +29,21 @@ function normalizeInterestSubmissionNumbers(values?: number[]) {
   return [...new Set((values || []).filter((value) => Number.isInteger(value) && value > 0))].slice(0, 3);
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function normalizePhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 7 ? digits : "";
+}
+
+function normalizeName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 const APPLICANT_NUMBER_HWM_KEY = "applicantNumberHighWaterMark";
+const PUBLIC_APPLICANT_NUMBER_HWM_KEY = "publicApplicantNumberHighWaterMark";
 
 // INVARIANT (see AGENTS.md): applicant numbers are permanent. Once assigned
 // they are never patched and never re-used, even if the underlying
@@ -84,6 +97,55 @@ async function nextApplicantNumber(ctx: MutationCtx) {
   return nextNumber;
 }
 
+// INVARIANT: public applicant numbers are the human-facing identifiers used
+// in admin, applicant dashboards, interest submission, and exports. They are
+// backed by their own monotonic high-water-mark and must never be reused after
+// deleteRegistration.
+async function nextPublicApplicantNumber(ctx: MutationCtx) {
+  const hwmRow = await ctx.db
+    .query("settings")
+    .withIndex("by_key", (q) => q.eq("key", PUBLIC_APPLICANT_NUMBER_HWM_KEY))
+    .first();
+  const persistedHwm = hwmRow ? Number.parseInt(hwmRow.value, 10) : 0;
+
+  let liveMax = 0;
+  let liveCount = 0;
+  for await (const registration of ctx.db.query("registrations")) {
+    liveCount += 1;
+    if (
+      typeof registration.publicApplicantNumber === "number" &&
+      Number.isInteger(registration.publicApplicantNumber) &&
+      registration.publicApplicantNumber > liveMax
+    ) {
+      liveMax = registration.publicApplicantNumber;
+    }
+  }
+
+  const previousHwm = Math.max(Number.isFinite(persistedHwm) ? persistedHwm : 0, liveMax, liveCount);
+  const nextNumber = previousHwm + 1;
+
+  const collision = await ctx.db
+    .query("registrations")
+    .withIndex("by_publicApplicantNumber", (q) => q.eq("publicApplicantNumber", nextNumber))
+    .first();
+  if (collision) {
+    throw new Error(
+      `Public applicant number invariant violated: number ${nextNumber} is already assigned (registration ${collision._id}). Refusing to reuse.`
+    );
+  }
+
+  if (hwmRow) {
+    await ctx.db.patch(hwmRow._id, { value: String(nextNumber) });
+  } else {
+    await ctx.db.insert("settings", {
+      key: PUBLIC_APPLICANT_NUMBER_HWM_KEY,
+      value: String(nextNumber),
+    });
+  }
+
+  return nextNumber;
+}
+
 async function countCapacityUsed(
   ctx: MutationCtx,
   eventId: Id<"events">,
@@ -110,6 +172,116 @@ async function eventRegistrationStatusForCapacity(
   const capacity = gender === "male" ? event.maleCapacity : event.femaleCapacity;
   const used = await countCapacityUsed(ctx, event._id, gender);
   return used < capacity ? "pending" as const : "waitlisted" as const;
+}
+
+async function findExistingParticipantProfile(
+  ctx: MutationCtx,
+  args: {
+    name: string;
+    age: number;
+    gender: "male" | "female";
+    email: string;
+    phone: string;
+  },
+  useSecondaryIdentifiers: boolean
+) {
+  const emailCanonical = normalizeEmail(args.email);
+  const phoneCanonical = normalizePhone(args.phone);
+  const nameCanonical = normalizeName(args.name);
+
+  if (emailCanonical) {
+    const byCanonicalEmail = await ctx.db
+      .query("registrations")
+      .withIndex("by_emailCanonical", (q) => q.eq("emailCanonical", emailCanonical))
+      .first();
+    if (byCanonicalEmail) return byCanonicalEmail;
+
+    const legacyEmailMatch = (await ctx.db.query("registrations").take(1000)).find(
+      (registration) => normalizeEmail(registration.email) === emailCanonical
+    );
+    if (legacyEmailMatch) return legacyEmailMatch;
+  }
+
+  if (!useSecondaryIdentifiers) return null;
+
+  if (phoneCanonical) {
+    const byCanonicalPhone = await ctx.db
+      .query("registrations")
+      .withIndex("by_phoneCanonical", (q) => q.eq("phoneCanonical", phoneCanonical))
+      .first();
+    if (byCanonicalPhone) return byCanonicalPhone;
+
+    const legacyPhoneMatch = (await ctx.db.query("registrations").take(1000)).find(
+      (registration) => normalizePhone(registration.phone) === phoneCanonical
+    );
+    if (legacyPhoneMatch) return legacyPhoneMatch;
+  }
+
+  if (nameCanonical) {
+    const nameMatches = (await ctx.db
+      .query("registrations")
+      .withIndex("by_nameCanonical", (q) => q.eq("nameCanonical", nameCanonical))
+      .take(10))
+      .filter((registration) => registration.gender === args.gender && registration.age === args.age);
+    if (nameMatches.length === 1) return nameMatches[0];
+
+    const legacyNameMatches = (await ctx.db.query("registrations").take(1000)).filter(
+      (registration) =>
+        normalizeName(registration.name) === nameCanonical &&
+        registration.gender === args.gender &&
+        registration.age === args.age
+    );
+    if (legacyNameMatches.length === 1) return legacyNameMatches[0];
+  }
+
+  return null;
+}
+
+async function createOrRestoreEventRegistration(
+  ctx: MutationCtx,
+  args: {
+    event: Doc<"events">;
+    registration: Doc<"registrations">;
+    now: number;
+  }
+) {
+  if (
+    typeof args.registration.publicApplicantNumber !== "number" &&
+    typeof args.registration.applicantNumber !== "number"
+  ) {
+    throw new Error("Existing profile is missing a profile number. Please contact admin before registering for this event.");
+  }
+
+  const existing = await ctx.db
+    .query("eventRegistrations")
+    .withIndex("by_eventId_and_registrationId", (q) =>
+      q.eq("eventId", args.event._id).eq("registrationId", args.registration._id)
+    )
+    .unique();
+  if (existing && !["cancelled", "rejected"].includes(existing.registrationStatus)) {
+    throw new Error("This applicant is already registered for this event.");
+  }
+
+  const registrationStatus = await eventRegistrationStatusForCapacity(ctx, args.event, args.registration.gender);
+  const payload = {
+    eventId: args.event._id,
+    registrationId: args.registration._id,
+    gender: args.registration.gender,
+    registrationStatus,
+    attendanceStatus: "not_checked_in" as const,
+    eligibilityStatus: deriveEligibilityStatus(args.registration),
+    cancelledAt: undefined,
+    rejectedAt: undefined,
+    createdAt: existing?.createdAt ?? args.now,
+    updatedAt: args.now,
+  };
+
+  if (existing) {
+    await ctx.db.patch(existing._id, payload);
+    return existing._id;
+  }
+
+  return await ctx.db.insert("eventRegistrations", payload);
 }
 
 async function validatePublicEventRegistration(ctx: MutationCtx, eventCode: string) {
@@ -255,33 +427,39 @@ export const create = mutation({
     const profileCompleted = hasCompletedProfile(args);
     const event = args.eventCode ? await validatePublicEventRegistration(ctx, args.eventCode) : null;
 
-    const trimmedEmail = args.email.trim();
-    const lowercasedEmail = trimmedEmail.toLowerCase();
-    const existingByEmail =
-      (await ctx.db
-        .query("registrations")
-        .withIndex("by_email", (q) => q.eq("email", trimmedEmail))
-        .first()) ??
-      (lowercasedEmail !== trimmedEmail
-        ? await ctx.db
-            .query("registrations")
-            .withIndex("by_email", (q) => q.eq("email", lowercasedEmail))
-            .first()
-        : null);
-    if (existingByEmail) {
+    const emailCanonical = normalizeEmail(args.email);
+    const phoneCanonical = normalizePhone(args.phone);
+    const nameCanonical = normalizeName(args.name);
+    const existingProfile = await findExistingParticipantProfile(ctx, args, Boolean(event));
+    if (existingProfile && !event) {
       throw new Error("An applicant is already registered with this email.");
+    }
+    if (existingProfile && event) {
+      await ctx.db.patch(existingProfile._id, {
+        emailCanonical: normalizeEmail(existingProfile.email),
+        phoneCanonical: normalizePhone(existingProfile.phone) || undefined,
+        nameCanonical: normalizeName(existingProfile.name),
+        stripeSessionId: args.stripeSessionId,
+        paymentStatus: existingProfile.paymentStatus === "paid" ? "paid" : args.paymentStatus ?? "pending",
+      });
+      await createOrRestoreEventRegistration(ctx, { event, registration: existingProfile, now });
+      return existingProfile._id;
     }
 
     const registrationId = await ctx.db.insert("registrations", {
       applicantNumber: await nextApplicantNumber(ctx),
-      name: args.name,
+      publicApplicantNumber: await nextPublicApplicantNumber(ctx),
+      name: args.name.trim(),
       age: args.age,
       gender: args.gender,
       maritalStatus: args.maritalStatus,
       education: args.education,
       job: args.job,
-      email: args.email,
-      phone: args.phone,
+      email: emailCanonical,
+      emailCanonical,
+      phone: args.phone.trim(),
+      phoneCanonical: phoneCanonical || undefined,
+      nameCanonical,
       describeYourself: args.describeYourself,
       lookingFor: args.lookingFor,
       backgroundCheck: args.backgroundCheck,
@@ -310,17 +488,7 @@ export const create = mutation({
     if (event) {
       const registration = await ctx.db.get(registrationId);
       if (!registration) throw new Error("Registration not found after creation");
-      const registrationStatus = await eventRegistrationStatusForCapacity(ctx, event, registration.gender);
-      await ctx.db.insert("eventRegistrations", {
-        eventId: event._id,
-        registrationId,
-        gender: registration.gender,
-        registrationStatus,
-        attendanceStatus: "not_checked_in",
-        eligibilityStatus: deriveEligibilityStatus(registration),
-        createdAt: now,
-        updatedAt: now,
-      });
+      await createOrRestoreEventRegistration(ctx, { event, registration, now });
     }
 
     return registrationId;
@@ -560,6 +728,10 @@ export const updatePaymentStatus = mutation({
       throw new Error(`Registration not found for session: ${args.stripeSessionId}`);
     }
 
+    if (args.paymentStatus === "failed" && registration.paymentStatus === "paid") {
+      return registration._id;
+    }
+
     await ctx.db.patch(registration._id, {
       paymentStatus: args.paymentStatus,
       amountPaid: args.amountPaid,
@@ -574,7 +746,12 @@ export const getByEmail = query({
   handler: async (ctx, args) => {
     const trimmed = args.email.trim();
     if (!trimmed) return null;
-    const lowercased = trimmed.toLowerCase();
+    const lowercased = normalizeEmail(trimmed);
+    const byCanonical = await ctx.db
+      .query("registrations")
+      .withIndex("by_emailCanonical", (q) => q.eq("emailCanonical", lowercased))
+      .first();
+    if (byCanonical) return byCanonical;
     const byTrimmed = await ctx.db
       .query("registrations")
       .withIndex("by_email", (q) => q.eq("email", trimmed))

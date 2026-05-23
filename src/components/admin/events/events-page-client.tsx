@@ -9,7 +9,9 @@ import { Ico } from "@/components/admin/primitives/icons";
 import { Pill } from "@/components/admin/primitives/status-pill";
 
 const eventStatuses = ["draft", "scheduled", "completed", "cancelled"] as const;
-const registrationStatuses = ["pending", "approved", "waitlisted", "rejected", "cancelled"] as const;
+const registrationDropdownStatuses = ["pending", "approved", "confirmed", "waitlisted", "rejected", "cancelled"] as const;
+const registrationFilterStatuses = ["pending", "approved", "confirmed", "waitlisted", "rejected", "cancelled"] as const;
+const profileApprovalStatuses = ["pending", "approved", "rejected"] as const;
 const attendanceStatuses = ["not_checked_in", "attended", "no_show"] as const;
 const emailKinds = ["approved", "waitlisted", "confirmation_request", "cancelled", "reminder"] as const;
 const carryoverStatuses = ["waitlisted", "pending", "approved"] as const;
@@ -47,6 +49,12 @@ function defaultEmailKind(status: string): (typeof emailKinds)[number] {
   return "reminder";
 }
 
+function profileApprovalTone(status?: string) {
+  if (status === "approved") return "green" as const;
+  if (status === "rejected") return "rose" as const;
+  return "amber" as const;
+}
+
 export function EventsPageClient() {
   const events = useQuery(api.events.getAll);
   const backfillStatus = useQuery(api.events.verifyEventBackfill);
@@ -54,6 +62,7 @@ export function EventsPageClient() {
   const updateEvent = useMutation(api.events.update);
   const deleteEvent = useMutation(api.events.deleteEvent);
   const updateRegistrationStatus = useMutation(api.events.updateRegistrationStatus);
+  const updateRegistrationConfirmation = useMutation(api.events.updateRegistrationConfirmation);
   const updateAttendanceStatus = useMutation(api.events.updateAttendanceStatus);
   const requestConfirmation = useMutation(api.events.requestConfirmation);
   const carryOverRegistrations = useMutation(api.events.carryOverRegistrations);
@@ -71,7 +80,8 @@ export function EventsPageClient() {
   const [emailKindByRegistration, setEmailKindByRegistration] = useState<Record<string, (typeof emailKinds)[number]>>({});
   const [broadcastEmailKind, setBroadcastEmailKind] = useState<(typeof emailKinds)[number]>("reminder");
   const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [registrationStatusFilter, setRegistrationStatusFilter] = useState<"all" | (typeof registrationStatuses)[number]>("all");
+  const [registrationStatusFilter, setRegistrationStatusFilter] = useState<"all" | (typeof registrationFilterStatuses)[number]>("all");
+  const [profileApprovalFilter, setProfileApprovalFilter] = useState<"all" | (typeof profileApprovalStatuses)[number]>("all");
   const [registrationSearch, setRegistrationSearch] = useState("");
   const [carryoverSourceEventId, setCarryoverSourceEventId] = useState<string>("");
   const [selectedCarryoverStatuses, setSelectedCarryoverStatuses] = useState<Array<(typeof carryoverStatuses)[number]>>([
@@ -107,6 +117,10 @@ export function EventsPageClient() {
       pending: registrations.filter((row) => row.registrationStatus === "pending").length,
       rejected: registrations.filter((row) => row.registrationStatus === "rejected").length,
       waitlisted: waitlistedRegistrations + waitlistEntries.length,
+      confirmed: registrations.filter((row) => row.confirmedAt).length,
+      profileApproved: registrations.filter((row) => row.registration?.status === "approved").length,
+      profilePending: registrations.filter((row) => row.registration?.status === "pending").length,
+      profileRejected: registrations.filter((row) => row.registration?.status === "rejected").length,
       male: registrations.filter((row) => row.gender === "male").length +
         waitlistEntries.filter((row) => row.gender === "male").length,
       female: registrations.filter((row) => row.gender === "female").length +
@@ -117,16 +131,25 @@ export function EventsPageClient() {
     const normalizedSearch = registrationSearch.trim().toLowerCase();
     return (detail?.registrations ?? []).filter((row) => {
       const statusMatches =
-        registrationStatusFilter === "all" || row.registrationStatus === registrationStatusFilter;
+        registrationStatusFilter === "all" ||
+        (registrationStatusFilter === "confirmed" ? Boolean(row.confirmedAt) : row.registrationStatus === registrationStatusFilter);
       if (!statusMatches) return false;
+      const profileStatusMatches =
+        profileApprovalFilter === "all" || row.registration?.status === profileApprovalFilter;
+      if (!profileStatusMatches) return false;
       if (!normalizedSearch) return true;
 
-      const applicantNumber = row.registration?.applicantNumber;
+      const applicantNumber = row.registration?.publicApplicantNumber;
       const applicantNumberText = applicantNumber === undefined ? "" : String(applicantNumber);
       const name = row.registration?.name?.toLowerCase() ?? "";
-      return name.includes(normalizedSearch) || applicantNumberText.includes(normalizedSearch);
+      const profileStatus = row.registration?.status?.toLowerCase() ?? "";
+      return (
+        name.includes(normalizedSearch) ||
+        applicantNumberText.includes(normalizedSearch) ||
+        profileStatus.includes(normalizedSearch)
+      );
     });
-  }, [detail?.registrations, registrationSearch, registrationStatusFilter]);
+  }, [detail?.registrations, profileApprovalFilter, registrationSearch, registrationStatusFilter]);
 
   useEffect(() => {
     if (!detail?._id || detail._id !== selectedEventId) return;
@@ -171,14 +194,58 @@ export function EventsPageClient() {
   }
 
   async function sendEventEmail(eventRegistrationId: string, kind: (typeof emailKinds)[number]) {
-    const response = await fetch("/api/admin/event-registration-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventRegistrationId, kind }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Failed to send email");
-    setMessage(payload.alreadySent ? "Email was already sent." : "Email sent.");
+    try {
+      const response = await fetch("/api/admin/event-registration-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventRegistrationId, kind, force: true }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Failed to send email");
+      setMessage("Email sent.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleRequestConfirmation(eventRegistrationId: Id<"eventRegistrations">) {
+    try {
+      await requestConfirmation({ eventRegistrationId });
+      const response = await fetch("/api/admin/event-registration-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventRegistrationId, kind: "confirmation_request", force: true }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Failed to send confirmation request email");
+      setMessage(
+        "Confirmation requested and applicant notified."
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleRegistrationStatusChange(
+    row: NonNullable<typeof detail>["registrations"][number],
+    value: (typeof registrationDropdownStatuses)[number]
+  ) {
+    try {
+      if (value === "confirmed") {
+        await updateRegistrationConfirmation({ eventRegistrationId: row._id, confirmed: true });
+        return;
+      }
+
+      await updateRegistrationStatus({
+        eventRegistrationId: row._id,
+        registrationStatus: value,
+      });
+      if (row.confirmedAt) {
+        await updateRegistrationConfirmation({ eventRegistrationId: row._id, confirmed: false });
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function handleCarryover() {
@@ -264,6 +331,7 @@ export function EventsPageClient() {
 
   function clearRegistrationFilters() {
     setRegistrationStatusFilter("all");
+    setProfileApprovalFilter("all");
     setRegistrationSearch("");
   }
 
@@ -482,6 +550,10 @@ export function EventsPageClient() {
               ["Pending", detailStats.pending],
               ["Rejected", detailStats.rejected],
               ["Waitlisted", detailStats.waitlisted],
+              ["Confirmed", detailStats.confirmed],
+              ["Profiles approved", detailStats.profileApproved],
+              ["Profiles pending", detailStats.profilePending],
+              ["Profiles rejected", detailStats.profileRejected],
               ["Male", detailStats.male],
               ["Female", detailStats.female],
             ].map(([label, value]) => (
@@ -666,13 +738,13 @@ export function EventsPageClient() {
                     <div className="interest-row-main">
                       <h4>{entry.registration?.name ?? "Unknown applicant"}</h4>
                       <p>
-                        {entry.registration?.applicantNumber ? `#${entry.registration.applicantNumber} · ` : ""}
+                        {entry.registration?.publicApplicantNumber ? `#${entry.registration.publicApplicantNumber} · ` : ""}
                         {titleize(entry.gender)} · {entry.registration?.email ?? "-"}
                       </p>
                     </div>
                     <div className="interest-row-meta">
-                      {entry.registration?.applicantNumber && (
-                        <span className="mono">#{entry.registration.applicantNumber}</span>
+                      {entry.registration?.publicApplicantNumber && (
+                        <span className="mono">#{entry.registration.publicApplicantNumber}</span>
                       )}
                       <Pill tone="gold">Waitlist</Pill>
                       {entry.sourceEvent && <span>{entry.sourceEvent.title}</span>}
@@ -685,7 +757,7 @@ export function EventsPageClient() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(180px, 240px) minmax(220px, 1fr) auto",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
               gap: 10,
               alignItems: "end",
               marginBottom: 12,
@@ -700,7 +772,21 @@ export function EventsPageClient() {
                 }
               >
                 <option value="all">All statuses</option>
-                {registrationStatuses.map((status) => (
+                {registrationFilterStatuses.map((status) => (
+                  <option key={status} value={status}>{titleize(status)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Profile approval</span>
+              <select
+                value={profileApprovalFilter}
+                onChange={(event) =>
+                  setProfileApprovalFilter(event.target.value as typeof profileApprovalFilter)
+                }
+              >
+                <option value="all">All approvals</option>
+                {profileApprovalStatuses.map((status) => (
                   <option key={status} value={status}>{titleize(status)}</option>
                 ))}
               </select>
@@ -716,7 +802,11 @@ export function EventsPageClient() {
             <button
               type="button"
               className="btn"
-              disabled={registrationStatusFilter === "all" && registrationSearch.trim() === ""}
+              disabled={
+                registrationStatusFilter === "all" &&
+                profileApprovalFilter === "all" &&
+                registrationSearch.trim() === ""
+              }
               onClick={clearRegistrationFilters}
             >
               Clear
@@ -729,28 +819,42 @@ export function EventsPageClient() {
             {filteredRegistrations.map((row) => (
               <div key={row._id} className="interest-row">
                 <div className="interest-row-main">
-                  <h4>{row.registration?.name ?? "Unknown applicant"}</h4>
+                  <h4>
+                    {row.registration?.publicApplicantNumber ? (
+                      <span className="mono">#{row.registration.publicApplicantNumber} · </span>
+                    ) : null}
+                    {row.registration?.name ?? "Unknown applicant"}
+                  </h4>
                   <p>
-                    {row.registration?.applicantNumber ? `#${row.registration.applicantNumber} · ` : ""}
                     {titleize(row.gender)} · {row.registration?.email ?? "-"}
                   </p>
                 </div>
                 <div className="interest-row-meta">
-                  {row.registration?.applicantNumber && (
-                    <span className="mono">#{row.registration.applicantNumber}</span>
+                  {row.registration?.publicApplicantNumber && (
+                    <Pill tone="blue">Applicant #{row.registration.publicApplicantNumber}</Pill>
+                  )}
+                  <Pill tone={profileApprovalTone(row.registration?.status)}>
+                    Profile {titleize(row.registration?.status ?? "pending")}
+                  </Pill>
+                  {row.confirmedAt && (
+                    <Pill tone="green">Confirmed {formatDateTime(row.confirmedAt)}</Pill>
                   )}
                   <select
-                    value={row.registrationStatus}
+                    aria-label="Event registration status"
+                    title="Event registration status"
+                    value={row.confirmedAt ? "confirmed" : row.registrationStatus}
                     onChange={(event) =>
-                      updateRegistrationStatus({
-                        eventRegistrationId: row._id,
-                        registrationStatus: event.target.value as (typeof registrationStatuses)[number],
-                      })
+                      handleRegistrationStatusChange(
+                        row,
+                        event.target.value as (typeof registrationDropdownStatuses)[number]
+                      )
                     }
                   >
-                    {registrationStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
+                    {registrationDropdownStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
                   </select>
                   <select
+                    aria-label="Event attendance status"
+                    title="Event attendance status"
                     value={row.attendanceStatus}
                     onChange={(event) =>
                       updateAttendanceStatus({
@@ -763,7 +867,7 @@ export function EventsPageClient() {
                   </select>
                   {detail.status !== "completed" && detail.status !== "cancelled" && (
                     <>
-                      <button type="button" className="btn" onClick={() => requestConfirmation({ eventRegistrationId: row._id })}>
+                      <button type="button" className="btn" onClick={() => handleRequestConfirmation(row._id)}>
                         Request Confirm
                       </button>
                       <select

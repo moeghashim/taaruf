@@ -305,6 +305,8 @@
 [data-admin] td .name { font-weight: 500; color: var(--ink); }
 [data-admin] td .sub { color: var(--mute); font-size: 11px; margin-top: 2px; }
 [data-admin] .who { display: flex; align-items: center; gap: 10px; }
+[data-admin] .who .name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+[data-admin] .who .applicant-number { font-family: var(--font-admin-mono, "JetBrains Mono"), monospace; font-size: 11px; font-weight: 500; color: var(--accent); background: var(--bg-tint); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
 [data-admin] .who .av { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-tint); display: grid; place-items: center; font-size: 12px; font-weight: 500; color: var(--ink-2); border: 1px solid var(--line); overflow: hidden; flex-shrink: 0; }
 [data-admin] .who.f .av { background: #F4E7E6; color: #8A3B37; }
 [data-admin] .who.m .av { background: #E5EBE7; color: #2E4A3E; }
