@@ -12,6 +12,7 @@ const eventStatuses = ["draft", "scheduled", "completed", "cancelled"] as const;
 const registrationDropdownStatuses = ["pending", "approved", "confirmed", "waitlisted", "rejected", "cancelled"] as const;
 const registrationFilterStatuses = ["pending", "approved", "confirmed", "waitlisted", "rejected", "cancelled"] as const;
 const profileApprovalStatuses = ["pending", "approved", "rejected"] as const;
+const genderFilterOptions = ["male", "female"] as const;
 const attendanceStatuses = ["not_checked_in", "attended", "no_show"] as const;
 const emailKinds = ["approved", "waitlisted", "confirmation_request", "cancelled", "reminder"] as const;
 const carryoverStatuses = ["waitlisted", "pending", "approved"] as const;
@@ -82,6 +83,7 @@ export function EventsPageClient() {
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [registrationStatusFilter, setRegistrationStatusFilter] = useState<"all" | (typeof registrationFilterStatuses)[number]>("all");
   const [profileApprovalFilter, setProfileApprovalFilter] = useState<"all" | (typeof profileApprovalStatuses)[number]>("all");
+  const [registrationGenderFilter, setRegistrationGenderFilter] = useState<"all" | (typeof genderFilterOptions)[number]>("all");
   const [registrationSearch, setRegistrationSearch] = useState("");
   const [carryoverSourceEventId, setCarryoverSourceEventId] = useState<string>("");
   const [selectedCarryoverStatuses, setSelectedCarryoverStatuses] = useState<Array<(typeof carryoverStatuses)[number]>>([
@@ -137,6 +139,7 @@ export function EventsPageClient() {
       const profileStatusMatches =
         profileApprovalFilter === "all" || row.registration?.status === profileApprovalFilter;
       if (!profileStatusMatches) return false;
+      if (registrationGenderFilter !== "all" && row.gender !== registrationGenderFilter) return false;
       if (!normalizedSearch) return true;
 
       const applicantNumber = row.registration?.publicApplicantNumber;
@@ -149,7 +152,7 @@ export function EventsPageClient() {
         profileStatus.includes(normalizedSearch)
       );
     });
-  }, [detail?.registrations, profileApprovalFilter, registrationSearch, registrationStatusFilter]);
+  }, [detail?.registrations, profileApprovalFilter, registrationGenderFilter, registrationSearch, registrationStatusFilter]);
 
   useEffect(() => {
     if (!detail?._id || detail._id !== selectedEventId) return;
@@ -332,6 +335,7 @@ export function EventsPageClient() {
   function clearRegistrationFilters() {
     setRegistrationStatusFilter("all");
     setProfileApprovalFilter("all");
+    setRegistrationGenderFilter("all");
     setRegistrationSearch("");
   }
 
@@ -792,6 +796,20 @@ export function EventsPageClient() {
               </select>
             </label>
             <label className="field">
+              <span>Gender</span>
+              <select
+                value={registrationGenderFilter}
+                onChange={(event) =>
+                  setRegistrationGenderFilter(event.target.value as typeof registrationGenderFilter)
+                }
+              >
+                <option value="all">All genders</option>
+                {genderFilterOptions.map((gender) => (
+                  <option key={gender} value={gender}>{titleize(gender)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
               <span>Name or applicant #</span>
               <input
                 value={registrationSearch}
@@ -805,6 +823,7 @@ export function EventsPageClient() {
               disabled={
                 registrationStatusFilter === "all" &&
                 profileApprovalFilter === "all" &&
+                registrationGenderFilter === "all" &&
                 registrationSearch.trim() === ""
               }
               onClick={clearRegistrationFilters}
