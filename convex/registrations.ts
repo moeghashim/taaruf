@@ -151,17 +151,13 @@ async function countCapacityUsed(
   eventId: Id<"events">,
   gender: "male" | "female"
 ) {
-  let count = 0;
-  for (const status of ["pending", "approved"] as const) {
-    const rows = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId_and_gender_and_registrationStatus", (q) =>
-        q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status)
-      )
-      .take(500);
-    count += rows.length;
-  }
-  return count;
+  const rows = await ctx.db
+    .query("eventRegistrations")
+    .withIndex("by_eventId_and_gender_and_registrationStatus", (q) =>
+      q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", "approved")
+    )
+    .take(500);
+  return rows.length;
 }
 
 async function eventRegistrationStatusForCapacity(
@@ -171,7 +167,7 @@ async function eventRegistrationStatusForCapacity(
 ) {
   const capacity = gender === "male" ? event.maleCapacity : event.femaleCapacity;
   const used = await countCapacityUsed(ctx, event._id, gender);
-  return used < capacity ? "pending" as const : "waitlisted" as const;
+  return used < capacity ? "pending" as const : "pending" as const;
 }
 
 async function findExistingParticipantProfile(
@@ -258,7 +254,7 @@ async function createOrRestoreEventRegistration(
       q.eq("eventId", args.event._id).eq("registrationId", args.registration._id)
     )
     .unique();
-  if (existing && !["cancelled", "rejected"].includes(existing.registrationStatus)) {
+  if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
     throw new Error("This applicant is already registered for this event.");
   }
 
@@ -268,8 +264,12 @@ async function createOrRestoreEventRegistration(
     registrationId: args.registration._id,
     gender: args.registration.gender,
     registrationStatus,
+    confirmationStatus: "confirmed" as const,
     attendanceStatus: "not_checked_in" as const,
     eligibilityStatus: deriveEligibilityStatus(args.registration),
+    confirmedAt: args.now,
+    confirmationRequestedAt: undefined,
+    confirmationExpiresAt: undefined,
     cancelledAt: undefined,
     rejectedAt: undefined,
     createdAt: existing?.createdAt ?? args.now,

@@ -7,6 +7,7 @@ import { modules } from "./test.setup";
 
 type Gender = Doc<"registrations">["gender"];
 type EventRegistrationStatus = Doc<"eventRegistrations">["registrationStatus"];
+type EventConfirmationStatus = NonNullable<Doc<"eventRegistrations">["confirmationStatus"]>;
 
 async function insertRegistration(
   ctx: Parameters<Parameters<ReturnType<typeof convexTest>["run"]>[0]>[0],
@@ -69,7 +70,8 @@ async function insertEventRegistration(
   eventId: Id<"events">,
   registrationId: Id<"registrations">,
   gender: Gender,
-  registrationStatus: EventRegistrationStatus
+  registrationStatus: EventRegistrationStatus,
+  confirmationStatus: EventConfirmationStatus = "not_confirmed"
 ) {
   const now = Date.now();
   return await ctx.db.insert("eventRegistrations", {
@@ -77,6 +79,7 @@ async function insertEventRegistration(
     registrationId,
     gender,
     registrationStatus,
+    confirmationStatus,
     attendanceStatus: "not_checked_in",
     eligibilityStatus: "approved_member",
     createdAt: now,
@@ -141,7 +144,7 @@ describe("events", () => {
     expect((active as Array<{ eventCode: string }>).map((event) => event.eventCode).slice(0, 2)).toEqual(["newer", "older"]);
   });
 
-  test("backfills selected source event registrations into a target event as pending", async () => {
+  test("backfills selected source event registrations into a target event as approved but not confirmed", async () => {
     const t = convexTest(schema, modules);
     const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
     const { sourceEventId, targetEventId, existingMaleId, sourceMaleId, sourceFemaleId } = await t.run(async (ctx) => {
@@ -153,7 +156,14 @@ describe("events", () => {
 
       await insertEventRegistration(ctx, targetEventId, existingMaleId, "male", "pending");
       await insertEventRegistration(ctx, sourceEventId, sourceMaleId, "male", "pending");
-      await insertEventRegistration(ctx, sourceEventId, sourceFemaleId, "female", "waitlisted");
+      await ctx.db.insert("eventWaitlistEntries", {
+        eventId: sourceEventId,
+        registrationId: sourceFemaleId,
+        gender: "female",
+        status: "active",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
 
       return { sourceEventId, targetEventId, existingMaleId, sourceMaleId, sourceFemaleId };
     });
@@ -165,9 +175,9 @@ describe("events", () => {
     });
 
     expect(result).toMatchObject({
-      copied: 1,
+      copied: 2,
       alreadyExists: 0,
-      skippedCapacity: 1,
+      skippedCapacity: 0,
     });
 
     const targetRows = await t.run(async (ctx) => {
@@ -185,12 +195,18 @@ describe("events", () => {
         }),
         expect.objectContaining({
           registrationId: sourceFemaleId,
-          registrationStatus: "pending",
+          registrationStatus: "approved",
+          confirmationStatus: "not_confirmed",
+          waitlistCarryoverFromEventId: sourceEventId,
+        }),
+        expect.objectContaining({
+          registrationId: sourceMaleId,
+          registrationStatus: "approved",
+          confirmationStatus: "not_confirmed",
           waitlistCarryoverFromEventId: sourceEventId,
         }),
       ])
     );
-    expect(targetRows.some((row) => row.registrationId === sourceMaleId)).toBe(false);
   });
 
   test("moves event applicants to the Apr26 waitlist without changing Apr26 attendance", async () => {
@@ -271,12 +287,14 @@ describe("events", () => {
       expect.arrayContaining([
         expect.objectContaining({
           registrationId: attendedMaleId,
-          registrationStatus: "pending",
+          registrationStatus: "approved",
+          confirmationStatus: "not_confirmed",
           waitlistCarryoverFromEventId: aprilEventId,
         }),
         expect.objectContaining({
           registrationId: newFemaleId,
-          registrationStatus: "pending",
+          registrationStatus: "approved",
+          confirmationStatus: "not_confirmed",
           waitlistCarryoverFromEventId: aprilEventId,
         }),
       ])
@@ -299,6 +317,7 @@ describe("events", () => {
     );
 
     const row = await t.run(async (ctx) => await ctx.db.get(eventRegistrationId));
+    expect(row?.confirmationStatus).toBe("confirmed");
     expect(row?.confirmedAt).toEqual(expect.any(Number));
   });
 
@@ -318,7 +337,32 @@ describe("events", () => {
     );
 
     const row = await t.run(async (ctx) => await ctx.db.get(eventRegistrationId));
+    expect(row?.confirmationStatus).toBe("confirmed");
     expect(row?.confirmedAt).toEqual(expect.any(Number));
+  });
+
+  test("lets withdrawn applicants confirm again during a fresh confirmation window", async () => {
+    const t = convexTest(schema, modules);
+    const startsAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const { eventRegistrationId, registrationId } = await t.run(async (ctx) => {
+      const eventId = await insertEvent(ctx, "Withdrawn Reconfirm Event", "withdrawn-reconfirm", startsAt, 60);
+      const registrationId = await insertRegistration(ctx, "Withdrawn Applicant", "female");
+      const eventRegistrationId = await insertEventRegistration(ctx, eventId, registrationId, "female", "withdrawn", "cancelled");
+      return { eventRegistrationId, registrationId };
+    });
+    const sessionHash = await createSession(t, registrationId);
+
+    await t.mutation(api.events.requestConfirmation, { eventRegistrationId });
+    await expect(t.mutation(api.events.confirmParticipation, { sessionHash, eventRegistrationId })).resolves.toBe(
+      eventRegistrationId
+    );
+
+    const row = await t.run(async (ctx) => await ctx.db.get(eventRegistrationId));
+    expect(row).toMatchObject({
+      registrationStatus: "pending",
+      confirmationStatus: "confirmed",
+      confirmedAt: expect.any(Number),
+    });
   });
 
   test("lets admins mark an event registration confirmed", async () => {
@@ -331,13 +375,13 @@ describe("events", () => {
     });
 
     await expect(
-      t.mutation(api.events.updateRegistrationConfirmation, { eventRegistrationId, confirmed: true })
+      t.mutation(api.events.updateRegistrationConfirmation, { eventRegistrationId, confirmationStatus: "confirmed" })
     ).resolves.toBe(eventRegistrationId);
 
     const row = await t.run(async (ctx) => await ctx.db.get(eventRegistrationId));
     expect(row).toMatchObject({
-      registrationStatus: "approved",
-      approvedAt: expect.any(Number),
+      registrationStatus: "pending",
+      confirmationStatus: "confirmed",
       confirmedAt: expect.any(Number),
     });
   });

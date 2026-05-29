@@ -59,7 +59,6 @@ export async function POST(request: NextRequest) {
         name: claim.name,
         email: claim.email,
         eventTitle: claim.eventTitle,
-        registrationStatus: claim.registrationStatus,
       });
       if (!emailResult.success) {
         await convex.mutation(api.events.recordRegistrationReceivedEmailFailure, {

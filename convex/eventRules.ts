@@ -11,6 +11,7 @@ export const APRIL_2026_EVENT_CODE = "apr26";
 type ReadCtx = QueryCtx | MutationCtx;
 type Registration = Doc<"registrations">;
 type EventRegistrationStatus = Doc<"eventRegistrations">["registrationStatus"];
+type EventConfirmationStatus = Doc<"eventRegistrations">["confirmationStatus"];
 
 export function interestWindowMs(event: Doc<"events">) {
   return event.eventCode === APRIL_2026_EVENT_CODE ? APRIL_2026_INTEREST_WINDOW_MS : DEFAULT_INTEREST_WINDOW_MS;
@@ -103,6 +104,7 @@ export async function ensureEventRegistration(
     eventId: Id<"events">;
     registration: Registration;
     registrationStatus: EventRegistrationStatus;
+    confirmationStatus?: EventConfirmationStatus;
     attendanceStatus?: Doc<"eventRegistrations">["attendanceStatus"];
     waitlistCarryoverFromEventId?: Id<"events">;
   }
@@ -117,11 +119,12 @@ export async function ensureEventRegistration(
   const patch = {
     gender: args.registration.gender,
     registrationStatus: args.registrationStatus,
+    confirmationStatus: args.confirmationStatus ?? existing?.confirmationStatus ?? "not_confirmed",
     attendanceStatus: args.attendanceStatus ?? existing?.attendanceStatus ?? "not_checked_in" as const,
     eligibilityStatus: deriveEligibilityStatus(args.registration),
     waitlistCarryoverFromEventId: args.waitlistCarryoverFromEventId ?? existing?.waitlistCarryoverFromEventId,
     approvedAt: args.registrationStatus === "approved" ? existing?.approvedAt ?? now : existing?.approvedAt,
-    cancelledAt: args.registrationStatus === "cancelled" ? existing?.cancelledAt ?? now : existing?.cancelledAt,
+    cancelledAt: args.registrationStatus === "withdrawn" ? existing?.cancelledAt ?? now : existing?.cancelledAt,
     checkedInAt: args.attendanceStatus === "attended" ? existing?.checkedInAt ?? now : existing?.checkedInAt,
     updatedAt: now,
   };
@@ -136,11 +139,12 @@ export async function ensureEventRegistration(
     registrationId: args.registration._id,
     gender: args.registration.gender,
     registrationStatus: args.registrationStatus,
+    confirmationStatus: args.confirmationStatus ?? "not_confirmed",
     attendanceStatus: args.attendanceStatus ?? "not_checked_in",
     eligibilityStatus: deriveEligibilityStatus(args.registration),
     waitlistCarryoverFromEventId: args.waitlistCarryoverFromEventId,
     approvedAt: args.registrationStatus === "approved" ? now : undefined,
-    cancelledAt: args.registrationStatus === "cancelled" ? now : undefined,
+    cancelledAt: args.registrationStatus === "withdrawn" ? now : undefined,
     checkedInAt: args.attendanceStatus === "attended" ? now : undefined,
     createdAt: now,
     updatedAt: now,

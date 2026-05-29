@@ -107,8 +107,12 @@ const eventStatus = v.union(
 const eventRegistrationStatus = v.union(
   v.literal("pending"),
   v.literal("approved"),
-  v.literal("waitlisted"),
   v.literal("rejected"),
+  v.literal("withdrawn")
+);
+const eventConfirmationStatus = v.union(
+  v.literal("confirmed"),
+  v.literal("not_confirmed"),
   v.literal("cancelled")
 );
 const eventAttendanceStatus = v.union(
@@ -264,6 +268,7 @@ export default defineSchema({
     registrationId: v.id("registrations"),
     gender: v.union(v.literal("male"), v.literal("female")),
     registrationStatus: eventRegistrationStatus,
+    confirmationStatus: eventConfirmationStatus,
     attendanceStatus: eventAttendanceStatus,
     eligibilityStatus: eventEligibilityStatus,
     confirmedAt: v.optional(v.number()),

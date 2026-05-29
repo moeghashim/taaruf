@@ -563,3 +563,23 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Changed Paths:
   - AGENTS.md
   - progress.md
+
+## 2026-05-29T18:45:12.000Z
+- Trigger: deploy
+- Learning: Event seat approval and attendance confirmation must be modeled as separate axes. eventRegistrations.registrationStatus now tracks only seat/admin state (approved, pending, rejected, withdrawn), while confirmationStatus tracks situational attendance confirmation (confirmed, not_confirmed, cancelled). Self-registration confirms automatically; waitlist/admin carryover grants a seat without confirmation.
+- Context: separate event approval status from confirmation status
+- Branch: main
+- Actor: Moe Ghashim <mohanadgh@gmail.com>
+- Changed Paths:
+  - convex/schema.ts
+  - convex/events.ts
+  - convex/eventRules.ts
+  - convex/registrations.ts
+  - convex/events.test.ts
+  - convex/interests.test.ts
+  - src/components/admin/events/events-page-client.tsx
+  - src/components/admin/primitives/status-pill.tsx
+  - src/app/me/page.tsx
+  - src/app/api/applicant/events/route.ts
+  - src/lib/email.ts
+  - progress.md

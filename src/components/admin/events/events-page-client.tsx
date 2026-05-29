@@ -9,8 +9,10 @@ import { Ico } from "@/components/admin/primitives/icons";
 import { Pill } from "@/components/admin/primitives/status-pill";
 
 const eventStatuses = ["draft", "scheduled", "completed", "cancelled"] as const;
-const registrationDropdownStatuses = ["pending", "approved", "confirmed", "waitlisted", "rejected", "cancelled"] as const;
-const registrationFilterStatuses = ["pending", "approved", "confirmed", "waitlisted", "rejected", "cancelled"] as const;
+const registrationDropdownStatuses = ["pending", "approved", "rejected", "withdrawn"] as const;
+const registrationFilterStatuses = ["pending", "approved", "rejected", "withdrawn"] as const;
+const confirmationStatuses = ["confirmed", "not_confirmed", "cancelled"] as const;
+const registrationSortOptions = ["registered_desc", "registered_asc", "applicant_number_asc", "name_asc"] as const;
 const profileApprovalStatuses = ["pending", "approved", "rejected"] as const;
 const genderFilterOptions = ["male", "female"] as const;
 const attendanceStatuses = ["not_checked_in", "attended", "no_show"] as const;
@@ -46,14 +48,27 @@ function eventMonthFromDate(value: string) {
 function defaultEmailKind(status: string): (typeof emailKinds)[number] {
   if (status === "approved") return "approved";
   if (status === "waitlisted") return "waitlisted";
-  if (status === "cancelled" || status === "rejected") return "cancelled";
+  if (status === "withdrawn" || status === "cancelled" || status === "rejected") return "cancelled";
   return "reminder";
+}
+
+function confirmationTone(status?: string) {
+  if (status === "confirmed") return "green" as const;
+  if (status === "cancelled") return "rose" as const;
+  return "amber" as const;
 }
 
 function profileApprovalTone(status?: string) {
   if (status === "approved") return "green" as const;
   if (status === "rejected") return "rose" as const;
   return "amber" as const;
+}
+
+function registrationSortLabel(value: (typeof registrationSortOptions)[number]) {
+  if (value === "registered_asc") return "Registered oldest first";
+  if (value === "applicant_number_asc") return "Applicant #";
+  if (value === "name_asc") return "Name";
+  return "Registered newest first";
 }
 
 export function EventsPageClient() {
@@ -82,8 +97,10 @@ export function EventsPageClient() {
   const [broadcastEmailKind, setBroadcastEmailKind] = useState<(typeof emailKinds)[number]>("reminder");
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [registrationStatusFilter, setRegistrationStatusFilter] = useState<"all" | (typeof registrationFilterStatuses)[number]>("all");
+  const [confirmationStatusFilter, setConfirmationStatusFilter] = useState<"all" | (typeof confirmationStatuses)[number]>("all");
   const [profileApprovalFilter, setProfileApprovalFilter] = useState<"all" | (typeof profileApprovalStatuses)[number]>("all");
   const [registrationGenderFilter, setRegistrationGenderFilter] = useState<"all" | (typeof genderFilterOptions)[number]>("all");
+  const [registrationSort, setRegistrationSort] = useState<(typeof registrationSortOptions)[number]>("registered_desc");
   const [registrationSearch, setRegistrationSearch] = useState("");
   const [carryoverSourceEventId, setCarryoverSourceEventId] = useState<string>("");
   const [selectedCarryoverStatuses, setSelectedCarryoverStatuses] = useState<Array<(typeof carryoverStatuses)[number]>>([
@@ -111,15 +128,16 @@ export function EventsPageClient() {
   const detailStats = useMemo(() => {
     const registrations = detail?.registrations ?? [];
     const waitlistEntries = detail?.waitlistEntries ?? [];
-    const waitlistedRegistrations = registrations.filter((row) => row.registrationStatus === "waitlisted").length;
-
     return {
       total: registrations.length + waitlistEntries.length,
       approved: registrations.filter((row) => row.registrationStatus === "approved").length,
       pending: registrations.filter((row) => row.registrationStatus === "pending").length,
       rejected: registrations.filter((row) => row.registrationStatus === "rejected").length,
-      waitlisted: waitlistedRegistrations + waitlistEntries.length,
-      confirmed: registrations.filter((row) => row.confirmedAt).length,
+      withdrawn: registrations.filter((row) => row.registrationStatus === "withdrawn").length,
+      waitlisted: waitlistEntries.length,
+      confirmed: registrations.filter((row) => row.confirmationStatus === "confirmed").length,
+      notConfirmed: registrations.filter((row) => row.confirmationStatus === "not_confirmed").length,
+      confirmationCancelled: registrations.filter((row) => row.confirmationStatus === "cancelled").length,
       profileApproved: registrations.filter((row) => row.registration?.status === "approved").length,
       profilePending: registrations.filter((row) => row.registration?.status === "pending").length,
       profileRejected: registrations.filter((row) => row.registration?.status === "rejected").length,
@@ -131,11 +149,15 @@ export function EventsPageClient() {
   }, [detail?.registrations, detail?.waitlistEntries]);
   const filteredRegistrations = useMemo(() => {
     const normalizedSearch = registrationSearch.trim().toLowerCase();
-    return (detail?.registrations ?? []).filter((row) => {
+    const rows = (detail?.registrations ?? []).filter((row) => {
       const statusMatches =
         registrationStatusFilter === "all" ||
-        (registrationStatusFilter === "confirmed" ? Boolean(row.confirmedAt) : row.registrationStatus === registrationStatusFilter);
+        row.registrationStatus === registrationStatusFilter;
       if (!statusMatches) return false;
+      const confirmationMatches =
+        confirmationStatusFilter === "all" ||
+        row.confirmationStatus === confirmationStatusFilter;
+      if (!confirmationMatches) return false;
       const profileStatusMatches =
         profileApprovalFilter === "all" || row.registration?.status === profileApprovalFilter;
       if (!profileStatusMatches) return false;
@@ -152,7 +174,19 @@ export function EventsPageClient() {
         profileStatus.includes(normalizedSearch)
       );
     });
-  }, [detail?.registrations, profileApprovalFilter, registrationGenderFilter, registrationSearch, registrationStatusFilter]);
+
+    return [...rows].sort((a, b) => {
+      if (registrationSort === "registered_asc") return a.createdAt - b.createdAt;
+      if (registrationSort === "applicant_number_asc") {
+        return (a.registration?.publicApplicantNumber ?? Number.MAX_SAFE_INTEGER) -
+          (b.registration?.publicApplicantNumber ?? Number.MAX_SAFE_INTEGER);
+      }
+      if (registrationSort === "name_asc") {
+        return (a.registration?.name ?? "").localeCompare(b.registration?.name ?? "");
+      }
+      return b.createdAt - a.createdAt;
+    });
+  }, [confirmationStatusFilter, detail?.registrations, profileApprovalFilter, registrationGenderFilter, registrationSearch, registrationSort, registrationStatusFilter]);
 
   useEffect(() => {
     if (!detail?._id || detail._id !== selectedEventId) return;
@@ -234,18 +268,21 @@ export function EventsPageClient() {
     value: (typeof registrationDropdownStatuses)[number]
   ) {
     try {
-      if (value === "confirmed") {
-        await updateRegistrationConfirmation({ eventRegistrationId: row._id, confirmed: true });
-        return;
-      }
-
       await updateRegistrationStatus({
         eventRegistrationId: row._id,
         registrationStatus: value,
       });
-      if (row.confirmedAt) {
-        await updateRegistrationConfirmation({ eventRegistrationId: row._id, confirmed: false });
-      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleConfirmationStatusChange(
+    eventRegistrationId: Id<"eventRegistrations">,
+    confirmationStatus: (typeof confirmationStatuses)[number]
+  ) {
+    try {
+      await updateRegistrationConfirmation({ eventRegistrationId, confirmationStatus });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
@@ -334,6 +371,7 @@ export function EventsPageClient() {
 
   function clearRegistrationFilters() {
     setRegistrationStatusFilter("all");
+    setConfirmationStatusFilter("all");
     setProfileApprovalFilter("all");
     setRegistrationGenderFilter("all");
     setRegistrationSearch("");
@@ -553,8 +591,11 @@ export function EventsPageClient() {
               ["Approved", detailStats.approved],
               ["Pending", detailStats.pending],
               ["Rejected", detailStats.rejected],
+              ["Withdrawn", detailStats.withdrawn],
               ["Waitlisted", detailStats.waitlisted],
               ["Confirmed", detailStats.confirmed],
+              ["Not confirmed", detailStats.notConfirmed],
+              ["Confirmation cancelled", detailStats.confirmationCancelled],
               ["Profiles approved", detailStats.profileApproved],
               ["Profiles pending", detailStats.profilePending],
               ["Profiles rejected", detailStats.profileRejected],
@@ -782,6 +823,20 @@ export function EventsPageClient() {
               </select>
             </label>
             <label className="field">
+              <span>Confirmation status</span>
+              <select
+                value={confirmationStatusFilter}
+                onChange={(event) =>
+                  setConfirmationStatusFilter(event.target.value as typeof confirmationStatusFilter)
+                }
+              >
+                <option value="all">All confirmations</option>
+                {confirmationStatuses.map((status) => (
+                  <option key={status} value={status}>{titleize(status)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
               <span>Profile approval</span>
               <select
                 value={profileApprovalFilter}
@@ -817,11 +872,25 @@ export function EventsPageClient() {
                 placeholder="Search name or number"
               />
             </label>
+            <label className="field">
+              <span>Sort</span>
+              <select
+                value={registrationSort}
+                onChange={(event) =>
+                  setRegistrationSort(event.target.value as (typeof registrationSortOptions)[number])
+                }
+              >
+                {registrationSortOptions.map((option) => (
+                  <option key={option} value={option}>{registrationSortLabel(option)}</option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               className="btn"
               disabled={
                 registrationStatusFilter === "all" &&
+                confirmationStatusFilter === "all" &&
                 profileApprovalFilter === "all" &&
                 registrationGenderFilter === "all" &&
                 registrationSearch.trim() === ""
@@ -845,7 +914,7 @@ export function EventsPageClient() {
                     {row.registration?.name ?? "Unknown applicant"}
                   </h4>
                   <p>
-                    {titleize(row.gender)} · {row.registration?.email ?? "-"}
+                    {titleize(row.gender)} · Registered {formatDateTime(row.createdAt)} · {row.registration?.email ?? "-"}
                   </p>
                 </div>
                 <div className="interest-row-meta">
@@ -855,13 +924,14 @@ export function EventsPageClient() {
                   <Pill tone={profileApprovalTone(row.registration?.status)}>
                     Profile {titleize(row.registration?.status ?? "pending")}
                   </Pill>
-                  {row.confirmedAt && (
-                    <Pill tone="green">Confirmed {formatDateTime(row.confirmedAt)}</Pill>
-                  )}
+                  <Pill tone={confirmationTone(row.confirmationStatus)}>
+                    {titleize(row.confirmationStatus)}
+                    {row.confirmationStatus === "confirmed" && row.confirmedAt ? " " + formatDateTime(row.confirmedAt) : ""}
+                  </Pill>
                   <select
                     aria-label="Event registration status"
                     title="Event registration status"
-                    value={row.confirmedAt ? "confirmed" : row.registrationStatus}
+                    value={row.registrationStatus}
                     onChange={(event) =>
                       handleRegistrationStatusChange(
                         row,
@@ -870,6 +940,19 @@ export function EventsPageClient() {
                     }
                   >
                     {registrationDropdownStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
+                  </select>
+                  <select
+                    aria-label="Confirmation status"
+                    title="Confirmation status"
+                    value={row.confirmationStatus}
+                    onChange={(event) =>
+                      handleConfirmationStatusChange(
+                        row._id,
+                        event.target.value as (typeof confirmationStatuses)[number]
+                      )
+                    }
+                  >
+                    {confirmationStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
                   </select>
                   <select
                     aria-label="Event attendance status"

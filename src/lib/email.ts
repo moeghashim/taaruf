@@ -196,19 +196,14 @@ export async function sendEventRegistrationReceivedEmail({
   name,
   email,
   eventTitle,
-  registrationStatus,
 }: {
   name: string;
   email: string;
   eventTitle: string;
-  registrationStatus: string;
 }): Promise<{ success: boolean; error?: string; id?: string }> {
   try {
     const resend = getResend();
-    const statusLine =
-      registrationStatus === "waitlisted"
-        ? "You are currently on the waitlist for this event."
-        : "Your event registration is pending admin approval.";
+    const statusLine = "Your event registration is pending admin approval.";
 
     const result = await resend.emails.send({
       from: defaultFrom,
@@ -274,7 +269,7 @@ export async function sendEventRegistrationStatusEmail({
     },
     cancelled: {
       subject: `Event registration cancelled: ${eventTitle}`,
-      body: `Your registration for ${eventTitle} has been cancelled.`,
+      body: `Your registration for ${eventTitle} has been cancelled because we did not receive your confirmation in time. If you would still like to attend, please confirm again within the next 24 hours.`,
     },
     reminder: {
       subject: `Reminder: ${eventTitle}`,
@@ -286,6 +281,8 @@ export async function sendEventRegistrationStatusEmail({
       ? "Confirm your registration"
       : kind === "confirmation_request"
         ? "Confirm your spot"
+        : kind === "cancelled"
+          ? "Confirm your registration"
         : "Open your profile";
   const portalText = applicantPortalUrl
     ? `\n\n${portalAction}: ${applicantPortalUrl}`

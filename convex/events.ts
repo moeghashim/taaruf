@@ -23,8 +23,12 @@ const eventStatus = v.union(
 const eventRegistrationStatus = v.union(
   v.literal("pending"),
   v.literal("approved"),
-  v.literal("waitlisted"),
   v.literal("rejected"),
+  v.literal("withdrawn")
+);
+const eventConfirmationStatus = v.union(
+  v.literal("confirmed"),
+  v.literal("not_confirmed"),
   v.literal("cancelled")
 );
 const eventAttendanceStatus = v.union(
@@ -47,6 +51,8 @@ const carryoverSourceStatus = v.union(
 
 type ReadCtx = QueryCtx | MutationCtx;
 type Gender = "male" | "female";
+type EventRegistration = Doc<"eventRegistrations">;
+type ConfirmationStatus = "confirmed" | "not_confirmed" | "cancelled";
 
 function assertValidEventTimes(startsAt: number, endsAt: number) {
   if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt <= startsAt) {
@@ -85,17 +91,13 @@ function requireCompletedProfile(registration: Doc<"registrations">) {
 }
 
 async function countCapacityUsed(ctx: ReadCtx, eventId: Id<"events">, gender: Gender) {
-  let count = 0;
-  for (const status of ["pending", "approved"] as const) {
-    const rows = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId_and_gender_and_registrationStatus", (q) =>
-        q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status)
-      )
-      .take(500);
-    count += rows.length;
-  }
-  return count;
+  const rows = await ctx.db
+    .query("eventRegistrations")
+    .withIndex("by_eventId_and_gender_and_registrationStatus", (q) =>
+      q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", "approved")
+    )
+    .take(500);
+  return rows.length;
 }
 
 async function eventCapacityForGender(event: Doc<"events">, gender: Gender) {
@@ -104,15 +106,19 @@ async function eventCapacityForGender(event: Doc<"events">, gender: Gender) {
 
 async function registrationStatusForCapacity(ctx: ReadCtx, event: Doc<"events">, gender: Gender) {
   const used = await countCapacityUsed(ctx, event._id, gender);
-  return used < await eventCapacityForGender(event, gender) ? "pending" as const : "waitlisted" as const;
+  return used < await eventCapacityForGender(event, gender) ? "approved" as const : null;
 }
 
-async function serializeEventRegistration(ctx: ReadCtx, row: Doc<"eventRegistrations">) {
+function confirmationStatusForRow(row: EventRegistration): ConfirmationStatus {
+  return row.confirmationStatus;
+}
+
+async function serializeEventRegistration(ctx: ReadCtx, row: EventRegistration) {
   const [event, registration] = await Promise.all([
     ctx.db.get(row.eventId),
     ctx.db.get(row.registrationId),
   ]);
-  return { ...row, event, registration };
+  return { ...row, confirmationStatus: confirmationStatusForRow(row), event, registration };
 }
 
 async function serializeEventWaitlistEntry(ctx: ReadCtx, row: Doc<"eventWaitlistEntries">) {
@@ -155,12 +161,7 @@ async function carryOverWaitlist(ctx: MutationCtx, event: Doc<"events">, overrid
     .sort((a, b) => b.startsAt - a.startsAt)[0];
   if (!previousEvent) return { carried: 0, previousEventId: null };
 
-  const waitlisted = await ctx.db
-    .query("eventRegistrations")
-    .withIndex("by_eventId_and_registrationStatus", (q) =>
-      q.eq("eventId", previousEvent._id).eq("registrationStatus", "waitlisted")
-    )
-    .take(500);
+  const waitlisted = await getActiveEventWaitlistEntries(ctx, previousEvent._id);
   let carried = 0;
 
   for (const row of waitlisted.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime)) {
@@ -175,16 +176,17 @@ async function carryOverWaitlist(ctx: MutationCtx, event: Doc<"events">, overrid
     if (existing) continue;
 
     const status = overrideCapacity
-      ? "pending" as const
+      ? "approved" as const
       : await registrationStatusForCapacity(ctx, event, registration.gender);
-    if (status !== "pending") continue;
+    if (status !== "approved") continue;
 
     const now = Date.now();
     await ctx.db.insert("eventRegistrations", {
       eventId: event._id,
       registrationId: registration._id,
       gender: registration.gender,
-      registrationStatus: "pending",
+      registrationStatus: "approved",
+      confirmationStatus: "not_confirmed",
       attendanceStatus: "not_checked_in",
       eligibilityStatus: deriveEligibilityStatus(registration),
       waitlistCarryoverFromEventId: previousEvent._id,
@@ -241,9 +243,9 @@ async function carryOverRegistrationsFromEvent(
     }
 
     const status = args.overrideCapacity
-      ? "pending" as const
+      ? "approved" as const
       : await registrationStatusForCapacity(ctx, args.targetEvent, registration.gender);
-    if (status !== "pending") {
+    if (status !== "approved") {
       skippedCapacity += 1;
       return;
     }
@@ -253,7 +255,8 @@ async function carryOverRegistrationsFromEvent(
       eventId: args.targetEvent._id,
       registrationId: registration._id,
       gender: registration.gender,
-      registrationStatus: "pending",
+      registrationStatus: "approved",
+      confirmationStatus: "not_confirmed",
       attendanceStatus: "not_checked_in",
       eligibilityStatus: deriveEligibilityStatus(registration),
       waitlistCarryoverFromEventId,
@@ -269,6 +272,7 @@ async function carryOverRegistrationsFromEvent(
       for (const row of waitlistRows.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime)) {
         await copyRegistration(row.registrationId, sourceEvent._id);
       }
+      continue;
     }
 
     const rows = await ctx.db
@@ -310,12 +314,10 @@ export const getAll = query({
           counts: {
             malePending: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "pending").length,
             maleApproved: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "approved").length,
-            maleWaitlisted: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "waitlisted").length +
-              activeWaitlist.filter((row) => row.gender === "male").length,
+            maleWaitlisted: activeWaitlist.filter((row) => row.gender === "male").length,
             femalePending: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "pending").length,
             femaleApproved: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "approved").length,
-            femaleWaitlisted: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "waitlisted").length +
-              activeWaitlist.filter((row) => row.gender === "female").length,
+            femaleWaitlisted: activeWaitlist.filter((row) => row.gender === "female").length,
             attended: registrations.filter((row) => row.attendanceStatus === "attended").length,
             noShow: registrations.filter((row) => row.attendanceStatus === "no_show").length,
           },
@@ -415,11 +417,6 @@ export const getPublicByCode = query({
 export const getWaitlistedRegistrationIds = query({
   args: {},
   handler: async (ctx) => {
-    const rows = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_registrationStatus", (q) => q.eq("registrationStatus", "waitlisted"))
-      .take(1000);
-
     const activeRegistrationIds = new Set<Id<"registrations">>();
     const waitlistEntries = await ctx.db
       .query("eventWaitlistEntries")
@@ -427,13 +424,6 @@ export const getWaitlistedRegistrationIds = query({
       .take(1000);
     for (const row of waitlistEntries) {
       activeRegistrationIds.add(row.registrationId);
-    }
-
-    for (const row of rows) {
-      const event = await ctx.db.get(row.eventId);
-      if (event && event.status !== "completed" && event.status !== "cancelled") {
-        activeRegistrationIds.add(row.registrationId);
-      }
     }
 
     return [...activeRegistrationIds];
@@ -802,18 +792,22 @@ export const registerForEvent = mutation({
         q.eq("eventId", event._id).eq("registrationId", registration._id)
       )
       .unique();
-    if (existing && !["cancelled", "rejected"].includes(existing.registrationStatus)) {
+    if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
       throw new Error("You are already registered for this event");
     }
 
-    const registrationStatus = await registrationStatusForCapacity(ctx, event, registration.gender);
+    const registrationStatus = "pending" as const;
     const payload = {
       eventId: event._id,
       registrationId: registration._id,
       gender: registration.gender,
       registrationStatus,
+      confirmationStatus: "confirmed" as const,
       attendanceStatus: "not_checked_in" as const,
       eligibilityStatus: deriveEligibilityStatus(registration),
+      confirmedAt: now,
+      confirmationRequestedAt: undefined,
+      confirmationExpiresAt: undefined,
       cancelledAt: undefined,
       rejectedAt: undefined,
       createdAt: existing?.createdAt ?? now,
@@ -844,9 +838,9 @@ export const updateRegistrationStatus = mutation({
     if (!event) throw new Error("Event not found");
     const now = Date.now();
 
-    if (args.registrationStatus === "pending" || args.registrationStatus === "approved") {
+    if (args.registrationStatus === "approved") {
       const used = await countCapacityUsed(ctx, event._id, row.gender);
-      const alreadyCounts = row.registrationStatus === "pending" || row.registrationStatus === "approved";
+      const alreadyCounts = row.registrationStatus === "approved";
       const capacity = await eventCapacityForGender(event, row.gender);
       if (!args.overrideCapacity && !alreadyCounts && used >= capacity) {
         throw new Error("Event capacity is full for this gender");
@@ -857,7 +851,7 @@ export const updateRegistrationStatus = mutation({
       registrationStatus: args.registrationStatus,
       approvedAt: args.registrationStatus === "approved" ? row.approvedAt ?? now : row.approvedAt,
       rejectedAt: args.registrationStatus === "rejected" ? row.rejectedAt ?? now : row.rejectedAt,
-      cancelledAt: args.registrationStatus === "cancelled" ? row.cancelledAt ?? now : row.cancelledAt,
+      cancelledAt: args.registrationStatus === "withdrawn" ? row.cancelledAt ?? now : row.cancelledAt,
       adminNotes: args.adminNotes?.trim() || row.adminNotes,
       updatedAt: now,
     });
@@ -887,23 +881,55 @@ export const updateAttendanceStatus = mutation({
 export const updateRegistrationConfirmation = mutation({
   args: {
     eventRegistrationId: v.id("eventRegistrations"),
-    confirmed: v.boolean(),
+    confirmationStatus: eventConfirmationStatus,
   },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
-    if (row.registrationStatus === "rejected" || row.registrationStatus === "cancelled") {
-      throw new Error("Rejected or cancelled event registrations cannot be confirmed");
+    if (row.registrationStatus === "rejected" && args.confirmationStatus === "confirmed") {
+      throw new Error("Rejected event registrations cannot be confirmed");
     }
 
     const now = Date.now();
-    await ctx.db.patch(row._id, {
-      registrationStatus: args.confirmed ? "approved" : row.registrationStatus,
-      approvedAt: args.confirmed ? row.approvedAt ?? now : row.approvedAt,
-      confirmedAt: args.confirmed ? row.confirmedAt ?? now : undefined,
-      updatedAt: now,
-    });
+    const patch =
+      args.confirmationStatus === "confirmed"
+        ? {
+            confirmationStatus: "confirmed" as const,
+            confirmedAt: row.confirmedAt ?? now,
+            updatedAt: now,
+          }
+        : args.confirmationStatus === "cancelled"
+          ? {
+              registrationStatus: "withdrawn" as const,
+              confirmationStatus: "cancelled" as const,
+              cancelledAt: row.cancelledAt ?? now,
+              updatedAt: now,
+            }
+          : {
+              confirmationStatus: "not_confirmed" as const,
+              confirmedAt: undefined,
+              updatedAt: now,
+            };
+    await ctx.db.patch(row._id, patch);
     return row._id;
+  },
+});
+
+export const verifyEventRegistrationStatusAxes = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("eventRegistrations").take(1000);
+    return {
+      checked: rows.length,
+      byRegistrationStatus: rows.reduce<Record<string, number>>((counts, row) => {
+        counts[row.registrationStatus] = (counts[row.registrationStatus] ?? 0) + 1;
+        return counts;
+      }, {}),
+      byConfirmationStatus: rows.reduce<Record<string, number>>((counts, row) => {
+        counts[row.confirmationStatus] = (counts[row.confirmationStatus] ?? 0) + 1;
+        return counts;
+      }, {}),
+    };
   },
 });
 
@@ -921,8 +947,10 @@ export const requestConfirmation = mutation({
     }
     const now = Date.now();
     await ctx.db.patch(row._id, {
+      confirmationStatus: "not_confirmed",
+      confirmedAt: undefined,
       confirmationRequestedAt: now,
-      confirmationExpiresAt: now + 48 * 60 * 60 * 1000,
+      confirmationExpiresAt: now + 24 * 60 * 60 * 1000,
       updatedAt: now,
     });
     return row._id;
@@ -938,20 +966,25 @@ export const confirmParticipation = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
-    if (row.confirmedAt) {
+    if (confirmationStatusForRow(row) === "confirmed") {
       return row._id;
     }
     if (row.confirmationRequestedAt && row.confirmationExpiresAt && row.confirmationExpiresAt < Date.now()) {
       throw new Error("Confirmation window has expired");
     }
+    if (row.registrationStatus === "withdrawn" && (!row.confirmationRequestedAt || !row.confirmationExpiresAt)) {
+      throw new Error("This event registration cannot be confirmed");
+    }
     if (
       row.registrationStatus !== "pending" &&
-      row.registrationStatus !== "waitlisted" &&
-      row.registrationStatus !== "approved"
+      row.registrationStatus !== "approved" &&
+      row.registrationStatus !== "withdrawn"
     ) {
       throw new Error("This event registration cannot be confirmed");
     }
     await ctx.db.patch(row._id, {
+      registrationStatus: row.registrationStatus === "withdrawn" ? "pending" : row.registrationStatus,
+      confirmationStatus: "confirmed",
       confirmedAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -967,13 +1000,14 @@ export const expireUnconfirmed = mutation({
     let cancelled = 0;
     for (const row of pending) {
       if (
-        row.registrationStatus === "pending" &&
+        confirmationStatusForRow(row) === "not_confirmed" &&
         row.confirmationExpiresAt &&
         row.confirmationExpiresAt < now &&
         !row.confirmedAt
       ) {
         await ctx.db.patch(row._id, {
-          registrationStatus: "cancelled",
+          registrationStatus: "withdrawn",
+          confirmationStatus: "cancelled",
           cancelledAt: now,
           updatedAt: now,
         });
@@ -1130,9 +1164,11 @@ export const backfillApril2026 = mutation({
           registrationId: registration._id,
           gender: registration.gender,
           registrationStatus: "approved",
+          confirmationStatus: "confirmed",
           attendanceStatus: "attended",
           eligibilityStatus: deriveEligibilityStatus(registration),
           approvedAt: aprilEvent.endsAt,
+          confirmedAt: aprilEvent.endsAt,
           checkedInAt: aprilEvent.endsAt,
           createdAt: Date.now(),
           updatedAt: Date.now(),

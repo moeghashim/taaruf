@@ -74,6 +74,7 @@ type ApplicantEventData = {
     registration: null | {
       _id: string;
       registrationStatus: string;
+      confirmationStatus: string;
       attendanceStatus: string;
       confirmedAt?: number;
       confirmationRequestedAt?: number;
@@ -83,6 +84,7 @@ type ApplicantEventData = {
   history: Array<{
     _id: string;
     registrationStatus: string;
+    confirmationStatus: string;
     attendanceStatus: string;
     event: null | {
       title: string;
@@ -218,10 +220,9 @@ function canConfirmEventRegistration(registration: NonNullable<ApplicantEventDat
   );
 
   return Boolean(
-      !registration.confirmedAt &&
+      registration.confirmationStatus === "not_confirmed" &&
       !confirmationWindowExpired &&
       (registration.registrationStatus === "pending" ||
-        registration.registrationStatus === "waitlisted" ||
         registration.registrationStatus === "approved")
   );
 }
@@ -726,11 +727,7 @@ export default function ApplicantDashboardPage() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Event registration failed");
-      setMessage(
-        payload.result?.registrationStatus === "waitlisted"
-          ? "Event registration received. You are currently waitlisted."
-          : "Event registration received. Your attendance is pending approval."
-      );
+      setMessage("Event registration received. Your attendance is pending approval.");
       await loadEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1059,8 +1056,10 @@ export default function ApplicantDashboardPage() {
                         {event.registration ? (
                           <>
                             <StatusBadge value={event.registration.registrationStatus} />
-                            {event.registration.confirmedAt ? (
+                            {event.registration.confirmationStatus === "confirmed" ? (
                               <StatusBadge value="confirmed" />
+                            ) : event.registration.confirmationStatus === "cancelled" ? (
+                              <StatusBadge value="cancelled" />
                             ) : canConfirmEventRegistration(event.registration) ? (
                               <button
                                 type="button"
