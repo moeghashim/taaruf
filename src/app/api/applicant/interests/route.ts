@@ -9,6 +9,69 @@ function getAppUrl() {
     || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
 }
 
+function rawErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function applicantInterestErrorResponse(error: unknown) {
+  const message = rawErrorMessage(error);
+
+  if (message.includes("Both applicants must have attended the same event within the active interest window")) {
+    return NextResponse.json(
+      {
+        error:
+          "Interest can only be submitted for someone who attended the same recent event as you. Please choose one of the eligible attendee numbers listed below, or contact the team if this looks wrong.",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (message.includes("Applicant number not found")) {
+    return NextResponse.json(
+      { error: "We could not find that applicant number. Please check the number and try again." },
+      { status: 400 }
+    );
+  }
+
+  if (message.includes("Applicant cannot express interest in themselves")) {
+    return NextResponse.json(
+      { error: "Please enter another applicant's number." },
+      { status: 400 }
+    );
+  }
+
+  if (message.includes("Interest must be between opposite-gender applicants")) {
+    return NextResponse.json(
+      { error: "Please enter an eligible attendee number from the opposite-gender list." },
+      { status: 400 }
+    );
+  }
+
+  if (message.includes("An open interest already exists")) {
+    return NextResponse.json(
+      { error: "You already have an open interest for this applicant." },
+      { status: 400 }
+    );
+  }
+
+  if (message.includes("Your registration must be approved before you can express or respond to interests.")) {
+    return NextResponse.json(
+      { error: "Your registration needs to be approved before you can submit or respond to interests." },
+      { status: 400 }
+    );
+  }
+
+  if (message === "Unauthorized") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  console.error("Applicant interest action failed", error);
+  return NextResponse.json(
+    { error: "Something went wrong while updating your interest. Please try again, or contact the team if it keeps happening." },
+    { status: 500 }
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     const sessionHash = await getApplicantSessionHash();
@@ -212,9 +275,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
-    );
+    return applicantInterestErrorResponse(error);
   }
 }
