@@ -80,7 +80,7 @@ async function syncSubmittedInterestNumbers(
       const message = error instanceof Error ? error.message : String(error);
       if (
         !message.startsWith("An open interest already exists") &&
-        !message.startsWith("Both applicants must have attended the same event")
+        !message.startsWith("Applicant must have attended an event")
       ) {
         throw error;
       }

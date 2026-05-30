@@ -187,31 +187,40 @@ export async function findEligibleSharedInterestEvent(
     .sort((a, b) => b.endsAt - a.endsAt)[0] ?? null;
 }
 
-export async function listEligibleInterestTargets(ctx: ReadCtx, registration: Registration, now = Date.now()) {
-  const attendedRows = await attendedRowsForRegistration(ctx, registration._id);
+export async function findEligibleInterestSubmissionEvent(
+  ctx: ReadCtx,
+  registrationId: Id<"registrations">,
+  now = Date.now()
+) {
+  const attendedRows = await attendedRowsForRegistration(ctx, registrationId);
   const events = await Promise.all(attendedRows.map((row) => ctx.db.get(row.eventId)));
-  const eligibleEvents = events.filter((event): event is Doc<"events"> =>
-    Boolean(
-      event &&
-      event.eventCode !== MANUAL_ADMIN_EVENT_CODE &&
-      event.status === "completed" &&
-      event.endsAt <= now &&
-      interestSubmissionClosesAt(event) >= now
-    )
-  );
-
-  const targetIds = new Set<Id<"registrations">>();
-  for (const event of eligibleEvents) {
-    const rows = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId_and_gender", (q) =>
-        q.eq("eventId", event._id).eq("gender", registration.gender === "male" ? "female" : "male")
+  return events
+    .filter((event): event is Doc<"events"> =>
+      Boolean(
+        event &&
+        event.eventCode !== MANUAL_ADMIN_EVENT_CODE &&
+        event.status === "completed" &&
+        event.endsAt <= now &&
+        interestSubmissionClosesAt(event) >= now
       )
-      .take(200);
-    for (const row of rows) {
-      if (row.attendanceStatus === "attended") {
-        targetIds.add(row.registrationId);
-      }
+    )
+    .sort((a, b) => b.endsAt - a.endsAt)[0] ?? null;
+}
+
+export async function listEligibleInterestTargets(ctx: ReadCtx, registration: Registration, now = Date.now()) {
+  const targetIds = new Set<Id<"registrations">>();
+  const eligibleEvent = await findEligibleInterestSubmissionEvent(ctx, registration._id, now);
+  if (!eligibleEvent) return targetIds;
+
+  const registrations = await ctx.db.query("registrations").take(1000);
+  for (const target of registrations) {
+    if (
+      target._id !== registration._id &&
+      target.gender !== registration.gender &&
+      target.status === "approved" &&
+      target.profileCompletionStatus === "completed"
+    ) {
+      targetIds.add(target._id);
     }
   }
 

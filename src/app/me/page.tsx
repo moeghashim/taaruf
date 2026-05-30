@@ -683,8 +683,8 @@ export default function ApplicantDashboardPage() {
   const interestHint = useMemo(() => {
     if (!data) return "";
     return data.applicant.gender === "female"
-      ? "Document interest in an eligible male attendee. This is visible only to you and admins before a match."
-      : "Submit an eligible female attendee number to send a visible interest for her to review.";
+      ? "Document interest in an approved male applicant. This is visible only to you and admins before a match."
+      : "Submit an approved female applicant number to send a visible interest for her to review.";
   }, [data]);
 
   async function runAction(body: Record<string, unknown>) {
@@ -1134,7 +1134,7 @@ export default function ApplicantDashboardPage() {
               </form>
               {data.eligibleInterestTargets.length > 0 && (
                 <div className="profile-review-box" style={{ marginTop: 16 }}>
-                  <h4>Eligible attendees</h4>
+                  <h4>Approved applicants</h4>
                   <div className="pill-row">
                     {data.eligibleInterestTargets.map((target) => (
                       <button

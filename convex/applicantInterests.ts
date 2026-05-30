@@ -44,6 +44,12 @@ function requireApprovedForInterestAction(registration: Registration) {
   }
 }
 
+function requirePendingOrApprovedForInterestSubmission(registration: Registration) {
+  if (!["pending", "approved"].includes(registration.status)) {
+    throw new Error("Your registration must be pending or approved before you can express interest.");
+  }
+}
+
 async function getRegistrationNumberMap(ctx: ReadCtx) {
   const registrations = await ctx.db.query("registrations").take(1000);
   return buildRegistrationNumberMaps(registrations);
@@ -285,7 +291,7 @@ export const submitInterestNumber = mutation({
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
-    requireApprovedForInterestAction(registration);
+    requirePendingOrApprovedForInterestSubmission(registration);
     const { byNumber } = await getRegistrationNumberMap(ctx);
     const target = byNumber.get(args.applicantNumber);
 

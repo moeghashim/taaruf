@@ -413,6 +413,78 @@ describe("interest rules", () => {
     });
   });
 
+  test("number submission does not require target to have attended the same event", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Cross Event Male", "male");
+    const female = await createRegistration(t, "Cross Event Female", "female");
+    const maleSession = await createSession(t, male);
+
+    const maleEventId = await t.run(async (ctx) => {
+      const maleAttendance = await ctx.db
+        .query("eventRegistrations")
+        .withIndex("by_registrationId_and_attendanceStatus", (q) =>
+          q.eq("registrationId", male).eq("attendanceStatus", "attended")
+        )
+        .unique();
+      if (!maleAttendance) throw new Error("Male attendance not found");
+
+      const femaleRows = await ctx.db
+        .query("eventRegistrations")
+        .withIndex("by_registrationId", (q) => q.eq("registrationId", female))
+        .take(10);
+      for (const row of femaleRows) {
+        await ctx.db.delete(row._id);
+      }
+
+      return maleAttendance.eventId;
+    });
+
+    const dashboard = await t.query(api.applicantInterests.getDashboard, {
+      sessionHash: maleSession,
+    });
+    expect(dashboard.eligibleInterestTargets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          applicantNumber: 2,
+          firstName: "Cross",
+        }),
+      ])
+    );
+
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: maleSession,
+      applicantNumber: 2,
+    });
+
+    await expect(getInterest(t, result.interestId)).resolves.toMatchObject({
+      fromRegistrationId: male,
+      toRegistrationId: female,
+      eventId: maleEventId,
+      visibility: "admin_actionable",
+    });
+  });
+
+  test("pending applicant can submit interest", async () => {
+    const t = convexTest(schema, modules);
+    const male = await createRegistration(t, "Pending Submitter Male", "male");
+    await createRegistration(t, "Approved Target Female", "female");
+    const maleSession = await createSession(t, male);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(male, { status: "pending" });
+    });
+
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: maleSession,
+      applicantNumber: 2,
+    });
+
+    await expect(getInterest(t, result.interestId)).resolves.toMatchObject({
+      fromRegistrationId: male,
+      visibility: "admin_actionable",
+    });
+  });
+
   test("number submission resolves public applicant numbers before legacy fallback numbers", async () => {
     const t = convexTest(schema, modules);
     const male = await createRegistration(t, "Numbered Male", "male");

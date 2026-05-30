@@ -16,11 +16,11 @@ function rawErrorMessage(error: unknown) {
 function applicantInterestErrorResponse(error: unknown) {
   const message = rawErrorMessage(error);
 
-  if (message.includes("Both applicants must have attended the same event within the active interest window")) {
+  if (message.includes("Applicant must have attended an event within the active interest window")) {
     return NextResponse.json(
       {
         error:
-          "Interest can only be submitted for someone who attended the same recent event as you. Please choose one of the eligible attendee numbers listed below, or contact the team if this looks wrong.",
+          "Interest submissions are open only for applicants who attended a recent event. Please contact the team if this looks wrong.",
       },
       { status: 400 }
     );
@@ -42,7 +42,7 @@ function applicantInterestErrorResponse(error: unknown) {
 
   if (message.includes("Interest must be between opposite-gender applicants")) {
     return NextResponse.json(
-      { error: "Please enter an eligible attendee number from the opposite-gender list." },
+      { error: "Please enter an approved opposite-gender applicant number." },
       { status: 400 }
     );
   }
@@ -57,6 +57,13 @@ function applicantInterestErrorResponse(error: unknown) {
   if (message.includes("Your registration must be approved before you can express or respond to interests.")) {
     return NextResponse.json(
       { error: "Your registration needs to be approved before you can submit or respond to interests." },
+      { status: 400 }
+    );
+  }
+
+  if (message.includes("Your registration must be pending or approved before you can express interest.")) {
+    return NextResponse.json(
+      { error: "Your registration needs to be pending or approved before you can submit interests." },
       { status: 400 }
     );
   }

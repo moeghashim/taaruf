@@ -1,6 +1,6 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { findEligibleSharedInterestEvent } from "./eventRules";
+import { findEligibleInterestSubmissionEvent } from "./eventRules";
 
 export const openInterestStatuses = ["new", "queued", "active", "deferred"] as const;
 export const slotFreeingInterestStatuses = ["declined", "withdrawn", "closed", "converted_to_match"] as const;
@@ -351,9 +351,9 @@ export async function createApplicantInterestWithRules(
     notes?: string;
   }
 ) {
-  const event = await findEligibleSharedInterestEvent(ctx, args.fromRegistrationId, args.toRegistrationId);
+  const event = await findEligibleInterestSubmissionEvent(ctx, args.fromRegistrationId);
   if (!event) {
-    throw new Error("Both applicants must have attended the same event within the active interest window");
+    throw new Error("Applicant must have attended an event within the active interest window");
   }
 
   return await createInterestWithRules(ctx, {
