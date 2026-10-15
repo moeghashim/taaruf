@@ -1,3 +1,4 @@
+import { hijabResponse } from "./hijab";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -11,7 +12,6 @@ const prayerCommitment = v.union(
   v.literal("always_five"),
   v.literal("five_and_sunnah")
 );
-const yesNoOpen = v.union(v.literal("yes"), v.literal("no"), v.literal("open"));
 const photoSharingPermission = v.union(
   v.literal("yes"),
   v.literal("no"),
@@ -159,7 +159,7 @@ export const updateProfile = mutation({
     ethnicity: v.string(),
     imageStorageIds: v.array(v.id("_storage")),
     prayerCommitment,
-    hijabResponse: yesNoOpen,
+    hijabResponse,
     spouseRequirement1: v.string(),
     spouseRequirement2: v.string(),
     spouseRequirement3: v.string(),

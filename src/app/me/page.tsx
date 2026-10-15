@@ -1,5 +1,6 @@
 "use client";
 
+import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -95,7 +96,6 @@ type ApplicantEventData = {
 };
 
 type PrayerCommitment = "sometimes" | "strive_five" | "always_five" | "five_and_sunnah" | "";
-type HijabResponse = "yes" | "no" | "open" | "";
 type PhotoSharingPermission = "yes" | "no" | "ask_me_first" | "";
 
 type UploadedImage = {
@@ -135,12 +135,6 @@ const prayerOptions = [
   { value: "strive_five", label: "I strive to pray 5 times a day but sometimes miss" },
   { value: "always_five", label: "I always pray 5 times a day" },
   { value: "five_and_sunnah", label: "I pray 5 times a day and strive to also pray sunnah" },
-] as const;
-
-const yesNoOpenOptions = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-  { value: "open", label: "Open" },
 ] as const;
 
 const photoSharingOptions = [
@@ -273,7 +267,7 @@ function profileFactsFor(counterparty: NonNullable<DashboardInterest["counterpar
     { label: "Job", value: counterparty.job || "-" },
     { label: "Ethnicity", value: counterparty.ethnicity || "-" },
     { label: "Prayer", value: titleizeValue(counterparty.prayerCommitment) },
-    { label: "Hijab", value: titleizeValue(counterparty.hijabResponse) },
+    { label: "Hijab", value: formatHijabResponse(counterparty.hijabResponse, counterparty.gender) },
     { label: "Photo permission", value: titleizeValue(counterparty.photoSharingPermission) },
   ];
 }
@@ -904,10 +898,7 @@ export default function ApplicantDashboardPage() {
     .toUpperCase();
   const privateCount = data.applicant.gender === "female" ? data.privateDocumented.length : null;
   const completedProfile = data.applicant.profileCompletionStatus === "completed";
-  const hijabLabel =
-    profile?.gender === "female"
-      ? "Do you wear hijab?"
-      : "Do you wish for your wife to wear hijab?";
+  const hijabLabel = hijabQuestion(profile?.gender);
 
   return (
     <main data-admin>
@@ -1207,7 +1198,7 @@ export default function ApplicantDashboardPage() {
                           onChange={(event) => setProfile({ ...profile, hijabResponse: event.target.value as HijabResponse })}
                         >
                           <option value="">Select one</option>
-                          {yesNoOpenOptions.map((option) => (
+                          {hijabOptions(profile.gender, profile.hijabResponse).map((option) => (
                             <option key={option.value} value={option.value}>
                               {option.label}
                             </option>

@@ -3,6 +3,7 @@
 // re-used, not even after deleteRegistration. The `create` mutation and the
 // one-time backfill are the only production code paths that write the field.
 
+import { hijabResponse } from "./hijab";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -17,7 +18,6 @@ const prayerCommitment = v.union(
   v.literal("always_five"),
   v.literal("five_and_sunnah")
 );
-const yesNoOpen = v.union(v.literal("yes"), v.literal("no"), v.literal("open"));
 const photoSharingPermission = v.union(
   v.literal("yes"),
   v.literal("no"),
@@ -412,7 +412,7 @@ export const create = mutation({
     ethnicity: v.optional(v.string()),
     imageStorageIds: v.optional(v.array(v.id("_storage"))),
     prayerCommitment: v.optional(prayerCommitment),
-    hijabResponse: v.optional(yesNoOpen),
+    hijabResponse: v.optional(hijabResponse),
     spouseRequirement1: v.optional(v.string()),
     spouseRequirement2: v.optional(v.string()),
     spouseRequirement3: v.optional(v.string()),
@@ -648,7 +648,7 @@ export const updateProfile = mutation({
     ethnicity: v.string(),
     imageStorageIds: v.array(v.id("_storage")),
     prayerCommitment,
-    hijabResponse: yesNoOpen,
+    hijabResponse,
     spouseRequirement1: v.string(),
     spouseRequirement2: v.string(),
     spouseRequirement3: v.string(),

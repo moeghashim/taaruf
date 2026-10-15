@@ -40,3 +40,8 @@ If you are about to: introduce an admin endpoint that edits `publicApplicantNumb
 ### Email uniqueness on registration
 
 Emails on `registrations` are unique. The checkout API and the `create` mutation both reject a second registration with the same email (case-insensitive trim). The applicant-facing flow surfaces this with a sign-in link rather than a generic error.
+
+
+## Approval and preview workflow (2026-10-15)
+
+When Moe approves an issue, implement it, validate it, and produce a preview link. Only after the preview is approved may changes be pushed live. This approval gate supersedes earlier automatic deployment guidance above for production and for the Convex deployment serving the live website. Use an isolated preview backend when backend changes are required; never point preview writes at live applicant data.

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
@@ -47,17 +48,23 @@ const PROFILE_STATUS_DEFS: Array<{ id: FilterProfileCompletionStatus; label: str
   { id: "not_started", label: "Not started" },
 ];
 
-export function ProfilesPageClient({
+export function ProfilesPageClient(props: Props) {
+  return <Suspense fallback={<p>Loading profiles…</p>}><ProfilesContent {...props} /></Suspense>;
+}
+
+function ProfilesContent({
   initialStatus = "all",
   lockStatus = false,
   title,
   subtitle,
 }: Props) {
   const data = useRegistrations();
+  const params = useSearchParams();
+  const query = params.get("q") ?? "";
   const [tab, setTab] = useState<FilterStatus>(initialStatus);
   const [gender, setGender] = useState<FilterGender>("all");
   const [profileStatus, setProfileStatus] = useState<FilterProfileCompletionStatus>("all");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(query);
   const [openProfileId, setOpenProfileId] = useState<string | null>(null);
 
   const effectiveTab = lockStatus ? initialStatus : tab;
@@ -67,12 +74,12 @@ export function ProfilesPageClient({
   );
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const profileId = params.get("profile");
-    if (profileId) {
-      setOpenProfileId(profileId);
-    }
-  }, []);
+    setSearch(query);
+    setTab(initialStatus);
+    setGender("all");
+    setProfileStatus("all");
+    setOpenProfileId(params.get("profile"));
+  }, [params, query, initialStatus]);
 
   const openProfile = openProfileId ? data.registrations.find((r) => r._id === openProfileId) : null;
 

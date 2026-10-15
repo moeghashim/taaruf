@@ -1,3 +1,4 @@
+import { hijabResponse } from "./hijab";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -8,7 +9,6 @@ const prayerCommitment = v.union(
   v.literal("five_and_sunnah")
 );
 
-const yesNoOpen = v.union(v.literal("yes"), v.literal("no"), v.literal("open"));
 const photoSharingPermission = v.union(
   v.literal("yes"),
   v.literal("no"),
@@ -188,7 +188,7 @@ export default defineSchema({
     ethnicity: v.optional(v.string()),
     imageStorageIds: v.optional(v.array(v.id("_storage"))),
     prayerCommitment: v.optional(prayerCommitment),
-    hijabResponse: v.optional(yesNoOpen),
+    hijabResponse: v.optional(hijabResponse),
     spouseRequirement1: v.optional(v.string()),
     spouseRequirement2: v.optional(v.string()),
     spouseRequirement3: v.optional(v.string()),
