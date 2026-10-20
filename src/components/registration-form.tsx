@@ -1,16 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useForm } from "@tanstack/react-form";
+import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 import { Ico } from "@/components/admin/primitives/icons";
 
 type PrayerCommitment = "sometimes" | "strive_five" | "always_five" | "five_and_sunnah" | "";
-type HijabResponse = "yes" | "no" | "open" | "";
 type PhotoSharingPermission = "yes" | "no" | "ask_me_first" | "";
 
 interface UploadedImage {
@@ -52,12 +52,6 @@ const prayerOptions = [
   { value: "strive_five", label: "I strive to pray 5 times a day but sometimes miss" },
   { value: "always_five", label: "I always pray 5 times a day" },
   { value: "five_and_sunnah", label: "I pray 5 times a day and strive to also pray sunnah" },
-] as const;
-
-const yesNoOpenOptions = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-  { value: "open", label: "Open" },
 ] as const;
 
 const photoSharingOptions = [
@@ -175,13 +169,8 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
     },
   });
 
-  const hijabLabel = useMemo(
-    () =>
-      form.state.values.gender === "female"
-        ? "Do you wear hijab?"
-        : "Do you wish for your wife to wear hijab?",
-    [form.state.values.gender]
-  );
+  const gender = useStore(form.store, (state) => state.values.gender);
+  const hijabLabel = hijabQuestion(gender);
 
   async function handleImageUpload(files: FileList | null) {
     if (!files?.length) return;
@@ -319,7 +308,10 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
                 <select
                   id={field.name}
                   value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value as "male" | "female" | "")}
+                  onChange={(e) => {
+                    field.handleChange(e.target.value as "male" | "female" | "");
+                    form.setFieldValue("hijabResponse", "");
+                  }}
                   onBlur={field.handleBlur}
                 >
                   <option value="">Select gender</option>
@@ -549,7 +541,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
                 onBlur={field.handleBlur}
               >
                 <option value="">Select one</option>
-                {yesNoOpenOptions.map((option) => (
+                {hijabOptions(gender).map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

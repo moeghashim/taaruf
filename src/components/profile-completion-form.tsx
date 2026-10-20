@@ -1,5 +1,6 @@
 "use client";
 
+import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useMutation } from "convex/react";
@@ -7,7 +8,6 @@ import { api } from "../../convex/_generated/api";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 
 type PrayerCommitment = "sometimes" | "strive_five" | "always_five" | "five_and_sunnah" | "";
-type HijabResponse = "yes" | "no" | "open" | "";
 type PhotoSharingPermission = "yes" | "no" | "ask_me_first" | "";
 
 interface UploadedImage {
@@ -47,12 +47,6 @@ const prayerOptions = [
   { value: "strive_five", label: "I strive to pray 5 times a day but sometimes miss" },
   { value: "always_five", label: "I always pray 5 times a day" },
   { value: "five_and_sunnah", label: "I pray 5 times a day and strive to also pray sunnah" },
-] as const;
-
-const yesNoOpenOptions = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-  { value: "open", label: "Open" },
 ] as const;
 
 const photoSharingOptions = [
@@ -244,10 +238,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
     );
   }
 
-  const hijabLabel =
-    profile.gender === "female"
-      ? "Do you wear hijab?"
-      : "Do you wish for your wife to wear hijab?";
+  const hijabLabel = hijabQuestion(profile?.gender);
 
   const isComplete = profile.profileCompletionStatus === "completed";
 
@@ -304,7 +295,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
               }
             >
               <option value="">Select one</option>
-              {yesNoOpenOptions.map((option) => (
+              {hijabOptions(profile.gender, profile.hijabResponse).map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

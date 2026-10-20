@@ -90,7 +90,7 @@ export function useRegistrations() {
         return false;
       }
       if (search.trim()) {
-        const q = search.toLowerCase();
+        const q = search.trim().toLowerCase();
         const applicantNumber = registrationNumbers.get(reg._id);
         return (
           reg.name.toLowerCase().includes(q) ||

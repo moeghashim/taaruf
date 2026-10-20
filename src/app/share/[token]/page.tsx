@@ -1,5 +1,7 @@
 "use client";
 
+import { formatHijabResponse } from "@/lib/hijab";
+
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
@@ -113,7 +115,7 @@ export default function SharedProfilePage({
     { label: "Job", value: owner.job || "—" },
     { label: "Ethnicity", value: owner.ethnicity || "—" },
     { label: "Prayer", value: titleizeValue(owner.prayerCommitment) },
-    { label: "Hijab", value: titleizeValue(owner.hijabResponse) },
+    { label: "Hijab", value: formatHijabResponse(owner.hijabResponse, owner.gender) },
     { label: "Photo permission", value: titleizeValue(owner.photoSharingPermission) },
   ];
 

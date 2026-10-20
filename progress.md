@@ -583,3 +583,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/api/applicant/events/route.ts
   - src/lib/email.ts
   - progress.md
+
+
+## 2026-10-15
+- Recorded approval workflow in AGENTS.md: issue approval -> implementation and preview; preview approval -> live deployment. Live Convex deployments are gated too.
+- Isolated #15/#16 release under .worktrees/release-15-16; 53 tests and TypeScript pass without unrelated local edits.
