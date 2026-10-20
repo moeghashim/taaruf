@@ -1,3 +1,4 @@
+import { formatEventDate } from "@/lib/event-date";
 import Link from "next/link";
 import { api } from "../../convex/_generated/api";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
@@ -18,15 +19,6 @@ type PublicEvent = {
   femaleWaitlisted: boolean;
 };
 
-function formatEventDate(timestamp: number) {
-  return new Date(timestamp).toLocaleString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 async function getActiveEvents(): Promise<PublicEvent[]> {
   try {
