@@ -17,12 +17,13 @@ async function fixture() {
       people.push(id);
       await ctx.db.insert("applicantSessions", { registrationId: id, sessionHash: "session" + index, expiresAt: now + 100000, createdAt: now });
       await ctx.db.insert("eventAttendees", { eventId: event, registrationId: id, addedAt: now });
+      await ctx.db.insert("eventRegistrations", { eventId: event, registrationId: id, gender: index === 0 ? "male" : "female", registrationStatus: "approved", attendanceStatus: "attended", confirmationStatus: "not_confirmed", eligibilityStatus: "approved_member", createdAt: now, updatedAt: now });
     }
     return { event, people };
   });
   return { t, ...ids };
 }
-const submit = (number = 2, name = "Person " + number) => ({ sessionHash: "session0", applicantNumber: number, applicantName: name });
+const submit = (number = 2, name = "Person") => ({ sessionHash: "session0", applicantNumber: number, applicantName: name });
 test("requires session and exact number/name; no applicant directory in either portal response", async () => {
   const { t } = await fixture();
   await expect(t.mutation(api.applicantInterests.submitInterestNumber, { ...submit(), sessionHash: "forged" })).rejects.toThrow("Unauthorized");
@@ -33,23 +34,22 @@ test("requires session and exact number/name; no applicant directory in either p
   expect(dashboard.canSubmitInterest).toBe(true);
   const events = await t.query(api.events.getApplicantEvents, { sessionHash: "session0" });
   expect(events).not.toHaveProperty("eligibleInterestTargetIds");
-  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(2, "  PERSON   2  "))).resolves.toHaveProperty("interestId");
+  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(2, "  PERSON  "))).resolves.toHaveProperty("interestId");
 });
-test("both parties must attend latest matching event; Real Talk is attendance-only", async () => {
+test("only sender needs latest matching event approval and attendance; Real Talk is attendance-only", async () => {
   const { t, event, people } = await fixture();
   await t.run(async ctx => {
-    const row = await ctx.db.query("eventAttendees").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", event).eq("registrationId", people[1])).unique();
+    const row = await ctx.db.query("eventRegistrations").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", event).eq("registrationId", people[1])).unique();
     await ctx.db.delete(row!._id);
   });
-  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).rejects.toThrow("attended");
+  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).resolves.toHaveProperty("interestId");
   await t.run(async ctx => {
-    await ctx.db.insert("eventAttendees", { eventId: event, registrationId: people[1], addedAt: Date.now() });
     const old = await ctx.db.get(event);
     const { _id, _creationTime, ...data } = old!;
     void _id; void _creationTime;
     await ctx.db.insert("events", { ...data, eventCode: "talk", series: "real_talk", endsAt: Date.now() - 100 });
   });
-  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).resolves.toHaveProperty("interestId");
+  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(3))).resolves.toHaveProperty("interestId");
   await t.run(async ctx => {
     const old = await ctx.db.get(event);
     const { _id, _creationTime, ...data } = old!;
@@ -58,7 +58,7 @@ test("both parties must attend latest matching event; Real Talk is attendance-on
   });
   expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).canSubmitInterest).toBe(false);
   await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(3))).rejects.toThrow("attended");
-  expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).outbound).toHaveLength(1);
+  expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).outbound).toHaveLength(2);
 });
 test("photo URLs require owner consent, even after contact sharing", async () => {
   const { t, people } = await fixture();
@@ -85,19 +85,15 @@ test("max three submissions per event survives withdrawal", async () => {
   await t.mutation(api.applicantInterests.submitInterestNumber, submit(4));
   await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(5))).rejects.toThrow("maximum of 3");
 });
-test("attendance admin authorization, idempotence, removal, deletion protection", async () => {
+test("retired attendance writer fails closed and preserves historical data", async () => {
   vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "test-secret");
   try {
     const { t, event, people } = await fixture();
     await expect(t.query(list, { adminSecret: "wrong" })).rejects.toThrow("Unauthorized");
-    await expect(t.mutation(setAttendance, { adminSecret: "wrong", eventId: event, registrationId: people[0], attending: false })).rejects.toThrow("Unauthorized");
-    const args = { adminSecret: "test-secret", eventId: event, registrationId: people[0], attending: true };
-    await t.mutation(setAttendance, args); await t.mutation(setAttendance, args);
+    const args = { adminSecret: "test-secret", eventId: event, registrationId: people[0], attending: false };
+    await expect(t.mutation(setAttendance, args)).rejects.toThrow("retired");
     expect((await t.query(list, { adminSecret: "test-secret", eventId: event })).total).toBe(5);
     await expect(t.mutation(api.events.deleteEvent, { eventId: event })).rejects.toThrow("attendance history");
-    await t.mutation(setAttendance, { ...args, attending: false });
-    expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).canSubmitInterest).toBe(false);
-    await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).rejects.toThrow("attended");
   } finally { vi.unstubAllEnvs(); }
 });
 
@@ -112,4 +108,70 @@ test("profile share links cannot bypass photo consent, including legacy links", 
   const share = await t.query(api.profileShares.getByShareToken, { shareToken: "legacy-share" });
   expect(share?.includeImages).toBe(false);
   expect(share?.owner?.imageStorageIds).toEqual([]);
+});
+
+for (const gender of ["male", "female"] as const) {
+  test(`event cap race, duplicate race and rollover for ${gender}`, async () => {
+    const { t, people, event } = await fixture();
+    await t.run(async ctx => {
+      for (let i = 0; i < people.length; i++) await ctx.db.patch(people[i], { gender: i === 0 ? gender : gender === "male" ? "female" : "male" });
+    });
+    const duplicates = await Promise.allSettled([t.mutation(api.applicantInterests.submitInterestNumber, submit()), t.mutation(api.applicantInterests.submitInterestNumber, submit())]);
+    expect(duplicates.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    const race = await Promise.allSettled([3, 4, 5].map(n => t.mutation(api.applicantInterests.submitInterestNumber, submit(n))));
+    expect(race.filter(r => r.status === "fulfilled")).toHaveLength(2);
+    const dashboard = () => t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" });
+    expect((await dashboard()).interestSubmissions).toHaveLength(3);
+    const first = (await dashboard()).interestSubmissions[0];
+    await t.run(async ctx => { await ctx.db.patch(first.interestId, { status: "declined" }); });
+    await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).rejects.toThrow("already submitted");
+    await expect(t.mutation(api.interests.remove, { id: first.interestId })).rejects.toThrow("retained");
+    await t.run(async ctx => {
+      const old = (await ctx.db.get(event))!;
+      const { _id, _creationTime, ...fields } = old; void _id; void _creationTime;
+      const next = await ctx.db.insert("events", { ...fields, eventCode: "rollover", startsAt: Date.now() - 100, endsAt: Date.now() + 10000, status: "scheduled" });
+      for (const id of people) await ctx.db.insert("eventRegistrations", { eventId: next, registrationId: id, gender, registrationStatus: "approved", attendanceStatus: "attended", confirmationStatus: "not_confirmed", eligibilityStatus: "approved_member", createdAt: Date.now(), updatedAt: Date.now() });
+    });
+    expect((await dashboard()).interestSubmissions).toHaveLength(0);
+    await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).resolves.toHaveProperty("interestId");
+  });
+}
+
+test("alternate public create cannot forge submissions or bypass session verification", async () => {
+  const { t, event, people } = await fixture();
+  for (const source of ["platform_submission", "admin_entered"] as const) {
+    await expect(t.mutation(api.interests.create, { fromRegistrationId: people[0], toRegistrationId: people[1], eventId: event, source })).rejects.toThrow("Unauthorized");
+  }
+});
+
+for (const gender of ["male", "female"] as const) test("Events approved AND attended gate, revocation and legacy isolation: " + gender, async () => {
+  vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "test-secret");
+  try {
+    const { t, event, people } = await fixture();
+    const id = await t.run(async ctx => {
+      for (let i = 0; i < people.length; i++) await ctx.db.patch(people[i], { gender: i === 0 ? gender : gender === "male" ? "female" : "male" });
+      const row = await ctx.db.query("eventRegistrations").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", event).eq("registrationId", people[0])).unique();
+      return row!._id;
+    });
+    const dashboard = () => t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" });
+    // Historical separate-table attendance never overrides the current Events state.
+    for (const registrationStatus of ["pending", "approved"] as const) {
+      for (const attendanceStatus of ["not_checked_in", "attended", "no_show"] as const) {
+        await t.run(ctx => ctx.db.patch(id, { registrationStatus, attendanceStatus }));
+        const eligible = registrationStatus === "approved" && attendanceStatus === "attended";
+        expect((await dashboard()).canSubmitInterest).toBe(eligible);
+        if (!eligible) await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).rejects.toThrow("approved and have attended");
+      }
+    }
+    await expect(t.mutation(api.events.updateAttendanceStatus, { adminSecret: "forged", eventRegistrationId: id, attendanceStatus: "attended" })).rejects.toThrow("Unauthorized");
+    const args = { adminSecret: "test-secret", eventRegistrationId: id };
+    await t.mutation(api.events.updateAttendanceStatus, { ...args, attendanceStatus: "attended" });
+    expect((await dashboard()).canSubmitInterest).toBe(true);
+    await t.mutation(api.events.updateAttendanceStatus, { ...args, attendanceStatus: "not_checked_in" });
+    expect((await dashboard()).canSubmitInterest).toBe(false);
+    await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).rejects.toThrow("attended");
+    await t.run(ctx => ctx.db.delete(id));
+    expect((await dashboard()).canSubmitInterest).toBe(false);
+    expect((await t.query(list, { adminSecret: "test-secret", eventId: event })).total).toBe(5);
+  } finally { vi.unstubAllEnvs(); }
 });

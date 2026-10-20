@@ -15,7 +15,7 @@ function rawErrorMessage(error: unknown) {
 
 function applicantInterestErrorResponse(error: unknown) {
   const message = rawErrorMessage(error);
-  for (const safeMessage of ["Applicant details could not be verified", "You can submit a maximum of 3 interests per event", "Applicant already has 3 open interests"]) {
+  for (const safeMessage of ["Applicant details could not be verified", "You can submit a maximum of 3 interests per event", "Interest already submitted for this event"]) {
     if (message.includes(safeMessage)) return NextResponse.json({ error: safeMessage }, { status: 400 });
   }
 
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "A valid applicant number is required" }, { status: 400 });
       }
       if (typeof body.applicantName !== "string" || !body.applicantName.trim() || body.applicantName.length > 200) {
-        return NextResponse.json({ error: "Applicant full name is required" }, { status: 400 });
+        return NextResponse.json({ error: "Applicant first name is required" }, { status: 400 });
       }
       const result = await convex.mutation(api.applicantInterests.submitInterestNumber, {
         sessionHash,

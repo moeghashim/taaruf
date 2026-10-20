@@ -156,19 +156,16 @@ export async function latestMatchingEvent(ctx: ReadCtx, now = Date.now()) {
   const events = await ctx.db.query("events")
     .withIndex("by_series_and_startsAt", q => q.eq("series", DEFAULT_EVENT_SERIES).lte("startsAt", now))
     .order("desc").take(100);
-  return events.filter(event => event.status === "completed" && event.endsAt <= now && event.eventCode !== MANUAL_ADMIN_EVENT_CODE)
+  return events.filter(event => (event.status !== "cancelled" && event.status !== "draft") && event.eventCode !== MANUAL_ADMIN_EVENT_CODE)
     .sort((a, b) => b.endsAt - a.endsAt)[0] ?? null;
 }
-export async function hasEventAttendance(ctx: ReadCtx, eventId: Id<"events">, registrationId: Id<"registrations">) {
-  return Boolean(await ctx.db.query("eventAttendees")
-    .withIndex("by_eventId_and_registrationId", q => q.eq("eventId", eventId).eq("registrationId", registrationId)).unique());
+export async function hasApprovedEventAttendance(ctx: ReadCtx, eventId: Id<"events">, registrationId: Id<"registrations">) {
+  const registration = await ctx.db.query("eventRegistrations")
+    .withIndex("by_eventId_and_registrationId", q => q.eq("eventId", eventId).eq("registrationId", registrationId)).unique();
+  return registration?.registrationStatus === "approved" && registration.attendanceStatus === "attended";
 }
 export async function findEligibleInterestSubmissionEvent(ctx: ReadCtx, registrationId: Id<"registrations">, now = Date.now()) {
   const event = await latestMatchingEvent(ctx, now);
-  if (!event || interestSubmissionClosesAt(event) < now || !await hasEventAttendance(ctx, event._id, registrationId)) return null;
+  if (!event || !await hasApprovedEventAttendance(ctx, event._id, registrationId)) return null;
   return event;
-}
-export async function findEligibleSharedInterestEvent(ctx: ReadCtx, fromRegistrationId: Id<"registrations">, toRegistrationId: Id<"registrations">, now = Date.now()) {
-  const event = await findEligibleInterestSubmissionEvent(ctx, fromRegistrationId, now);
-  return event && await hasEventAttendance(ctx, event._id, toRegistrationId) ? event : null;
 }

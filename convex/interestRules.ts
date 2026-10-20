@@ -1,6 +1,7 @@
+import { matchesInterestFirstName } from "./interestIdentity";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { findEligibleSharedInterestEvent } from "./eventRules";
+import { findEligibleInterestSubmissionEvent } from "./eventRules";
 
 export const openInterestStatuses = ["new", "queued", "active", "deferred"] as const;
 export const slotFreeingInterestStatuses = ["declined", "withdrawn", "closed", "converted_to_match"] as const;
@@ -138,7 +139,8 @@ export async function assertCanCreateInterest(
   ctx: ReadCtx,
   fromRegistrationId: Id<"registrations">,
   toRegistrationId: Id<"registrations">,
-  eventId: Id<"events">
+  eventId: Id<"events">,
+  applicantSubmission = false
 ) {
   if (fromRegistrationId === toRegistrationId) {
     throw new Error("Applicant cannot express interest in themselves");
@@ -150,7 +152,7 @@ export async function assertCanCreateInterest(
 
   assertProfileCompleted(fromRegistration, "Requester");
   assertProfileCompleted(toRegistration, "Recipient");
-  await assertOpenInterestCap(ctx, fromRegistrationId);
+  if (!applicantSubmission) await assertOpenInterestCap(ctx, fromRegistrationId);
   await assertNoDuplicateOpenInterest(ctx, fromRegistrationId, toRegistrationId, eventId);
 
   return {
@@ -300,7 +302,8 @@ export async function createInterestWithRules(
     ctx,
     args.fromRegistrationId,
     args.toRegistrationId,
-    args.eventId
+    args.eventId,
+    args.source === "platform_submission"
   );
   const now = Date.now();
   const interestId = await ctx.db.insert("interests", {
@@ -355,17 +358,17 @@ export async function createApplicantInterestWithRules(
   // Old profile-number fields remain stored but cannot create new unverified interests.
   if (!args.applicantName) throw new Error("Applicant must have attended an event and verified the applicant name using Submit Interest");
   const recipient = await getRegistrationOrThrow(ctx, args.toRegistrationId);
-  const normalize = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
-  if (normalize(recipient.name) !== normalize(args.applicantName)) throw new Error("Applicant details could not be verified");
-  const event = await findEligibleSharedInterestEvent(ctx, args.fromRegistrationId, args.toRegistrationId);
+  if (!matchesInterestFirstName(recipient.name, args.applicantName)) throw new Error("Applicant details could not be verified");
+  const event = await findEligibleInterestSubmissionEvent(ctx, args.fromRegistrationId);
   if (!event) {
-    throw new Error("Applicant must have attended an event within the active interest window");
+    throw new Error("Applicant must be approved and have attended the latest matching event");
   }
 
   const target = await getRegistrationOrThrow(ctx, args.toRegistrationId);
   if (target.status !== "approved") throw new Error("Applicant details could not be verified");
   const submissions = await ctx.db.query("interests")
     .withIndex("by_fromRegistrationId_and_eventId_and_source", q => q.eq("fromRegistrationId", args.fromRegistrationId).eq("eventId", event._id).eq("source", "platform_submission")).take(3);
+  if (submissions.some(row => row.toRegistrationId === args.toRegistrationId)) throw new Error("Interest already submitted for this event");
   if (submissions.length >= 3) {
     throw new Error("You can submit a maximum of 3 interests per event");
   }
@@ -373,6 +376,7 @@ export async function createApplicantInterestWithRules(
   void applicantName;
   return await createInterestWithRules(ctx, {
     ...interestArgs,
+    source: "platform_submission",
     eventId: event._id,
   });
 }

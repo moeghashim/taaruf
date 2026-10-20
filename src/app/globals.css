@@ -495,7 +495,7 @@
 [data-admin] .applicant-number-form {
   padding: 18px 20px 20px;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 14px;
   align-items: end;
 }
@@ -1108,9 +1108,10 @@
     flex-direction: column;
   }
   [data-admin] .applicant-number-form {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
   [data-admin] .applicant-number-form .btn {
+    grid-column: 1 / -1;
     justify-content: center;
     width: 100%;
   }
