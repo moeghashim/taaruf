@@ -151,78 +151,24 @@ export async function ensureEventRegistration(
   });
 }
 
-async function attendedRowsForRegistration(ctx: ReadCtx, registrationId: Id<"registrations">) {
-  return await ctx.db
-    .query("eventRegistrations")
-    .withIndex("by_registrationId_and_attendanceStatus", (q) =>
-      q.eq("registrationId", registrationId).eq("attendanceStatus", "attended")
-    )
-    .take(100);
-}
-
-export async function findEligibleSharedInterestEvent(
-  ctx: ReadCtx,
-  fromRegistrationId: Id<"registrations">,
-  toRegistrationId: Id<"registrations">,
-  now = Date.now()
-) {
-  const [fromRows, toRows] = await Promise.all([
-    attendedRowsForRegistration(ctx, fromRegistrationId),
-    attendedRowsForRegistration(ctx, toRegistrationId),
-  ]);
-  const targetEventIds = new Set(toRows.map((row) => row.eventId));
-  const sharedRows = fromRows.filter((row) => targetEventIds.has(row.eventId));
-
-  const events = await Promise.all(sharedRows.map((row) => ctx.db.get(row.eventId)));
-  return events
-    .filter((event): event is Doc<"events"> =>
-      Boolean(
-        event &&
-        event.eventCode !== MANUAL_ADMIN_EVENT_CODE &&
-        event.status === "completed" &&
-        event.endsAt <= now &&
-        interestSubmissionClosesAt(event) >= now
-      )
-    )
+// Real Talk and other attendance-only series never supersede matching events.
+export async function latestMatchingEvent(ctx: ReadCtx, now = Date.now()) {
+  const events = await ctx.db.query("events")
+    .withIndex("by_series_and_startsAt", q => q.eq("series", DEFAULT_EVENT_SERIES).lte("startsAt", now))
+    .order("desc").take(100);
+  return events.filter(event => event.status === "completed" && event.endsAt <= now && event.eventCode !== MANUAL_ADMIN_EVENT_CODE)
     .sort((a, b) => b.endsAt - a.endsAt)[0] ?? null;
 }
-
-export async function findEligibleInterestSubmissionEvent(
-  ctx: ReadCtx,
-  registrationId: Id<"registrations">,
-  now = Date.now()
-) {
-  const attendedRows = await attendedRowsForRegistration(ctx, registrationId);
-  const events = await Promise.all(attendedRows.map((row) => ctx.db.get(row.eventId)));
-  return events
-    .filter((event): event is Doc<"events"> =>
-      Boolean(
-        event &&
-        event.eventCode !== MANUAL_ADMIN_EVENT_CODE &&
-        event.status === "completed" &&
-        event.endsAt <= now &&
-        interestSubmissionClosesAt(event) >= now
-      )
-    )
-    .sort((a, b) => b.endsAt - a.endsAt)[0] ?? null;
+export async function hasEventAttendance(ctx: ReadCtx, eventId: Id<"events">, registrationId: Id<"registrations">) {
+  return Boolean(await ctx.db.query("eventAttendees")
+    .withIndex("by_eventId_and_registrationId", q => q.eq("eventId", eventId).eq("registrationId", registrationId)).unique());
 }
-
-export async function listEligibleInterestTargets(ctx: ReadCtx, registration: Registration, now = Date.now()) {
-  const targetIds = new Set<Id<"registrations">>();
-  const eligibleEvent = await findEligibleInterestSubmissionEvent(ctx, registration._id, now);
-  if (!eligibleEvent) return targetIds;
-
-  const registrations = await ctx.db.query("registrations").take(1000);
-  for (const target of registrations) {
-    if (
-      target._id !== registration._id &&
-      target.gender !== registration.gender &&
-      target.status === "approved" &&
-      target.profileCompletionStatus === "completed"
-    ) {
-      targetIds.add(target._id);
-    }
-  }
-
-  return targetIds;
+export async function findEligibleInterestSubmissionEvent(ctx: ReadCtx, registrationId: Id<"registrations">, now = Date.now()) {
+  const event = await latestMatchingEvent(ctx, now);
+  if (!event || interestSubmissionClosesAt(event) < now || !await hasEventAttendance(ctx, event._id, registrationId)) return null;
+  return event;
+}
+export async function findEligibleSharedInterestEvent(ctx: ReadCtx, fromRegistrationId: Id<"registrations">, toRegistrationId: Id<"registrations">, now = Date.now()) {
+  const event = await findEligibleInterestSubmissionEvent(ctx, fromRegistrationId, now);
+  return event && await hasEventAttendance(ctx, event._id, toRegistrationId) ? event : null;
 }

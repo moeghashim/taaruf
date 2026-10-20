@@ -117,10 +117,7 @@ export const claimDeclineNotification = mutation({
       throw new Error("Interest registration not found");
     }
 
-    const registrations = await ctx.db.query("registrations").take(1000);
-    const sortedRegistrations = [...registrations].sort((a, b) => a._creationTime - b._creationTime);
-    const targetIndex = sortedRegistrations.findIndex((registration) => registration._id === target._id);
-    const targetNumber = targetIndex >= 0 ? targetIndex + 1 : null;
+    const targetNumber = target.publicApplicantNumber ?? null;
 
     await ctx.db.patch(args.id, {
       declineNotificationSentAt: Date.now(),

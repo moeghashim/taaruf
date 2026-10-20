@@ -39,7 +39,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${cormorant.variable} ${interTight.variable} ${jetbrainsMono.variable} antialiased`}>
-        <ConvexProvider>{children}</ConvexProvider>
+        {process.env.VERCEL_ENV === "preview" && process.env.PREVIEW_BACKEND_ISOLATED !== "true" && (
+          <div role="status" style={{ background: "#fff3cd", color: "#664d03", padding: 12, textAlign: "center" }}>
+            UI-review-only preview — backend access disabled. No real submissions. An isolated backend is required for functional testing.
+          </div>
+        )}
+        <ConvexProvider reviewOnly={process.env.VERCEL_ENV === "preview" && process.env.PREVIEW_BACKEND_ISOLATED !== "true"}>{children}</ConvexProvider>
       </body>
     </html>
   );

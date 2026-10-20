@@ -34,6 +34,9 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
     assertProfileCompleted(ownerRegistration, "Profile owner");
+    if (args.includeImages && ownerRegistration.photoSharingPermission !== "yes") {
+      throw new Error("Photo sharing requires explicit owner consent");
+    }
 
     const now = Date.now();
     return await ctx.db.insert("profileShares", {
@@ -68,7 +71,8 @@ export const getByShareToken = query({
 
     return {
       ...share,
-      owner,
+      includeImages: share.includeImages && owner?.photoSharingPermission === "yes",
+      owner: owner ? { ...owner, imageStorageIds: share.includeImages && owner.photoSharingPermission === "yes" ? owner.imageStorageIds : [] } : null,
       recipient,
     };
   },

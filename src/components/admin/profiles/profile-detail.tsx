@@ -80,6 +80,8 @@ export function ProfileDetail({
   onDelete,
   onClose,
 }: Props) {
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
   const eventHistory = useQuery(api.events.getByRegistration, {
     registrationId: profile._id as Id<"registrations">,
   });
@@ -88,7 +90,7 @@ export function ProfileDetail({
   });
   const [notes, setNotes] = useState(profile.adminNotes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
-  const [busyAction, setBusyAction] = useState<null | "approve" | "reject" | "delete">(null);
+  const [busyAction, setBusyAction] = useState<null | "approve" | "reject" | "revoke" | "delete">(null);
   const about = currentText(profile.shareableBio, profile.describeYourself);
   const lookingFor = currentLookingFor(profile);
   const outboundInterests = interestHistory?.outbound ?? [];
@@ -127,6 +129,17 @@ export function ProfileDetail({
     } finally {
       setBusyAction(null);
     }
+  };
+
+  const revokeApproval = async () => {
+    if (!window.confirm("Revoke approval and return to pending review? Already-shared contacts cannot be recalled.")) return;
+    setBusyAction("revoke"); setActionError(null);
+    try {
+      const response = await fetch("/api/admin/revoke-approval", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ registrationId: profile._id }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to revoke approval"); }
+    finally { setBusyAction(null); }
   };
 
   const handleDelete = async () => {
@@ -174,10 +187,11 @@ export function ProfileDetail({
               marginBottom: 24,
             }}
           >
-            {profile.imageUrls.map((imageUrl, index) => (
+            {profile.imageUrls.map((imageUrl, index) => failedPhotos.includes(imageUrl) ? <p key={imageUrl}>Photo {index + 1} could not load. Please request a re-upload.</p> : (
               <img
                 key={`${profile._id}-photo-${index}`}
                 src={imageUrl}
+                onError={() => setFailedPhotos(urls => [...urls, imageUrl])}
                 alt={`${profile.name} photo ${index + 1}`}
                 style={{
                   width: "100%",
@@ -191,7 +205,7 @@ export function ProfileDetail({
             ))}
           </div>
         </>
-      ) : null}
+      ) : <p role="status">{profile.imageStorageIds?.length ? "Uploaded photos are unavailable. Please request a re-upload." : "No photos uploaded for this profile."}</p>}
 
       {sectionHeading("Profile facts")}
       <div style={{ marginBottom: 24 }}>
@@ -403,6 +417,8 @@ export function ProfileDetail({
           borderTop: "1px solid var(--line-2)",
         }}
       >
+        {actionError && <p role="alert">{actionError}</p>}
+        {profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke approval"}</button>}
         {profile.status === "pending" && (
           <>
             <button

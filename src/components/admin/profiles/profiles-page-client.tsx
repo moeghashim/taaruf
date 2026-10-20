@@ -75,7 +75,8 @@ function ProfilesContent({
 
   useEffect(() => {
     setSearch(query);
-    setTab(initialStatus);
+    const requestedStatus = params.get("status");
+    setTab(TAB_DEFS.find(item => item.id === requestedStatus)?.id ?? initialStatus);
     setGender("all");
     setProfileStatus("all");
     setOpenProfileId(params.get("profile"));

@@ -1,9 +1,11 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { modules } from "./test.setup";
+
+afterEach(() => vi.unstubAllEnvs());
 
 type Gender = "male" | "female";
 
@@ -70,6 +72,7 @@ async function createRegistration(
       createdAt: now,
       updatedAt: now,
     });
+    await ctx.db.insert("eventAttendees", { eventId, registrationId, addedAt: now });
     return registrationId;
   });
 }
@@ -287,9 +290,15 @@ describe("interest rules", () => {
       toRegistrationId: queuedTarget,
       source: "admin_entered",
     });
+    vi.stubEnv("ADMIN_PASSWORD", "test-only-secret");
+    await t.run(async ctx => {
+      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interestId)).unique();
+      await ctx.db.patch(flow!._id, { requesterFinalApproval: "approved", recipientFinalApproval: "approved" });
+    });
     await t.mutation(api.matches.updateStatus, {
       id: matchId,
       status: "contact_shared",
+      adminSecret: "test-only-secret",
     });
 
     await expect(getRegistration(t, male)).resolves.toMatchObject({
@@ -386,6 +395,7 @@ describe("interest rules", () => {
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
       sessionHash: maleSession,
       applicantNumber: 2,
+      applicantName: "Portal Female",
     });
     const interest = await getInterest(t, result.interestId);
 
@@ -413,55 +423,20 @@ describe("interest rules", () => {
     });
   });
 
-  test("number submission does not require target to have attended the same event", async () => {
+  test("number submission requires target attendance at the same event without exposing a directory", async () => {
     const t = convexTest(schema, modules);
     const male = await createRegistration(t, "Cross Event Male", "male");
     const female = await createRegistration(t, "Cross Event Female", "female");
     const maleSession = await createSession(t, male);
-
-    const maleEventId = await t.run(async (ctx) => {
-      const maleAttendance = await ctx.db
-        .query("eventRegistrations")
-        .withIndex("by_registrationId_and_attendanceStatus", (q) =>
-          q.eq("registrationId", male).eq("attendanceStatus", "attended")
-        )
-        .unique();
-      if (!maleAttendance) throw new Error("Male attendance not found");
-
-      const femaleRows = await ctx.db
-        .query("eventRegistrations")
-        .withIndex("by_registrationId", (q) => q.eq("registrationId", female))
-        .take(10);
-      for (const row of femaleRows) {
-        await ctx.db.delete(row._id);
-      }
-
-      return maleAttendance.eventId;
+    await t.run(async ctx => {
+      const rows = await ctx.db.query("eventAttendees").take(10);
+      for (const row of rows) if (row.registrationId === female) await ctx.db.delete(row._id);
     });
-
-    const dashboard = await t.query(api.applicantInterests.getDashboard, {
-      sessionHash: maleSession,
-    });
-    expect(dashboard.eligibleInterestTargets).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          applicantNumber: 2,
-          firstName: "Cross",
-        }),
-      ])
-    );
-
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
-      sessionHash: maleSession,
-      applicantNumber: 2,
-    });
-
-    await expect(getInterest(t, result.interestId)).resolves.toMatchObject({
-      fromRegistrationId: male,
-      toRegistrationId: female,
-      eventId: maleEventId,
-      visibility: "admin_actionable",
-    });
+    const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash: maleSession });
+    expect(dashboard).not.toHaveProperty("eligibleInterestTargets");
+    await expect(t.mutation(api.applicantInterests.submitInterestNumber, {
+      sessionHash: maleSession, applicantNumber: 2, applicantName: "Cross Event Female",
+    })).rejects.toThrow("attended");
   });
 
   test("pending applicant can submit interest", async () => {
@@ -477,6 +452,7 @@ describe("interest rules", () => {
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
       sessionHash: maleSession,
       applicantNumber: 2,
+      applicantName: "Approved Target Female",
     });
 
     await expect(getInterest(t, result.interestId)).resolves.toMatchObject({
@@ -521,6 +497,7 @@ describe("interest rules", () => {
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
       sessionHash: maleSession,
       applicantNumber: 3,
+      applicantName: "Numbered Female",
     });
 
     await expect(getInterest(t, result.interestId)).resolves.toMatchObject({
@@ -539,6 +516,7 @@ describe("interest rules", () => {
     await t.mutation(api.applicantInterests.submitInterestNumber, {
       sessionHash: maleSession,
       applicantNumber: 2,
+      applicantName: "Visible Female",
     });
 
     const femaleDashboard = await t.query(api.applicantInterests.getDashboard, {
@@ -593,6 +571,7 @@ describe("interest rules", () => {
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
       sessionHash: maleSession,
       applicantNumber: 2,
+      applicantName: "Approving Female",
     });
 
     const beforeApproval = await t.query(api.applicantInterests.getDashboard, {
@@ -643,6 +622,7 @@ describe("interest rules", () => {
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
       sessionHash: maleSession,
       applicantNumber: 2,
+      applicantName: "Final Approval Female",
     });
 
     await t.mutation(api.applicantInterests.respondToInbound, {
@@ -759,6 +739,7 @@ describe("interest rules", () => {
     await t.mutation(api.applicantInterests.submitInterestNumber, {
       sessionHash: femaleSession,
       applicantNumber: 1,
+      applicantName: "Documented Male",
     });
 
     const dashboard = await t.query(api.applicantInterests.getDashboard, {
@@ -789,6 +770,7 @@ describe("interest rules", () => {
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
       sessionHash: femaleSession,
       applicantNumber: 1,
+      applicantName: "Private Male",
     });
     const interest = await getInterest(t, result.interestId);
 

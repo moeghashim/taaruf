@@ -57,11 +57,8 @@ type DashboardData = {
   inbound: DashboardInterest[];
   outbound: DashboardInterest[];
   privateDocumented: DashboardInterest[];
-  eligibleInterestTargets: Array<{
-    registrationId: string;
-    applicantNumber: number | null;
-    firstName: string;
-  }>;
+  canSubmitInterest: boolean;
+  interestSubmissionLimit: number;
 };
 
 type ApplicantEventData = {
@@ -596,6 +593,7 @@ export default function ApplicantDashboardPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [applicantNumber, setApplicantNumber] = useState("");
+  const [applicantName, setApplicantName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -705,8 +703,9 @@ export default function ApplicantDashboardPage() {
   async function submitNumber(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const number = Number(applicantNumber);
-    await runAction({ action: "submit_number", applicantNumber: number });
+    await runAction({ action: "submit_number", applicantNumber: number, applicantName });
     setApplicantNumber("");
+    setApplicantName("");
   }
 
   async function registerForEvent(eventId: string) {
@@ -1006,17 +1005,7 @@ export default function ApplicantDashboardPage() {
                   <span>Visible interests sent</span>
                 </div>
               </div>
-              <div className="stat">
-                <h4>{data.applicant.gender === "female" ? "Private" : "Profile"}</h4>
-                <div className="big">{data.applicant.gender === "female" ? data.privateDocumented.length : completedProfile ? 1 : 0}</div>
-                <div className="sub">
-                  <span>
-                    {data.applicant.gender === "female"
-                      ? "Documented for admins"
-                      : titleize(data.applicant.profileCompletionStatus)}
-                  </span>
-                </div>
-              </div>
+              {data.applicant.gender === "female" && <div className="stat"><h4>Private</h4><div className="big">{data.privateDocumented.length}</div><div className="sub">Documented for admins</div></div>}
               <div className="stat">
                 <h4>Status</h4>
                 <div className="big">{data.inbound.length + data.outbound.length + data.privateDocumented.length}</div>
@@ -1104,7 +1093,11 @@ export default function ApplicantDashboardPage() {
                   <p>{interestHint}</p>
                 </div>
               </div>
-              <form onSubmit={submitNumber} className="applicant-number-form">
+              {data.canSubmitInterest ? <form onSubmit={submitNumber} className="applicant-number-form">
+                <div className="field">
+                  <label htmlFor="applicantName">Applicant full name</label>
+                  <input id="applicantName" value={applicantName} onChange={(event) => setApplicantName(event.target.value)} maxLength={200} required />
+                </div>
                 <div className="field">
                   <label htmlFor="applicantNumber">Applicant number</label>
                   <input
@@ -1122,24 +1115,8 @@ export default function ApplicantDashboardPage() {
                   {Ico.plus}
                   <span>{data.applicant.gender === "female" ? "Document Interest" : "Submit Interest"}</span>
                 </button>
-              </form>
-              {data.eligibleInterestTargets.length > 0 && (
-                <div className="profile-review-box" style={{ marginTop: 16 }}>
-                  <h4>Approved applicants</h4>
-                  <div className="pill-row">
-                    {data.eligibleInterestTargets.map((target) => (
-                      <button
-                        key={target.registrationId}
-                        type="button"
-                        className="btn"
-                        onClick={() => setApplicantNumber(String(target.applicantNumber ?? ""))}
-                      >
-                        #{target.applicantNumber ?? "-"} {target.firstName}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              </form> : <p>You&apos;ll be able to submit interests after attending our next event.</p>}
+              <p>Enter the applicant&apos;s number and full name. Maximum 3 interests per event.</p>
             </div>
 
             {message && <p className="notice success">{message}</p>}
@@ -1283,31 +1260,6 @@ export default function ApplicantDashboardPage() {
                         onChange={(event) => setProfile({ ...profile, shareableBio: event.target.value })}
                         rows={6}
                       />
-                    </div>
-
-                    <div className="profile-grid three">
-                      {[0, 1, 2].map((index) => (
-                        <div key={`interestSubmissionNumber${index + 1}`} className="field">
-                          <label htmlFor={`interestSubmissionNumber${index + 1}`}>Interest number {index + 1}</label>
-                          <input
-                            id={`interestSubmissionNumber${index + 1}`}
-                            type="number"
-                            min="1"
-                            inputMode="numeric"
-                            value={profile.interestSubmissionNumbers[index] || ""}
-                            onChange={(event) => {
-                              const nextNumbers = [...profile.interestSubmissionNumbers];
-                              nextNumbers[index] = event.target.value;
-                              setProfile({
-                                ...profile,
-                                interestSubmissionNumbers: nextNumbers,
-                                interestSubmission: nextNumbers.filter(Boolean).join(", "),
-                              });
-                            }}
-                            placeholder="e.g. 137"
-                          />
-                        </div>
-                      ))}
                     </div>
 
                     <div className="field">

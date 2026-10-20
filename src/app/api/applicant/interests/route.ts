@@ -15,6 +15,9 @@ function rawErrorMessage(error: unknown) {
 
 function applicantInterestErrorResponse(error: unknown) {
   const message = rawErrorMessage(error);
+  for (const safeMessage of ["Applicant details could not be verified", "You can submit a maximum of 3 interests per event", "Applicant already has 3 open interests"]) {
+    if (message.includes(safeMessage)) return NextResponse.json({ error: safeMessage }, { status: 400 });
+  }
 
   if (message.includes("Applicant must have attended an event within the active interest window")) {
     return NextResponse.json(
@@ -93,9 +96,13 @@ export async function POST(request: NextRequest) {
       if (!Number.isInteger(body.applicantNumber) || body.applicantNumber <= 0) {
         return NextResponse.json({ error: "A valid applicant number is required" }, { status: 400 });
       }
+      if (typeof body.applicantName !== "string" || !body.applicantName.trim() || body.applicantName.length > 200) {
+        return NextResponse.json({ error: "Applicant full name is required" }, { status: 400 });
+      }
       const result = await convex.mutation(api.applicantInterests.submitInterestNumber, {
         sessionHash,
         applicantNumber: body.applicantNumber,
+        applicantName: body.applicantName,
       });
 
       if (result.inboundInterestNotification) {
@@ -108,7 +115,7 @@ export async function POST(request: NextRequest) {
           });
           return NextResponse.json({
             success: true,
-            result,
+            result: { interestId: result.interestId, private: result.private },
             message: "Interest submitted, but the recipient notification email could not be sent.",
             notification: { sent: false, error },
           });
@@ -127,7 +134,7 @@ export async function POST(request: NextRequest) {
           });
           return NextResponse.json({
             success: true,
-            result,
+            result: { interestId: result.interestId, private: result.private },
             message: "Interest submitted, but the recipient notification email could not be sent.",
             notification: { sent: false, error: emailResult.error || "Failed to send inbound interest email" },
           });
@@ -135,13 +142,13 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          result,
+          result: { interestId: result.interestId, private: result.private },
           message: "Interest submitted. The recipient has been notified.",
           notification: { sent: true, providerId: emailResult.id },
         });
       }
 
-      return NextResponse.json({ success: true, result });
+      return NextResponse.json({ success: true, result: { interestId: result.interestId, private: result.private } });
     }
 
     if (body.action === "respond") {

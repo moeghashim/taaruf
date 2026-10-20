@@ -588,3 +588,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-10-15
 - Recorded approval workflow in AGENTS.md: issue approval -> implementation and preview; preview approval -> live deployment. Live Convex deployments are gated too.
 - Isolated #15/#16 release under .worktrees/release-15-16; 53 tests and TypeScript pass without unrelated local edits.
+
+## 2026-10-20
+- Implemented approved issue fixes in isolated tree: attendance/interest privacy, workflow clarity/contact sharing, approval reversal, metrics, degree options, photo diagnostics; added regression tests and preview isolation safeguards. No live deployment.

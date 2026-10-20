@@ -332,6 +332,7 @@ export const updateStatus = mutation({
     id: v.id("matches"),
     status: matchStatus,
     adminNotes: v.optional(v.string()),
+    adminSecret: v.optional(v.string()),
     closedReason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -340,6 +341,25 @@ export const updateStatus = mutation({
       throw new Error("Match not found");
     }
 
+    // Contact disclosure is a privileged, consent-gated transaction, not a status label.
+    if (args.status === "contact_shared") {
+      if (!process.env.ADMIN_PASSWORD || args.adminSecret !== process.env.ADMIN_PASSWORD) throw new Error("Unauthorized");
+      if (["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+      const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
+      if (!interest || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Active linked interest required");
+      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
+      if (!flow || ["closed", "declined"].includes(flow.flowStatus) || flow.requesterFinalApproval !== "approved" || flow.recipientFinalApproval !== "approved") throw new Error("Both applicants must give final approval before contacts can be shared");
+      const pair = await Promise.all([ctx.db.get(match.maleRegistrationId), ctx.db.get(match.femaleRegistrationId)]);
+      for (const person of pair) {
+        if (!person || person.status !== "approved" || !person.email || !person.phone) throw new Error("Both applicants must be approved and have contact details");
+        if (person.activeMatchId && person.activeMatchId !== match._id) throw new Error("Applicant already has an active match");
+      }
+      if (!flow.contactSharedAt) {
+        const now = Date.now();
+        await ctx.db.patch(flow._id, { flowStatus: "contact_shared", contactSharedAt: now, updatedAt: now });
+        await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: interest._id, actor: "system", eventType: "contacts_disclosed_in_portal", message: "Contacts made available to both authenticated applicants by admin.", createdAt: now });
+      }
+    }
     const previousStatus = match.status;
     const now = Date.now();
     await ctx.db.patch(args.id, {

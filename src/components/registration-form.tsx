@@ -376,6 +376,10 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
                   <option value="bachelor">Bachelor&apos;s</option>
                   <option value="master">Master&apos;s</option>
                   <option value="phd">PhD</option>
+                  <option value="jd">JD</option>
+                  <option value="md_do">MD/DO</option>
+                  <option value="md_phd">MD/PhD</option>
+                  <option value="jd_phd">JD/PhD</option>
                 </select>
                 {field.state.meta.errors?.length > 0 && (
                   <p className="field-error">{field.state.meta.errors.join(", ")}</p>

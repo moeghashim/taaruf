@@ -230,6 +230,7 @@ export default defineSchema({
   })
     .index("by_fromRegistrationId", ["fromRegistrationId"])
     .index("by_toRegistrationId", ["toRegistrationId"])
+    .index("by_fromRegistrationId_and_eventId_and_source", ["fromRegistrationId", "eventId", "source"])
     .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
     .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])
     .index("by_fromRegistrationId_and_toRegistrationId_and_eventId", ["fromRegistrationId", "toRegistrationId", "eventId"])
@@ -262,6 +263,12 @@ export default defineSchema({
     .index("by_series_and_eventMonth", ["series", "eventMonth"])
     .index("by_series_and_startsAt", ["series", "startsAt"])
     .index("by_eventCode", ["eventCode"]),
+
+  eventAttendees: defineTable({
+    eventId: v.id("events"),
+    registrationId: v.id("registrations"),
+    addedAt: v.number(),
+  }).index("by_eventId_and_registrationId", ["eventId", "registrationId"]),
 
   eventRegistrations: defineTable({
     eventId: v.id("events"),

@@ -45,6 +45,7 @@ const NAV: NavGroup[] = [
     heading: "System",
     items: [
       { href: "/admin/events", label: "Events", icon: Ico.calendar },
+      { href: "/admin/event-attendees", label: "Event Attendees", icon: Ico.people },
       { href: "/admin/settings", label: "Settings", icon: Ico.settings },
     ],
   },
