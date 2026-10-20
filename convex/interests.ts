@@ -55,6 +55,7 @@ export const getAll = query({
 
 export const create = mutation({
   args: {
+    adminSecret: v.optional(v.string()),
     fromRegistrationId: v.id("registrations"),
     toRegistrationId: v.id("registrations"),
     eventId: v.id("events"),
@@ -63,6 +64,8 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    if (args.source === "platform_submission") throw new Error("Use Submit Interest with a verified applicant session");
     const result = await createInterestWithRules(ctx, args);
     return result.interestId;
   },
@@ -230,6 +233,7 @@ export const remove = mutation({
       throw new Error("Interest not found");
     }
 
+    if (interest.source === "platform_submission") throw new Error("Submitted interests must be retained for the event limit");
     if (interest.matchId) {
       throw new Error("Cannot delete an interest that is already linked to a match");
     }

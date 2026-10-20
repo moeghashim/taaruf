@@ -22,15 +22,11 @@ export const list = query({
     return { events: events.map(row => ({ eventId: row._id, title: row.title, startsAt: row.startsAt })), attendees, total: attendees.length, candidates };
   },
 });
+// Retired by #38. Keep the read-only archive and schema; never erase history.
 export const setAttendance = mutation({
   args: { adminSecret: v.string(), eventId: v.id("events"), registrationId: v.id("registrations"), attending: v.boolean() },
-  handler: async (ctx, args) => {
+  handler: async (_ctx, args) => {
     requireAdmin(args.adminSecret);
-    if (!await ctx.db.get(args.eventId) || !await ctx.db.get(args.registrationId)) throw new Error("Event or applicant not found");
-    // Indexed read + insert in one serializable transaction prevents concurrent duplicates.
-    const existing = await ctx.db.query("eventAttendees").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", args.eventId).eq("registrationId", args.registrationId)).unique();
-    if (args.attending && !existing) await ctx.db.insert("eventAttendees", { eventId: args.eventId, registrationId: args.registrationId, addedAt: Date.now() });
-    if (!args.attending && existing) await ctx.db.delete(existing._id);
-    return null;
+    throw new Error("Event Attendees is retired; use Events approval and check-in");
   },
 });

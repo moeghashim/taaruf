@@ -1,7 +1,7 @@
 "use client";
 
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
@@ -59,6 +59,8 @@ type DashboardData = {
   privateDocumented: DashboardInterest[];
   canSubmitInterest: boolean;
   interestSubmissionLimit: number;
+  interestSubmissionEventId: string | null;
+  interestSubmissions: { interestId: string; status: string }[];
 };
 
 type ApplicantEventData = {
@@ -592,8 +594,7 @@ export default function ApplicantDashboardPage() {
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
-  const [applicantNumber, setApplicantNumber] = useState("");
-  const [applicantName, setApplicantName] = useState("");
+  const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -672,12 +673,7 @@ export default function ApplicantDashboardPage() {
     void loadEvents();
   }, [loadEvents]);
 
-  const interestHint = useMemo(() => {
-    if (!data) return "";
-    return data.applicant.gender === "female"
-      ? "Document interest in an approved male applicant. This is visible only to you and admins before a match."
-      : "Submit an approved female applicant number to send a visible interest for her to review.";
-  }, [data]);
+
 
   async function runAction(body: Record<string, unknown>) {
     setBusy(true);
@@ -693,6 +689,7 @@ export default function ApplicantDashboardPage() {
       if (!response.ok) throw new Error(payload.error || "Action failed");
       setMessage(typeof payload.message === "string" ? payload.message : "Updated.");
       await Promise.all([load(), loadEvents()]);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -700,12 +697,13 @@ export default function ApplicantDashboardPage() {
     }
   }
 
-  async function submitNumber(event: React.FormEvent<HTMLFormElement>) {
+  async function submitNumber(event: React.FormEvent<HTMLFormElement>, index: number) {
     event.preventDefault();
-    const number = Number(applicantNumber);
-    await runAction({ action: "submit_number", applicantNumber: number, applicantName });
-    setApplicantNumber("");
-    setApplicantName("");
+    if (busy) return;
+    const row = interestRows[index];
+    if (await runAction({ action: "submit_number", applicantNumber: Number(row.number), applicantName: row.name })) {
+      setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "" })));
+    }
   }
 
   async function registerForEvent(eventId: string) {
@@ -1089,34 +1087,32 @@ export default function ApplicantDashboardPage() {
             <div className="panel interest-submit-panel">
               <div className="panel-head">
                 <div>
-                  <h3>{data.applicant.gender === "female" ? "Document Interest" : "Submit Interest"}</h3>
-                  <p>{interestHint}</p>
+                  <h3>Submit Interest</h3>
+                  <p>{data.canSubmitInterest
+                    ? "Enter the applicant's number and first name. Maximum 3 interests per event."
+                    : "You'll be able to submit interests after attending our next event."}</p>
                 </div>
               </div>
-              {data.canSubmitInterest ? <form onSubmit={submitNumber} className="applicant-number-form">
-                <div className="field">
-                  <label htmlFor="applicantName">Applicant full name</label>
-                  <input id="applicantName" value={applicantName} onChange={(event) => setApplicantName(event.target.value)} maxLength={200} required />
-                </div>
-                <div className="field">
-                  <label htmlFor="applicantNumber">Applicant number</label>
-                  <input
-                    id="applicantNumber"
-                    type="number"
-                    min="1"
-                    inputMode="numeric"
-                    value={applicantNumber}
-                    onChange={(event) => setApplicantNumber(event.target.value)}
-                    placeholder="e.g. 137"
-                    required
-                  />
-                </div>
-                <button type="submit" className="btn btn-primary" disabled={busy}>
-                  {Ico.plus}
-                  <span>{data.applicant.gender === "female" ? "Document Interest" : "Submit Interest"}</span>
-                </button>
-              </form> : <p>You&apos;ll be able to submit interests after attending our next event.</p>}
-              <p>Enter the applicant&apos;s number and full name. Maximum 3 interests per event.</p>
+              {data.canSubmitInterest && [0, 1, 2].map(index => {
+                const submitted = data.interestSubmissions?.[index];
+                return <form key={index} onSubmit={event => submitNumber(event, index)} className="applicant-number-form" aria-label={`Interest ${index + 1}`}>
+                  <div className="field">
+                    <label htmlFor={`interest-number-${index}`}>Interest {index + 1} · Applicant #</label>
+                    <input id={`interest-number-${index}`} type="number" min="1" step="1" inputMode="numeric" required disabled={busy || Boolean(submitted)}
+                      placeholder={submitted ? "Submitted" : "Applicant #"} value={submitted ? "" : interestRows[index].number}
+                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, number: event.target.value } : row))} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`interest-name-${index}`}>First name</label>
+                    <input id={`interest-name-${index}`} required maxLength={200} disabled={busy || Boolean(submitted)} placeholder="First name"
+                      value={submitted ? "" : interestRows[index].name}
+                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, name: event.target.value } : row))} />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={busy || Boolean(submitted)}>
+                    {submitted ? "Submitted" : "Submit interest"}
+                  </button>
+                </form>;
+              })}
             </div>
 
             {message && <p className="notice success">{message}</p>}
@@ -1286,14 +1282,14 @@ export default function ApplicantDashboardPage() {
                 title="Inbound Interests"
                 description="People who expressed interest in you."
                 interests={data.inbound}
-                onAction={runAction}
+                onAction={async body => { await runAction(body); }}
                 busy={busy}
               />
               <Section
                 title="Outbound Interests"
                 description="Visible interests you sent."
                 interests={data.outbound}
-                onAction={runAction}
+                onAction={async body => { await runAction(body); }}
                 busy={busy}
               />
               {data.applicant.gender === "female" && (
@@ -1301,7 +1297,7 @@ export default function ApplicantDashboardPage() {
                   title="Private Documented Interests"
                   description="Interests you documented for yourself and the admin team. These are not visible to men before a match."
                   interests={data.privateDocumented}
-                  onAction={runAction}
+                  onAction={async body => { await runAction(body); }}
                   busy={busy}
                 />
               )}

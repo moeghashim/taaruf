@@ -864,10 +864,12 @@ export const updateRegistrationStatus = mutation({
 
 export const updateAttendanceStatus = mutation({
   args: {
+    adminSecret: v.string(),
     eventRegistrationId: v.id("eventRegistrations"),
     attendanceStatus: eventAttendanceStatus,
   },
   handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
     const now = Date.now();

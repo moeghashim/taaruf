@@ -21,13 +21,5 @@ export async function GET(request: NextRequest) {
 }
 export async function POST(request: NextRequest) {
   if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!process.env.ATTENDANCE_ADMIN_SECRET) return NextResponse.json({ error: "Attendance service not configured" }, { status: 503 });
-  try {
-    const body = await request.json();
-    if (typeof body.attending !== "boolean") throw new Error("Invalid attendance");
-    await getConvexClient().mutation(api.eventAttendees.setAttendance, {
-      adminSecret: process.env.ATTENDANCE_ADMIN_SECRET, eventId: body.eventId, registrationId: body.registrationId, attending: body.attending,
-    });
-    return NextResponse.json({ success: true });
-  } catch { return NextResponse.json({ error: "Unable to update attendance" }, { status: 400 }); }
+  return NextResponse.json({ error: "Event Attendees is retired; use Events approval and check-in" }, { status: 410 });
 }

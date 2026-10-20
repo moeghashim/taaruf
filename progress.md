@@ -591,3 +591,9 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-10-20
 - Implemented approved issue fixes in isolated tree: attendance/interest privacy, workflow clarity/contact sharing, approval reversal, metrics, degree options, photo diagnostics; added regression tests and preview isolation safeguards. No live deployment.
+
+## 2026-10-20
+- Issue 37 local-only: aligned check-in sources, first-name verification, three event-scoped submission slots, bypass guard, synthetic race/browser tests; see docs/issue-37-local-review.md.
+
+## 2026-10-20
+- Issue #38 supersedes #30: Events approved+attended sender-only gate; retired separate writer/UI without deleting history, added cookie bridge and tests. Combined #37/#38 review in docs/issue-38-local-review.md. <!-- project: github.com/moeghashim/clawscrewskill -->

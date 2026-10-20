@@ -1,3 +1,4 @@
+import { matchesInterestFirstName } from "./interestIdentity";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -250,7 +251,11 @@ export const getDashboard = query({
           )
         : [];
 
+    const submissions = eligibleEvent ? await ctx.db.query("interests")
+      .withIndex("by_fromRegistrationId_and_eventId_and_source", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id).eq("source", "platform_submission")).take(3) : [];
     return {
+      interestSubmissionEventId: eligibleEvent?._id ?? null,
+      interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
       applicant: {
         registrationId: registration._id,
         name: registration.name,
@@ -267,7 +272,7 @@ export const getDashboard = query({
       privateDocumented: await Promise.all(
         privateDocumented.map((interest) => serializeInterest(ctx, registration, interest, byId, "private"))
       ),
-      canSubmitInterest: Boolean(eligibleEvent),
+      canSubmitInterest: Boolean(eligibleEvent) && ["pending", "approved"].includes(registration.status) && registration.profileCompletionStatus === "completed",
       interestSubmissionLimit: 3,
     };
   },
@@ -285,8 +290,7 @@ export const submitInterestNumber = mutation({
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique()
       : null;
-    const normalizeName = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
-    if (!target || !args.applicantName.trim() || normalizeName(target.name) !== normalizeName(args.applicantName) ||
+    if (!target || !matchesInterestFirstName(target.name, args.applicantName) ||
         target._id === registration._id || target.gender === registration.gender || target.status !== "approved") {
       throw new Error("Applicant details could not be verified");
     }

@@ -79,7 +79,14 @@ export function EventsPageClient() {
   const deleteEvent = useMutation(api.events.deleteEvent);
   const updateRegistrationStatus = useMutation(api.events.updateRegistrationStatus);
   const updateRegistrationConfirmation = useMutation(api.events.updateRegistrationConfirmation);
-  const updateAttendanceStatus = useMutation(api.events.updateAttendanceStatus);
+  async function updateAttendanceStatus(args: { eventRegistrationId: Id<"eventRegistrations">; attendanceStatus: (typeof attendanceStatuses)[number] }) {
+    try {
+      const response = await fetch("/api/admin/event-check-in", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(args) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to update attendance");
+      setMessage("Attendance updated.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update attendance"); }
+  }
   const requestConfirmation = useMutation(api.events.requestConfirmation);
   const carryOverRegistrations = useMutation(api.events.carryOverRegistrations);
   const moveEventRegistrationsToAprilWaitlist = useMutation(api.events.moveEventRegistrationsToAprilWaitlist);
