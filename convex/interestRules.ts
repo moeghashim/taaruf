@@ -1,6 +1,6 @@
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { findEligibleInterestSubmissionEvent } from "./eventRules";
+import { findEligibleSharedInterestEvent } from "./eventRules";
 
 export const openInterestStatuses = ["new", "queued", "active", "deferred"] as const;
 export const slotFreeingInterestStatuses = ["declined", "withdrawn", "closed", "converted_to_match"] as const;
@@ -349,15 +349,30 @@ export async function createApplicantInterestWithRules(
     rank?: number;
     source: InterestSource;
     notes?: string;
+    applicantName?: string;
   }
 ) {
-  const event = await findEligibleInterestSubmissionEvent(ctx, args.fromRegistrationId);
+  // Old profile-number fields remain stored but cannot create new unverified interests.
+  if (!args.applicantName) throw new Error("Applicant must have attended an event and verified the applicant name using Submit Interest");
+  const recipient = await getRegistrationOrThrow(ctx, args.toRegistrationId);
+  const normalize = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+  if (normalize(recipient.name) !== normalize(args.applicantName)) throw new Error("Applicant details could not be verified");
+  const event = await findEligibleSharedInterestEvent(ctx, args.fromRegistrationId, args.toRegistrationId);
   if (!event) {
     throw new Error("Applicant must have attended an event within the active interest window");
   }
 
+  const target = await getRegistrationOrThrow(ctx, args.toRegistrationId);
+  if (target.status !== "approved") throw new Error("Applicant details could not be verified");
+  const submissions = await ctx.db.query("interests")
+    .withIndex("by_fromRegistrationId_and_eventId_and_source", q => q.eq("fromRegistrationId", args.fromRegistrationId).eq("eventId", event._id).eq("source", "platform_submission")).take(3);
+  if (submissions.length >= 3) {
+    throw new Error("You can submit a maximum of 3 interests per event");
+  }
+  const { applicantName, ...interestArgs } = args;
+  void applicantName;
   return await createInterestWithRules(ctx, {
-    ...args,
+    ...interestArgs,
     eventId: event._id,
   });
 }

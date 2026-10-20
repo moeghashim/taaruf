@@ -11,7 +11,7 @@ import {
   getOrCreateApril2026Event,
   getOrCreateManualAdminEvent,
   interestSubmissionClosesAt,
-  listEligibleInterestTargets,
+  findEligibleInterestSubmissionEvent,
 } from "./eventRules";
 
 const eventStatus = v.union(
@@ -448,7 +448,8 @@ export const getDetail = query({
       .query("eventRegistrationEmails")
       .withIndex("by_eventId_and_kind", (q) => q.eq("eventId", args.eventId))
       .first();
-    const deleteBlockedReason = rows.length
+    const attendee = await ctx.db.query("eventAttendees").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", args.eventId)).first();
+    const deleteBlockedReason = attendee ? "Cannot delete an event with attendance history." : rows.length
       ? "Cannot delete an event after someone has signed up."
       : linkedInterest
         ? "Cannot delete an event linked to interest history."
@@ -478,7 +479,7 @@ export const getApplicantEvents = query({
       .withIndex("by_registrationId", (q) => q.eq("registrationId", registration._id))
       .take(100);
     const byEventId = new Map(eventRegistrations.map((row) => [row.eventId, row] as const));
-    const eligibleTargetIds = await listEligibleInterestTargets(ctx, registration);
+    const eligibleEvent = await findEligibleInterestSubmissionEvent(ctx, registration._id);
 
     return {
       upcoming: events
@@ -488,7 +489,7 @@ export const getApplicantEvents = query({
           registration: byEventId.get(event._id) ?? null,
         })),
       history: await Promise.all(eventRegistrations.map((row) => serializeEventRegistration(ctx, row))),
-      eligibleInterestTargetIds: [...eligibleTargetIds],
+      canSubmitInterest: Boolean(eligibleEvent),
     };
   },
 });
@@ -616,6 +617,8 @@ export const deleteEvent = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
 
+    const attendee = await ctx.db.query("eventAttendees").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", args.eventId)).first();
+    if (attendee) throw new Error("Cannot delete an event with attendance history.");
     const existingRegistration = await ctx.db
       .query("eventRegistrations")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))

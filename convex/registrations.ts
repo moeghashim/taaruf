@@ -817,3 +817,14 @@ export const deleteRegistration = mutation({
     return args.id;
   },
 });
+
+export const revokeApproval = mutation({
+  args: { id: v.id("registrations"), adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.ADMIN_PASSWORD || args.adminSecret !== process.env.ADMIN_PASSWORD) throw new Error("Unauthorized");
+    const person = await ctx.db.get(args.id);
+    if (!person || person.status !== "approved") throw new Error("Applicant is not approved");
+    await ctx.db.patch(args.id, { status: "pending" });
+    return args.id;
+  },
+});

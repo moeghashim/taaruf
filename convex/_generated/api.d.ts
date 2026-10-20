@@ -12,6 +12,7 @@ import type * as applicantAuth from "../applicantAuth.js";
 import type * as applicantInterests from "../applicantInterests.js";
 import type * as applicantProfile from "../applicantProfile.js";
 import type * as crons from "../crons.js";
+import type * as eventAttendees from "../eventAttendees.js";
 import type * as eventRules from "../eventRules.js";
 import type * as events from "../events.js";
 import type * as interestRules from "../interestRules.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   applicantInterests: typeof applicantInterests;
   applicantProfile: typeof applicantProfile;
   crons: typeof crons;
+  eventAttendees: typeof eventAttendees;
   eventRules: typeof eventRules;
   events: typeof events;
   interestRules: typeof interestRules;

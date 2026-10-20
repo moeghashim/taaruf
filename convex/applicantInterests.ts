@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
-  listEligibleInterestTargets,
+  findEligibleInterestSubmissionEvent,
 } from "./eventRules";
 import {
   createApplicantInterestWithRules,
@@ -145,11 +145,9 @@ async function safeCounterparty(
       direction === "outbound" ||
       direction === "private" ||
       (direction === "inbound" && viewer.gender === "female"));
-  const imagesVisible =
-    showProfile &&
-    (contactShared ||
-      (direction === "private" && viewer.gender === "female") ||
-      (direction === "inbound" && viewer.gender === "female"));
+  // Neither gender nor contact sharing is photo consent.
+  const imagesVisible = showProfile && (counterparty.photoSharingPermission === "yes" ||
+    (flow?.photoDecision === "approved" && flow.photoRequestedByRegistrationId === viewer._id));
   const imageUrls = imagesVisible
     ? await Promise.all((counterparty.imageStorageIds || []).map((storageId) => ctx.storage.getUrl(storageId)))
     : [];
@@ -226,7 +224,7 @@ export const getDashboard = query({
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const { byId } = await getRegistrationNumberMap(ctx);
-    const eligibleTargetIds = await listEligibleInterestTargets(ctx, registration);
+    const eligibleEvent = await findEligibleInterestSubmissionEvent(ctx, registration._id);
     const inboundRows = await ctx.db
       .query("interests")
       .withIndex("by_toRegistrationId", (q) => q.eq("toRegistrationId", registration._id))
@@ -269,17 +267,8 @@ export const getDashboard = query({
       privateDocumented: await Promise.all(
         privateDocumented.map((interest) => serializeInterest(ctx, registration, interest, byId, "private"))
       ),
-      eligibleInterestTargets: await Promise.all(
-        [...eligibleTargetIds].map(async (registrationId) => {
-          const target = await ctx.db.get(registrationId);
-          if (!target) return null;
-          return {
-            registrationId: target._id,
-            applicantNumber: byId.get(target._id) ?? null,
-            firstName: target.name.trim().split(/\s+/)[0] || target.name,
-          };
-        })
-      ).then((rows) => rows.filter((row): row is NonNullable<typeof row> => Boolean(row))),
+      canSubmitInterest: Boolean(eligibleEvent),
+      interestSubmissionLimit: 3,
     };
   },
 });
@@ -288,21 +277,25 @@ export const submitInterestNumber = mutation({
   args: {
     sessionHash: v.string(),
     applicantNumber: v.number(),
+    applicantName: v.string(),
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requirePendingOrApprovedForInterestSubmission(registration);
-    const { byNumber } = await getRegistrationNumberMap(ctx);
-    const target = byNumber.get(args.applicantNumber);
-
-    if (!target) throw new Error("Applicant number not found");
-    if (target._id === registration._id) throw new Error("Applicant cannot express interest in themselves");
-    if (target.gender === registration.gender) throw new Error("Interest must be between opposite-gender applicants");
+    const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
+      ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique()
+      : null;
+    const normalizeName = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+    if (!target || !args.applicantName.trim() || normalizeName(target.name) !== normalizeName(args.applicantName) ||
+        target._id === registration._id || target.gender === registration.gender || target.status !== "approved") {
+      throw new Error("Applicant details could not be verified");
+    }
 
     const result = await createApplicantInterestWithRules(ctx, {
       fromRegistrationId: registration._id,
       toRegistrationId: target._id,
       source: "platform_submission",
+      applicantName: args.applicantName,
       notes:
         registration.gender === "female"
           ? `Private interest documented by applicant number: ${args.applicantNumber}`
@@ -551,6 +544,9 @@ export const giveFinalApproval = mutation({
     }
 
     const flow = await ensureFlow(ctx, interest);
+    if (["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(flow.flowStatus)) {
+      throw new Error("Interest is no longer active");
+    }
     if (!flow.bioVisibleAt) {
       throw new Error("Bio review is not open for this interest");
     }
@@ -618,6 +614,13 @@ export const giveFinalApproval = mutation({
       matchId = await createMatchFromInterest(ctx, interest);
     }
 
+    if (bothApproved) {
+      for (const id of [interest.fromRegistrationId, interest.toRegistrationId]) {
+        const person = await ctx.db.get(id);
+        if (!person || person.status !== "approved") throw new Error("Both applicants must be approved");
+        if (person.activeMatchId && person.activeMatchId !== matchId) throw new Error("Applicant already has an active match");
+      }
+    }
     if (bothApproved && matchId) {
       const match = await ctx.db.get(matchId);
       if (match) {

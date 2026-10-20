@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
-import { Sparkline } from "@/components/admin/primitives/sparkline";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
 import { WhoCell } from "@/components/admin/primitives/who-cell";
 import { Ico } from "@/components/admin/primitives/icons";
@@ -38,14 +37,6 @@ export function DashboardPageClient() {
   const data = useRegistrations();
   const adminName = useAdminName();
   const [openProfileId, setOpenProfileId] = useState<string | null>(null);
-
-  const completedProfiles = useMemo(
-    () =>
-      data.registrations.filter(
-        (r) => !!r.describeYourself?.trim() && !!r.lookingFor?.trim() && r.paymentStatus === "paid"
-      ).length,
-    [data.registrations]
-  );
 
   // Pending registrations sorted oldest-first (longest-waiting first).
   const pendingQueue = useMemo(
@@ -97,42 +88,12 @@ export function DashboardPageClient() {
       />
 
       <div className="stats">
-        <div className="stat">
-          <h4>Active members</h4>
-          <div className="big">{data.counts.approved}</div>
-          <div className="sub">
-            <span>{data.counts.total} total registrations</span>
-          </div>
-          <Sparkline data={[1, 3, 5, data.counts.approved / 4, data.counts.approved / 2, data.counts.approved * 0.75, data.counts.approved, data.counts.approved]} />
-        </div>
-        <div className="stat">
-          <h4>Pending review</h4>
-          <div className="big">{data.counts.pending}</div>
-          <div className="sub">
-            {data.counts.pending > 0 ? (
-              <span className="trend down">{data.counts.pending} awaiting</span>
-            ) : (
-              <span>All caught up</span>
-            )}
-          </div>
-          <Sparkline data={[2, 1, 3, 2, 4, 3, data.counts.pending, data.counts.pending]} color="var(--amber)" />
-        </div>
-        <div className="stat">
-          <h4>Completed profiles</h4>
-          <div className="big">{completedProfiles}</div>
-          <div className="sub">
-            <span>{data.counts.approved > 0 ? Math.round((completedProfiles / data.counts.approved) * 100) : 0}% of approved</span>
-          </div>
-          <Sparkline data={[1, 2, 3, 4, 5, 6, completedProfiles, completedProfiles]} color="var(--accent-2)" />
-        </div>
-        <div className="stat">
-          <h4>Event waitlist</h4>
-          <div className="big">{data.counts.waitlisted}</div>
-          <div className="sub">
-            <span>Across event registrations</span>
-          </div>
-          <Sparkline data={[0, 0, 1, 1, 2, 2, data.counts.waitlisted, data.counts.waitlisted]} color="var(--gold)" />
-        </div>
+        {[
+          { label: "Approved applicants", count: data.counts.approved, href: "/admin/profiles?status=approved" },
+          { label: "Pending review", count: data.counts.pending, href: "/admin/pending" },
+          { label: "All applicants", count: data.counts.total, href: "/admin/profiles" },
+          { label: "Event waitlist", count: data.counts.waitlisted, href: "/admin/profiles?status=waitlisted" },
+        ].map(metric => <Link key={metric.label} href={metric.href} className="stat" style={{ color: "inherit", textDecoration: "none" }}><h4>{metric.label}</h4><div className="big">{data.isLoading ? "—" : metric.count}</div></Link>)}
       </div>
 
       <div className="two-col">

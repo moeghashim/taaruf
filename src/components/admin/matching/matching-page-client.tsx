@@ -17,7 +17,7 @@ type RegistrationWithImages = Registration & { imageUrls?: string[] };
 type InterestStatus = Doc<"interests">["status"];
 type InterestAdminStatus = NonNullable<Doc<"interests">["adminStatus"]>;
 type MatchStatus = Doc<"matches">["status"];
-type PipelineStage = MatchStatus | "approved";
+type PipelineStage = MatchStatus;
 type ShareStatus = Doc<"profileShares">["status"];
 
 type InterestRecord = Doc<"interests"> & {
@@ -49,7 +49,7 @@ const INTEREST_STATUSES: InterestStatus[] = [
 ];
 const ADMIN_STATUSES: InterestAdminStatus[] = ["pending", "requested", "declined", "matched"];
 const MATCH_STATUSES: MatchStatus[] = ["new", "reviewing", "contact_shared", "paused", "closed", "declined"];
-const PIPELINE_STAGES: PipelineStage[] = ["new", "reviewing", "contact_shared", "approved", "paused", "closed", "declined"];
+const PIPELINE_STAGES: PipelineStage[] = ["new", "reviewing", "contact_shared", "paused", "closed", "declined"];
 const ATTENTION_SHARE_STATUSES: ShareStatus[] = ["interested", "follow_up_needed", "viewed"];
 
 function titleize(value: string) {
@@ -85,7 +85,7 @@ function isOpenInterest(status: InterestStatus) {
 }
 
 function pipelineStageForMatch(match: MatchRecord): PipelineStage {
-  return match.status === "contact_shared" && match.contactSharedNotificationSentAt ? "approved" : match.status;
+  return match.status;
 }
 
 function useMatchingData() {
@@ -133,7 +133,7 @@ function useMatchingData() {
       progressInterestFirst: (id: string) => progressInterestFirst({ interestId: id as Id<"interests"> }),
       convertInterestToMatch: (id: string) => convertInterestToMatch({ interestId: id as Id<"interests"> }),
       updateMatchStatus: (id: string, status: MatchStatus, adminNotes?: string) =>
-        updateMatchStatus({ id: id as Id<"matches">, status, adminNotes }),
+        status === "contact_shared" ? shareContacts(id) : updateMatchStatus({ id: id as Id<"matches">, status, adminNotes }),
       resetPair: (registrationAId: string, registrationBId: string) =>
         resetPair({
           registrationAId: registrationAId as Id<"registrations">,
@@ -141,6 +141,13 @@ function useMatchingData() {
         }),
     },
   };
+}
+
+async function shareContacts(matchId: string) {
+  const response = await fetch("/api/admin/share-contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId }) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Contact sharing failed");
+  return result;
 }
 
 type MatchingData = ReturnType<typeof useMatchingData>;
@@ -276,6 +283,7 @@ function NotesEditor({
 }) {
   const [value, setValue] = useState(initialValue ?? "");
   const [saving, setSaving] = useState(false);
+  useEffect(() => { setValue(initialValue ?? ""); }, [initialValue]);
 
   const save = async () => {
     setSaving(true);
@@ -523,7 +531,7 @@ function InterestActions({
 
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-      {interest.status !== "active" && interest.status !== "converted_to_match" && (
+      {isOpenInterest(interest.status) && interest.status !== "active" && (
         <button
           className="btn btn-sm"
           type="button"
@@ -539,7 +547,7 @@ function InterestActions({
           {busy === "progress" ? "Updating..." : "Progress"}
         </button>
       )}
-      {!interest.matchId && (
+      {!interest.matchId && isOpenInterest(interest.status) && (
         <button
           className="btn btn-sm btn-primary"
           type="button"
@@ -643,7 +651,7 @@ function InterestRow({
   };
 
   return (
-    <tr>
+    <tr style={{ opacity: isOpenInterest(interest.status) ? 1 : 0.6 }}>
       <td>
         <div style={{ display: "grid", gap: 8 }}>
           <ApplicantLink
@@ -662,7 +670,7 @@ function InterestRow({
           <Pill tone={interest.event?.series === "manual_admin" ? "gold" : "green"}>
             {interest.event?.eventCode ?? "event"}
           </Pill>
-          <div style={{ color: "var(--ink-2)", fontSize: 12 }}>{interest.event?.title ?? "Unknown event"}</div>
+          <div style={{ color: "var(--ink-2)", fontSize: 12 }}>{interest.source === "platform_submission" && (!interest.event || interest.event.eventCode === "manual-admin") ? "Applicant interest (outside event)" : interest.event?.title ?? "Unknown event"}</div>
           {interest.event?.startsAt && (
             <div className="mono" style={{ color: "var(--mute)", fontSize: 11 }}>
               {formatDate(interest.event.startsAt)}
@@ -677,7 +685,7 @@ function InterestRow({
           <Pill tone={interest.visibility === "internal_only" ? "blue" : "plain"}>
             {titleize(interest.visibility)}
           </Pill>
-          <Pill tone="plain">{titleize(interest.source)}</Pill>
+          <Pill tone="plain">{interest.source === "platform_submission" ? "Applicant interest" : titleize(interest.source)}</Pill>
         </div>
         {interest.declineNotificationError && (
           <p style={{ color: "var(--rose)", fontSize: 11, marginTop: 8 }}>
@@ -708,6 +716,8 @@ function InterestRow({
         </div>
       </td>
       <td style={{ minWidth: 220 }}>
+        <p>Requester #{interest.fromRegistration?.publicApplicantNumber ?? "-"} → Target #{interest.toRegistration?.publicApplicantNumber ?? "-"}</p>
+        <p>Updated {formatDateTime(interest.updatedAt ?? interest.createdAt ?? interest._creationTime)}</p>
         <NotesEditor
           initialValue={interest.notes}
           placeholder="Interest notes..."
@@ -724,6 +734,7 @@ function InterestRow({
 export function InterestsPageClient() {
   const data = useMatchingData();
   const [status, setStatus] = useState<InterestStatus | "all">("all");
+  const [showArchive, setShowArchive] = useState(false);
   const [visibility, setVisibility] = useState<"all" | "internal_only" | "admin_actionable">("all");
   const [adminStatus, setAdminStatus] = useState<InterestAdminStatus | "all">("all");
   const [eventFilter, setEventFilter] = useState<string>("all");
@@ -741,6 +752,7 @@ export function InterestsPageClient() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.interests
+      .filter((interest) => showArchive ? !isOpenInterest(interest.status) : isOpenInterest(interest.status))
       .filter((interest) => status === "all" || interest.status === status)
       .filter((interest) => visibility === "all" || interest.visibility === visibility)
       .filter((interest) => adminStatus === "all" || (interest.adminStatus ?? "pending") === adminStatus)
@@ -760,7 +772,7 @@ export function InterestsPageClient() {
           .some((value) => value!.toLowerCase().includes(q));
       })
       .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [adminStatus, data.interests, eventFilter, search, status, visibility]);
+  }, [adminStatus, data.interests, eventFilter, search, status, visibility, showArchive]);
 
   return (
     <>
@@ -774,14 +786,15 @@ export function InterestsPageClient() {
       ) : (
         <div className="panel">
           <div className="tabs">
+            <button className="tab" onClick={() => { setShowArchive(!showArchive); setStatus("all"); }}>{showArchive ? "Show active / pending" : "Show archive"}</button>
             <button className={`tab ${status === "all" ? "active" : ""}`} onClick={() => setStatus("all")}>
-              All <span className="cnt">{data.interests.length}</span>
+              {showArchive ? "Archived history" : "Active / pending"}
             </button>
             {INTEREST_STATUSES.map((item) => (
               <button
                 key={item}
                 className={`tab ${status === item ? "active" : ""}`}
-                onClick={() => setStatus(item)}
+                onClick={() => { setStatus(item); setShowArchive(!isOpenInterest(item)); }}
               >
                 {titleize(item)} <span className="cnt">{data.interests.filter((interest) => interest.status === item).length}</span>
               </button>
@@ -913,7 +926,7 @@ function MatchCard({
           <ApplicantMini registration={match.maleRegistration} number={match.maleRegistration ? numbers.get(match.maleRegistration._id) : undefined} />
           <ApplicantMini registration={match.femaleRegistration} number={match.femaleRegistration ? numbers.get(match.femaleRegistration._id) : undefined} />
         </div>
-        <span className="mono" style={{ color: "var(--mute)" }}>{formatDate(match.updatedAt)}</span>
+        <span className="mono" style={{ color: "var(--mute)" }}>{formatDateTime(match.updatedAt ?? match.createdAt ?? match._creationTime)}</span>
       </div>
 
       <AdminSelect
@@ -1034,7 +1047,9 @@ function ShareProfileAction({
   owner,
   recipient,
   onMessage,
+  role,
 }: {
+  role: "Requester" | "Target";
   owner: Registration | null;
   recipient: Registration | null;
   onMessage: (message: string) => void;
@@ -1063,11 +1078,11 @@ function ShareProfileAction({
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
       <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12 }}>
-        <input type="checkbox" checked={includeImages} onChange={(event) => setIncludeImages(event.target.checked)} />
-        Include photos
+        <input type="checkbox" checked={includeImages} disabled={owner?.photoSharingPermission !== "yes"} onChange={(event) => setIncludeImages(event.target.checked)} />
+        Include {role.toLowerCase()} photos ({owner?.name ?? "Unknown"}){owner?.photoSharingPermission !== "yes" ? " — owner consent required" : ""}
       </label>
       <button className="btn btn-sm" type="button" onClick={create} disabled={busy || !owner || !recipient}>
-        {busy ? "Creating..." : "Create share link"}
+        {busy ? "Creating..." : `Share ${role.toLowerCase()} profile → ${recipient?.name ?? "Unknown"}`}
       </button>
     </div>
   );
@@ -1089,13 +1104,16 @@ export function WorkbenchPageClient() {
     if (match) setSelectedMatchId(match);
   }, []);
 
-  const selectedInterest =
+  const [mode, setMode] = useState<"interest" | "match">("interest");
+  useEffect(() => { const p = new URLSearchParams(window.location.search); setMode(p.has("match") && !p.has("interest") ? "match" : "interest"); }, []);
+  const selectedInterest = mode === "match" ? null :
     data.interests.find((interest) => interest._id === selectedInterestId) ??
     (selectedMatchId ? null : data.interests.find((interest) => isOpenInterest(interest.status)) ?? data.interests[0]) ??
     null;
-  const selectedMatch = data.matches.find((match) => match._id === selectedMatchId) ?? (!selectedInterest ? data.matches[0] : null) ?? null;
-  const left = selectedMatch?.maleRegistration ?? selectedInterest?.fromRegistration ?? null;
-  const right = selectedMatch?.femaleRegistration ?? selectedInterest?.toRegistration ?? null;
+  const selectedMatch = mode === "interest" ? null : data.matches.find((match) => match._id === selectedMatchId) ?? (!selectedInterest ? data.matches[0] : null) ?? null;
+  const requesterIsFemale = selectedMatch?.interest?.fromRegistrationId === selectedMatch?.femaleRegistrationId;
+  const left = (requesterIsFemale ? selectedMatch?.femaleRegistration : selectedMatch?.maleRegistration) ?? selectedInterest?.fromRegistration ?? null;
+  const right = (requesterIsFemale ? selectedMatch?.maleRegistration : selectedMatch?.femaleRegistration) ?? selectedInterest?.toRegistration ?? null;
 
   const run = async (label: string, action: () => Promise<unknown>, success: string) => {
     setBusy(label);
@@ -1126,11 +1144,12 @@ export function WorkbenchPageClient() {
                 <span className="mono" style={{ color: "var(--mute)", fontSize: 10 }}>Interest</span>
                 <select
                   value={selectedInterest?._id ?? ""}
-                  onChange={(event) => setSelectedInterestId(event.target.value)}
+                  onChange={(event) => { setSelectedInterestId(event.target.value); setSelectedMatchId(""); setMode("interest"); setMessage(null); }}
                   style={{ height: 36, border: "1px solid var(--line)", borderRadius: 6, padding: "0 10px" }}
                 >
-                  {data.interests.map((interest) => (
-                    <option key={interest._id} value={interest._id}>
+                  <option value="" disabled>Select an interest</option>
+                  {[...data.interests].sort((a,b) => Number(!isOpenInterest(a.status)) - Number(!isOpenInterest(b.status))).map((interest) => (
+                    <option key={interest._id} value={interest._id} style={{ color: isOpenInterest(interest.status) ? undefined : "gray" }}>
                       #{interest.fromRegistration ? data.registrationNumbers.get(interest.fromRegistration._id) : "-"} {interest.fromRegistration?.name ?? "Unknown"} to #{interest.toRegistration ? data.registrationNumbers.get(interest.toRegistration._id) : "-"} {interest.toRegistration?.name ?? "Unknown"} · {titleize(interest.status)}
                     </option>
                   ))}
@@ -1140,11 +1159,12 @@ export function WorkbenchPageClient() {
                 <span className="mono" style={{ color: "var(--mute)", fontSize: 10 }}>Match</span>
                 <select
                   value={selectedMatch?._id ?? ""}
-                  onChange={(event) => setSelectedMatchId(event.target.value)}
+                  onChange={(event) => { setSelectedMatchId(event.target.value); setSelectedInterestId(""); setMode("match"); setMessage(null); }}
                   style={{ height: 36, border: "1px solid var(--line)", borderRadius: 6, padding: "0 10px" }}
                 >
-                  {data.matches.map((match) => (
-                    <option key={match._id} value={match._id}>
+                  <option value="" disabled>Select a match</option>
+                  {[...data.matches].sort((a,b) => Number(["closed", "declined"].includes(a.status)) - Number(["closed", "declined"].includes(b.status))).map((match) => (
+                    <option key={match._id} value={match._id} style={{ color: ["closed", "declined"].includes(match.status) ? "gray" : undefined }}>
                       #{match.maleRegistration ? data.registrationNumbers.get(match.maleRegistration._id) : "-"} {match.maleRegistration?.name ?? "Unknown"} + #{match.femaleRegistration ? data.registrationNumbers.get(match.femaleRegistration._id) : "-"} {match.femaleRegistration?.name ?? "Unknown"} · {titleize(match.status)}
                     </option>
                   ))}
@@ -1152,6 +1172,16 @@ export function WorkbenchPageClient() {
               </label>
             </div>
             <div style={{ padding: 16 }}>
+              <p><strong>{mode === "interest" ? "Interest review" : "Match review"}</strong> · Requester {left?.name ?? "—"} → Target {right?.name ?? "—"}</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                {[left, right].map((person) => person && <section key={person._id}>
+                  <h4>{person.name}: other interests and workflows</h4>
+                  <p>{data.interests.some((i) => i.status === "active" && [i.fromRegistrationId, i.toRegistrationId].includes(person._id) && !([i.fromRegistrationId, i.toRegistrationId].includes(left?._id ?? "" as Id<"registrations">) && [i.fromRegistrationId, i.toRegistrationId].includes(right?._id ?? "" as Id<"registrations">))) ? "Active interest workflow with someone else" : "No other active interest workflow"}</p>
+                  <p>{data.interests.some((i) => i.fromRegistrationId === right?._id && i.toRegistrationId === left?._id && isOpenInterest(i.status)) && data.interests.some((i) => i.fromRegistrationId === left?._id && i.toRegistrationId === right?._id && isOpenInterest(i.status)) || selectedMatch?.interestType === "mutual_interest" ? "Mutual interest" : "No reciprocal open interest recorded"}</p>
+                  {data.interests.filter((i) => (i.fromRegistrationId === person._id || i.toRegistrationId === person._id) && i._id !== selectedInterest?._id && i._id !== selectedMatch?.interestId).map((i) => <p key={i._id} style={{ opacity: isOpenInterest(i.status) ? 1 : 0.5 }}>#{i.fromRegistration?.publicApplicantNumber} {i.fromRegistration?.name} → #{i.toRegistration?.publicApplicantNumber} {i.toRegistration?.name} · {titleize(i.status)}</p>)}
+                  {data.matches.filter((m) => m._id !== selectedMatch?._id && [m.maleRegistrationId, m.femaleRegistrationId].includes(person._id) && !["closed", "declined", "paused"].includes(m.status)).map((m) => <p key={m._id}><strong>Other active match:</strong> {m.maleRegistration?.name} + {m.femaleRegistration?.name} · {titleize(m.status)}</p>)}
+                </section>)}
+              </div>
               <ProfileComparison
                 left={left}
                 right={right}
@@ -1163,10 +1193,10 @@ export function WorkbenchPageClient() {
 
           <div className="panel">
             <div className="panel-head">
-              <h3>Action bar</h3>
+              <h3>{mode === "interest" ? "Evaluating interest" : "Evaluating match"} · {selectedInterest?.status ?? selectedMatch?.status ?? "No selection"}</h3>
             </div>
             <div style={{ padding: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              {selectedInterest && !selectedInterest.matchId && (
+              {selectedInterest && isOpenInterest(selectedInterest.status) && !selectedInterest.matchId && (
                 <button
                   className="btn btn-primary"
                   type="button"
@@ -1206,15 +1236,15 @@ export function WorkbenchPageClient() {
                     run(
                       "contact",
                       () => data.actions.updateMatchStatus(selectedMatch._id, "contact_shared", selectedMatch.adminNotes),
-                      "Match marked contact shared."
+                      "Contacts are available in both authenticated portals. No email sent."
                     )
                   }
                 >
-                  {busy === "contact" ? "Updating..." : "Mark contact shared"}
+                  {busy === "contact" ? "Updating..." : "Share contacts in portals"}
                 </button>
               )}
-              <ShareProfileAction owner={left} recipient={right} onMessage={setMessage} />
-              <ShareProfileAction owner={right} recipient={left} onMessage={setMessage} />
+              <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" owner={left} recipient={right} onMessage={setMessage} />
+              <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" owner={right} recipient={left} onMessage={setMessage} />
             </div>
           </div>
         </div>
@@ -1238,7 +1268,7 @@ export function InboxPageClient() {
         id: `interest-${interest._id}`,
         kind: "Pending interest",
         tone: "amber" as const,
-        createdAt: interest.updatedAt,
+        createdAt: interest.updatedAt ?? interest.createdAt ?? interest._creationTime,
         primary: interest.fromRegistration,
         secondary: interest.toRegistration,
         body: `${titleize(interest.visibility)} · ${titleize(interest.source)}`,
