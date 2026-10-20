@@ -20,7 +20,7 @@ Base: main 2cff643bc6b349af243656814611df48d87877bc, verified against live GitHu
 - npm test: 77 tests / 12 files passed. Synthetic fixtures only, both genders, quota/duplicate simultaneous calls, rollover, approval vs attendance, no recipient attendance, revocation, first-name and existing privacy regressions.
 - npx tsc --noEmit passed.
 - npm run lint: zero errors, seven pre-existing warnings.
-- npx playwright test -c playwright.issue37.config.ts: 2 mocked Chrome browser tests passed (both genders); State A for approved-only/attended-only, State B six inputs, quota receipts, refresh/revocation, styling/mobile overflow. All /api calls intercepted; preview-only local server used disabled backend URLs. Tests use locally available Playwright/Chrome, not a new locked dependency.
+- npx playwright test -c playwright.issue37.config.ts: 2 mocked Chrome browser tests passed (both genders); State A for approved-only/attended-only, State B six inputs, quota receipts, refresh/revocation, styling/mobile overflow. All /api calls intercepted; preview-only local server used disabled backend URLs. Initial tests used locally available Playwright/Chrome. PR #39 build remediation adds @playwright/test to devDependencies and the lockfile so clean installs can type-check the committed browser tests.
 - git diff --check passed. No live backend reads/writes, emails, deployments, credential changes or migration executed. Local server stopped after validation.
 
 ## Important deployment blockers / remaining risks

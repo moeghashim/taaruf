@@ -597,3 +597,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-10-20
 - Issue #38 supersedes #30: Events approved+attended sender-only gate; retired separate writer/UI without deleting history, added cookie bridge and tests. Combined #37/#38 review in docs/issue-38-local-review.md. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-10-20
+- PR #39 preview build: declared and locked @playwright/test in package.json/package-lock.json; missing dependency was masked by shared local node_modules. Updated review documentation. 77 tests and isolated-URL production build pass; no backend/config changes. <!-- project: github.com/moeghashim/clawscrewskill -->
