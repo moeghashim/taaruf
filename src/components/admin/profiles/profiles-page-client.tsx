@@ -38,7 +38,6 @@ const TAB_DEFS: Array<{ id: FilterStatus; label: string }> = [
   { id: "approved", label: "Approved" },
   { id: "pending", label: "Pending" },
   { id: "rejected", label: "Rejected" },
-  { id: "waitlisted", label: "Event waitlist" },
 ];
 
 const PROFILE_STATUS_DEFS: Array<{ id: FilterProfileCompletionStatus; label: string }> = [
@@ -254,7 +253,6 @@ function ProfilesContent({
                   <td>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                       <StatusPill status={r.status} />
-                      {data.waitlistIds.has(r._id) && <Pill tone="gold">Waitlisted</Pill>}
                     </div>
                   </td>
                   <td>
@@ -295,7 +293,6 @@ function ProfilesContent({
           <ProfileDetail
             profile={openProfile}
             registrationNumber={data.registrationNumbers.get(openProfile._id)}
-            isWaitlisted={data.waitlistIds.has(openProfile._id)}
             onUpdateNotes={data.actions.updateAdminNotes}
             onUpdateStatus={data.actions.updateStatus}
             onDelete={data.actions.deleteRegistration}

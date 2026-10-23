@@ -105,6 +105,7 @@ const eventStatus = v.union(
   v.literal("cancelled")
 );
 const eventRegistrationStatus = v.union(
+  v.literal("waitlisted"),
   v.literal("pending"),
   v.literal("approved"),
   v.literal("rejected"),
@@ -137,6 +138,18 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  checkoutLinks: defineTable({
+    stripeSessionId: v.string(), registrationId: v.id("registrations"),
+    eventRegistrationId: v.optional(v.id("eventRegistrations")),
+    receiptAttempt: v.optional(v.number()), createdAt: v.number(),
+  }).index("by_session", ["stripeSessionId"]),
+  receiptDeliveries: defineTable({
+    key: v.string(), token: v.string(), leaseUntil: v.number(), firstAttemptAt: v.number(),
+    sentAt: v.optional(v.number()), error: v.optional(v.string()),
+    name: v.string(), email: v.string(), eventTitle: v.optional(v.string()),
+    registrationStatus: v.optional(v.union(v.literal("pending"), v.literal("waitlisted"))),
+    profileUrl: v.optional(v.string()),
+  }).index("by_key", ["key"]),
   registrations: defineTable({
     // Legacy/internal identifier. Keep for compatibility, but human-facing
     // applicant references should use publicApplicantNumber.
@@ -281,12 +294,14 @@ export default defineSchema({
     confirmedAt: v.optional(v.number()),
     confirmationRequestedAt: v.optional(v.number()),
     confirmationExpiresAt: v.optional(v.number()),
+    waitlistedAt: v.optional(v.number()),
     waitlistCarryoverFromEventId: v.optional(v.id("events")),
     approvedAt: v.optional(v.number()),
     rejectedAt: v.optional(v.number()),
     cancelledAt: v.optional(v.number()),
     checkedInAt: v.optional(v.number()),
     noShowMarkedAt: v.optional(v.number()),
+    receiptAttempt: v.optional(v.number()),
     registrationReceivedEmailSentAt: v.optional(v.number()),
     registrationReceivedEmailError: v.optional(v.string()),
     adminNotes: v.optional(v.string()),

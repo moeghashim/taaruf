@@ -1,7 +1,7 @@
+import { sendCheckoutReceipt } from "@/lib/event-registration-receipt";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { api } from "../../../../convex/_generated/api";
-import { createToken, hashToken } from "@/lib/applicant-session";
 import Stripe from "stripe";
 
 function getAppUrl(request: NextRequest) {
@@ -66,39 +66,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
       }
 
-      // Send welcome email with auto-login link (non-blocking — failure doesn't break webhook)
-      try {
-        const registration = await convexClient.query(
-          api.registrations.getByStripeSession,
-          { stripeSessionId: session.id }
-        );
-        if (registration && registration.email) {
-          const loginToken = createToken();
-          const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-          await convexClient.mutation(api.applicantAuth.createLoginToken, {
-            email: registration.email,
-            tokenHash: hashToken(loginToken),
-            expiresInMs: SEVEN_DAYS_MS,
-          });
-
-          const profileUrl = `${getAppUrl(request)}/api/applicant/login/verify?token=${encodeURIComponent(loginToken)}`;
-
-          const { sendConfirmationEmail } = await import("@/lib/email");
-          const result = await sendConfirmationEmail({
-            name: registration.name,
-            email: registration.email,
-            profileUrl,
-          });
-          if (result.success) {
-            await convexClient.mutation(api.registrations.markEmailSent, {
-              stripeSessionId: session.id,
-            });
-          }
-        }
-      } catch (err) {
-        console.error("Failed to send welcome email:", err instanceof Error ? err.message : err);
-        // Don't return error — payment was already confirmed
-      }
+      const receipt = await sendCheckoutReceipt(convexClient, session.id, getAppUrl(request));
+      if (receipt.error) return NextResponse.json({ error: receipt.error }, { status: 500 });
     } else if (event.type === "checkout.session.expired") {
       try {
         await convexClient.mutation(api.registrations.updatePaymentStatus, {

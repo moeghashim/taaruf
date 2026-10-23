@@ -1,0 +1,23 @@
+// Copy ONLY into the isolated local test backend as convex/raceFixture.ts.
+import { mutation, query } from "./_generated/server";
+export const seed = mutation({ args: {}, handler: async ctx => {
+  if ((await ctx.db.query("registrations").take(1)).length) throw new Error("Fresh synthetic database required");
+  const profiles = [];
+  for (const gender of ["male", "female"] as const) for(let i=0;i<70;i++) {
+    const sessionHash = "synthetic-"+gender+"-"+i;
+    const registrationId = await ctx.db.insert("registrations", {
+      name: sessionHash, email: sessionHash+"@example.invalid", age: 30, gender,
+      maritalStatus:"single", education:"synthetic", job:"synthetic", phone:"0000000000",
+      status:i%2 ? "approved":"pending", backgroundCheck:i%2 ? "completed":"pending",
+      profileCompletionStatus:"completed", createdAt:Date.now(),
+    });
+    await ctx.db.insert("applicantSessions", {registrationId,sessionHash,createdAt:Date.now(),expiresAt:Date.now()+86400000});
+    profiles.push({registrationId,sessionHash,gender});
+  }
+  return profiles;
+}});
+export const snapshot = query({args:{},handler:async ctx => ({
+ profiles:await ctx.db.query("registrations").take(200),
+ rows:await ctx.db.query("eventRegistrations").take(1000),
+ emails:await ctx.db.query("eventRegistrationEmails").take(10),
+})});

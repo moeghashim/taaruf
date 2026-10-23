@@ -1,8 +1,7 @@
+import { sendCheckoutReceipt } from "@/lib/event-registration-receipt";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { sendConfirmationEmail } from "@/lib/email";
 import { api } from "../../../../../convex/_generated/api";
-import { createToken, hashToken } from "@/lib/applicant-session";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
@@ -65,33 +64,10 @@ export async function POST(request: NextRequest) {
           details.push(`Fixed: ${registration.name} (${registration.email})`);
         }
 
-        // Send welcome email if not already sent
-        if (!registration.confirmationEmailSent) {
-          const loginToken = createToken();
-          const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-          await convexClient.mutation(api.applicantAuth.createLoginToken, {
-            email: registration.email,
-            tokenHash: hashToken(loginToken),
-            expiresInMs: SEVEN_DAYS_MS,
-          });
-
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL
-            || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-            || request.nextUrl.origin;
-          const profileUrl = `${appUrl}/api/applicant/login/verify?token=${encodeURIComponent(loginToken)}`;
-
-          const result = await sendConfirmationEmail({
-            name: registration.name,
-            email: registration.email,
-            profileUrl,
-          });
-          if (result.success) {
-            await convexClient.mutation(api.registrations.markEmailSent, {
-              stripeSessionId: session.id,
-            });
-            emailsSent++;
-          }
-        }
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : request.nextUrl.origin);
+        const receipt = await sendCheckoutReceipt(convexClient, session.id, appUrl);
+        if (receipt.sent) emailsSent++;
+        if (receipt.error) details.push("Receipt not delivered: " + receipt.error);
       } catch (err) {
         console.error(`Error processing session ${session.id}:`, err);
       }

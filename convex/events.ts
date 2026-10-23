@@ -1,15 +1,13 @@
+import { requireEventAdmin, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
-  APRIL_2026_EVENT_CODE,
   DEFAULT_EVENT_CAPACITY,
   DEFAULT_EVENT_SERIES,
   deriveEligibilityStatus,
   getEventByCode,
-  getOrCreateApril2026Event,
-  getOrCreateManualAdminEvent,
   interestSubmissionClosesAt,
   findEligibleInterestSubmissionEvent,
 } from "./eventRules";
@@ -21,6 +19,7 @@ const eventStatus = v.union(
   v.literal("cancelled")
 );
 const eventRegistrationStatus = v.union(
+  v.literal("waitlisted"),
   v.literal("pending"),
   v.literal("approved"),
   v.literal("rejected"),
@@ -50,7 +49,6 @@ const carryoverSourceStatus = v.union(
 );
 
 type ReadCtx = QueryCtx | MutationCtx;
-type Gender = "male" | "female";
 type EventRegistration = Doc<"eventRegistrations">;
 type ConfirmationStatus = "confirmed" | "not_confirmed" | "cancelled";
 
@@ -90,25 +88,6 @@ function requireCompletedProfile(registration: Doc<"registrations">) {
   }
 }
 
-async function countCapacityUsed(ctx: ReadCtx, eventId: Id<"events">, gender: Gender) {
-  const rows = await ctx.db
-    .query("eventRegistrations")
-    .withIndex("by_eventId_and_gender_and_registrationStatus", (q) =>
-      q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", "approved")
-    )
-    .take(500);
-  return rows.length;
-}
-
-async function eventCapacityForGender(event: Doc<"events">, gender: Gender) {
-  return gender === "male" ? event.maleCapacity : event.femaleCapacity;
-}
-
-async function registrationStatusForCapacity(ctx: ReadCtx, event: Doc<"events">, gender: Gender) {
-  const used = await countCapacityUsed(ctx, event._id, gender);
-  return used < await eventCapacityForGender(event, gender) ? "approved" as const : null;
-}
-
 function confirmationStatusForRow(row: EventRegistration): ConfirmationStatus {
   return row.confirmationStatus;
 }
@@ -130,74 +109,6 @@ async function serializeEventWaitlistEntry(ctx: ReadCtx, row: Doc<"eventWaitlist
   return { ...row, event, registration, sourceEvent };
 }
 
-async function getActiveEventWaitlistEntries(ctx: ReadCtx, eventId: Id<"events">) {
-  return await ctx.db
-    .query("eventWaitlistEntries")
-    .withIndex("by_eventId_and_status", (q) => q.eq("eventId", eventId).eq("status", "active"))
-    .take(500);
-}
-
-async function carryOverWaitlist(ctx: MutationCtx, event: Doc<"events">, overrideCapacity = false) {
-  const aprilEvent = await getEventByCode(ctx, APRIL_2026_EVENT_CODE);
-  if (aprilEvent && aprilEvent._id !== event._id) {
-    const aprilWaitlist = await getActiveEventWaitlistEntries(ctx, aprilEvent._id);
-    if (aprilWaitlist.length > 0) {
-      const result = await carryOverRegistrationsFromEvent(ctx, {
-        sourceEventId: aprilEvent._id,
-        targetEvent: event,
-        sourceStatuses: ["waitlisted"],
-        overrideCapacity,
-      });
-      return { carried: result.copied, previousEventId: aprilEvent._id };
-    }
-  }
-
-  const previousEvents = await ctx.db
-    .query("events")
-    .withIndex("by_series_and_startsAt", (q) => q.eq("series", event.series))
-    .take(100);
-  const previousEvent = previousEvents
-    .filter((candidate) => candidate._id !== event._id && candidate.startsAt < event.startsAt)
-    .sort((a, b) => b.startsAt - a.startsAt)[0];
-  if (!previousEvent) return { carried: 0, previousEventId: null };
-
-  const waitlisted = await getActiveEventWaitlistEntries(ctx, previousEvent._id);
-  let carried = 0;
-
-  for (const row of waitlisted.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime)) {
-    const registration = await ctx.db.get(row.registrationId);
-    if (!registration) continue;
-    const existing = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId_and_registrationId", (q) =>
-        q.eq("eventId", event._id).eq("registrationId", registration._id)
-      )
-      .unique();
-    if (existing) continue;
-
-    const status = overrideCapacity
-      ? "approved" as const
-      : await registrationStatusForCapacity(ctx, event, registration.gender);
-    if (status !== "approved") continue;
-
-    const now = Date.now();
-    await ctx.db.insert("eventRegistrations", {
-      eventId: event._id,
-      registrationId: registration._id,
-      gender: registration.gender,
-      registrationStatus: "approved",
-      confirmationStatus: "not_confirmed",
-      attendanceStatus: "not_checked_in",
-      eligibilityStatus: deriveEligibilityStatus(registration),
-      waitlistCarryoverFromEventId: previousEvent._id,
-      createdAt: now,
-      updatedAt: now,
-    });
-    carried += 1;
-  }
-
-  return { carried, previousEventId: previousEvent._id };
-}
 
 async function carryOverRegistrationsFromEvent(
   ctx: MutationCtx,
@@ -217,7 +128,7 @@ async function carryOverRegistrationsFromEvent(
 
   let copied = 0;
   let alreadyExists = 0;
-  let skippedCapacity = 0;
+  const skippedCapacity = 0;
   let skippedMissingRegistration = 0;
   const seenSourceRegistrationIds = new Set<string>();
 
@@ -242,20 +153,15 @@ async function carryOverRegistrationsFromEvent(
       return;
     }
 
-    const status = args.overrideCapacity
-      ? "approved" as const
-      : await registrationStatusForCapacity(ctx, args.targetEvent, registration.gender);
-    if (status !== "approved") {
-      skippedCapacity += 1;
-      return;
-    }
-
+    await promoteWaitlist(ctx, args.targetEvent._id, registration.gender);
+    const status = await registrationStatusForCapacity(ctx, args.targetEvent, registration.gender);
     const now = Date.now();
     await ctx.db.insert("eventRegistrations", {
       eventId: args.targetEvent._id,
       registrationId: registration._id,
       gender: registration.gender,
-      registrationStatus: "approved",
+      registrationStatus: status,
+      waitlistedAt: status === "waitlisted" ? now : undefined,
       confirmationStatus: "not_confirmed",
       attendanceStatus: "not_checked_in",
       eligibilityStatus: deriveEligibilityStatus(registration),
@@ -268,10 +174,10 @@ async function carryOverRegistrationsFromEvent(
 
   for (const sourceStatus of args.sourceStatuses) {
     if (sourceStatus === "waitlisted") {
-      const waitlistRows = await getActiveEventWaitlistEntries(ctx, sourceEvent._id);
-      for (const row of waitlistRows.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime)) {
+      for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_registrationStatus", q => q.eq("eventId", sourceEvent._id).eq("registrationStatus", "waitlisted"))) {
         await copyRegistration(row.registrationId, sourceEvent._id);
       }
+      // Existing holding-list records are read-only pending Danielle's retirement/orphan decision.
       continue;
     }
 
@@ -303,21 +209,26 @@ export const getAll = query({
     const events = await ctx.db.query("events").withIndex("by_startsAt").order("desc").take(100);
     return await Promise.all(
       events.map(async (event) => {
-        const registrations = await ctx.db
-          .query("eventRegistrations")
-          .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-          .take(500);
-        const activeWaitlist = await getActiveEventWaitlistEntries(ctx, event._id);
+        // Isolate statuses so historical rows cannot hide a new queue. Never return partial counts.
+    const registrations = (await Promise.all(
+      (["pending", "approved", "waitlisted", "rejected", "withdrawn"] as const).map(async (status) => {
+        const statusRows = await ctx.db.query("eventRegistrations")
+          .withIndex("by_eventId_and_registrationStatus", q => q.eq("eventId", event._id).eq("registrationStatus", status))
+          .take(1001);
+        if (statusRows.length > 1000) throw new Error(status + " roster exceeds 1000 rows. Complete counts unavailable; paginated review is required.");
+        return statusRows;
+      })
+    )).flat();
         return {
           ...event,
           interestSubmissionClosesAt: interestSubmissionClosesAt(event),
           counts: {
             malePending: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "pending").length,
             maleApproved: registrations.filter((row) => row.gender === "male" && row.registrationStatus === "approved").length,
-            maleWaitlisted: activeWaitlist.filter((row) => row.gender === "male").length,
+            maleWaitlisted: registrations.filter(row => row.gender === "male" && row.registrationStatus === "waitlisted").length,
             femalePending: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "pending").length,
             femaleApproved: registrations.filter((row) => row.gender === "female" && row.registrationStatus === "approved").length,
-            femaleWaitlisted: activeWaitlist.filter((row) => row.gender === "female").length,
+            femaleWaitlisted: registrations.filter(row => row.gender === "female" && row.registrationStatus === "waitlisted").length,
             attended: registrations.filter((row) => row.attendanceStatus === "attended").length,
             noShow: registrations.filter((row) => row.attendanceStatus === "no_show").length,
           },
@@ -344,16 +255,8 @@ export const getPublicActive = query({
 
     return await Promise.all(
       scheduledEvents.map(async (event) => {
-        const registrations = await ctx.db
-          .query("eventRegistrations")
-          .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-          .take(500);
-        const maleUsed = registrations.filter(
-          (row) => row.gender === "male" && (row.registrationStatus === "pending" || row.registrationStatus === "approved")
-        ).length;
-        const femaleUsed = registrations.filter(
-          (row) => row.gender === "female" && (row.registrationStatus === "pending" || row.registrationStatus === "approved")
-        ).length;
+        const maleUsed = await countCapacityUsed(ctx, event._id, "male");
+        const femaleUsed = await countCapacityUsed(ctx, event._id, "female");
 
         return {
           _id: event._id,
@@ -385,16 +288,8 @@ export const getPublicByCode = query({
     if (event.registrationOpensAt && event.registrationOpensAt > now) return null;
     if (event.registrationClosesAt && event.registrationClosesAt < now) return null;
 
-    const registrations = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-      .take(500);
-    const maleUsed = registrations.filter(
-      (row) => row.gender === "male" && (row.registrationStatus === "pending" || row.registrationStatus === "approved")
-    ).length;
-    const femaleUsed = registrations.filter(
-      (row) => row.gender === "female" && (row.registrationStatus === "pending" || row.registrationStatus === "approved")
-    ).length;
+    const maleUsed = await countCapacityUsed(ctx, event._id, "male");
+    const femaleUsed = await countCapacityUsed(ctx, event._id, "female");
 
     return {
       _id: event._id,
@@ -435,11 +330,20 @@ export const getDetail = query({
   handler: async (ctx, args) => {
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
-    const rows = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(500);
-    const waitlistRows = await getActiveEventWaitlistEntries(ctx, args.eventId);
+    // Isolate statuses so historical rows cannot hide a new queue. Never return partial counts.
+    const rows = (await Promise.all(
+      (["pending", "approved", "waitlisted", "rejected", "withdrawn"] as const).map(async (status) => {
+        const statusRows = await ctx.db.query("eventRegistrations")
+          .withIndex("by_eventId_and_registrationStatus", q => q.eq("eventId", args.eventId).eq("registrationStatus", status))
+          .take(1001);
+        if (statusRows.length > 1000) throw new Error(status + " roster exceeds 1000 rows. Complete counts unavailable; paginated review is required.");
+        return statusRows;
+      })
+    )).flat();
+    const waitlistRows = await ctx.db.query("eventWaitlistEntries")
+      .withIndex("by_eventId_and_status", q => q.eq("eventId", args.eventId).eq("status", "active"))
+      .take(1001);
+    if (waitlistRows.length > 1000) throw new Error("Legacy waitlist exceeds 1000 rows. Complete roster unavailable; paginated review is required.");
     const linkedInterest = await ctx.db
       .query("interests")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
@@ -507,6 +411,7 @@ export const getByRegistration = query({
 
 export const create = mutation({
   args: {
+    adminSecret: v.string(),
     title: v.string(),
     eventCode: v.string(),
     eventMonth: v.string(),
@@ -525,6 +430,7 @@ export const create = mutation({
     carryOverWaitlist: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
     assertValidEventTimes(args.startsAt, args.endsAt);
     const maleCapacity = args.maleCapacity ?? DEFAULT_EVENT_CAPACITY;
     const femaleCapacity = args.femaleCapacity ?? DEFAULT_EVENT_CAPACITY;
@@ -560,13 +466,15 @@ export const create = mutation({
 
     const event = await ctx.db.get(eventId);
     if (!event) throw new Error("Event not found after creation");
-    const carryover = args.carryOverWaitlist ? await carryOverWaitlist(ctx, event) : null;
+    if (args.carryOverWaitlist) throw new Error("Automatic cross-event waitlist carryover is retired");
+    const carryover = null;
     return { eventId, carryover };
   },
 });
 
 export const update = mutation({
   args: {
+    adminSecret: v.string(),
     eventId: v.id("events"),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -582,6 +490,7 @@ export const update = mutation({
     adminNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
     const startsAt = args.startsAt ?? event.startsAt;
@@ -590,6 +499,10 @@ export const update = mutation({
     if (args.maleCapacity !== undefined) assertCapacity(args.maleCapacity, "Male");
     if (args.femaleCapacity !== undefined) assertCapacity(args.femaleCapacity, "Female");
 
+    for (const gender of ["male", "female"] as const) {
+      const cap = gender === "male" ? args.maleCapacity : args.femaleCapacity;
+      if (cap !== undefined && cap < await countCapacityUsed(ctx, event._id, gender)) throw new Error("Capacity cannot be below reserved Pending and Approved places");
+    }
     await ctx.db.patch(args.eventId, {
       title: args.title?.trim() ?? event.title,
       description: args.description?.trim() || event.description,
@@ -605,15 +518,19 @@ export const update = mutation({
       adminNotes: args.adminNotes?.trim() || event.adminNotes,
       updatedAt: Date.now(),
     });
+    await promoteWaitlist(ctx, event._id, "male");
+    await promoteWaitlist(ctx, event._id, "female");
     return args.eventId;
   },
 });
 
 export const deleteEvent = mutation({
   args: {
+    adminSecret: v.string(),
     eventId: v.id("events"),
   },
   handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
 
@@ -658,12 +575,14 @@ export const deleteEvent = mutation({
 
 export const carryOverRegistrations = mutation({
   args: {
+    adminSecret: v.string(),
     sourceEventId: v.id("events"),
     targetEventId: v.id("events"),
     sourceStatuses: v.array(carryoverSourceStatus),
     overrideCapacity: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
     const targetEvent = await ctx.db.get(args.targetEventId);
     if (!targetEvent) throw new Error("Target event not found");
     if (targetEvent.status === "completed" || targetEvent.status === "cancelled") {
@@ -683,96 +602,7 @@ export const carryOverRegistrations = mutation({
   },
 });
 
-export const moveEventRegistrationsToAprilWaitlist = mutation({
-  args: {
-    eventId: v.id("events"),
-  },
-  handler: async (ctx, args) => {
-    const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found");
-    if (event.eventCode === APRIL_2026_EVENT_CODE) {
-      throw new Error("Apr26 is already the waitlist event");
-    }
-
-    const aprilEvent = await getOrCreateApril2026Event(ctx);
-    const rows = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(500);
-
-    const now = Date.now();
-    let moved = 0;
-    let alreadyWaitlisted = 0;
-    let removedFromSource = 0;
-    let skippedMissingRegistration = 0;
-    let deletedEmailRecords = 0;
-
-    for (const row of rows) {
-      const registration = await ctx.db.get(row.registrationId);
-      if (!registration) {
-        skippedMissingRegistration += 1;
-        continue;
-      }
-
-      const existingWaitlistEntry = await ctx.db
-        .query("eventWaitlistEntries")
-        .withIndex("by_eventId_and_registrationId", (q) =>
-          q.eq("eventId", aprilEvent._id).eq("registrationId", registration._id)
-        )
-        .unique();
-
-      if (existingWaitlistEntry) {
-        if (existingWaitlistEntry.status === "active") {
-          alreadyWaitlisted += 1;
-        } else {
-          await ctx.db.patch(existingWaitlistEntry._id, {
-            status: "active",
-            gender: registration.gender,
-            sourceEventId: event._id,
-            sourceEventRegistrationId: row._id,
-            removedAt: undefined,
-            updatedAt: now,
-          });
-          moved += 1;
-        }
-      } else {
-        await ctx.db.insert("eventWaitlistEntries", {
-          eventId: aprilEvent._id,
-          registrationId: registration._id,
-          gender: registration.gender,
-          status: "active",
-          sourceEventId: event._id,
-          sourceEventRegistrationId: row._id,
-          createdAt: now,
-          updatedAt: now,
-        });
-        moved += 1;
-      }
-
-      const linkedEmails = await ctx.db
-        .query("eventRegistrationEmails")
-        .withIndex("by_eventRegistrationId", (q) => q.eq("eventRegistrationId", row._id))
-        .take(20);
-      for (const linkedEmail of linkedEmails) {
-        await ctx.db.delete(linkedEmail._id);
-        deletedEmailRecords += 1;
-      }
-
-      await ctx.db.delete(row._id);
-      removedFromSource += 1;
-    }
-
-    return {
-      eventId: args.eventId,
-      aprilEventId: aprilEvent._id,
-      moved,
-      alreadyWaitlisted,
-      removedFromSource,
-      skippedMissingRegistration,
-      deletedEmailRecords,
-    };
-  },
-});
+export const moveEventRegistrationsToAprilWaitlist = mutation({ args: { eventId: v.id("events") }, handler: async () => { throw new Error("Legacy cross-event migration is retired; no data changed"); } });
 
 export const registerForEvent = mutation({
   args: {
@@ -796,15 +626,80 @@ export const registerForEvent = mutation({
       )
       .unique();
     if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
-      throw new Error("You are already registered for this event");
+      return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration };
     }
 
-    const registrationStatus = "pending" as const;
+    await promoteWaitlist(ctx, event._id, registration.gender);
+    const registrationStatus = await registrationStatusForCapacity(ctx, event, registration.gender);
     const payload = {
       eventId: event._id,
       registrationId: registration._id,
       gender: registration.gender,
       registrationStatus,
+      waitlistedAt: registrationStatus === "waitlisted" ? now : undefined,
+      approvedAt: undefined,
+      confirmationStatus: "confirmed" as const,
+      attendanceStatus: "not_checked_in" as const,
+      eligibilityStatus: deriveEligibilityStatus(registration),
+      confirmedAt: now,
+      confirmationRequestedAt: undefined,
+      confirmationExpiresAt: undefined,
+      cancelledAt: undefined,
+      rejectedAt: undefined,
+      receiptAttempt: (existing?.receiptAttempt ?? 0) + 1,
+      registrationReceivedEmailSentAt: undefined,
+      registrationReceivedEmailError: undefined,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, payload);
+      return { eventRegistrationId: existing._id, registrationStatus, event, registration };
+    }
+
+    const eventRegistrationId = await ctx.db.insert("eventRegistrations", payload);
+    return { eventRegistrationId, registrationStatus, event, registration };
+  },
+});
+
+export const addRegistration = mutation({
+  args: {
+    adminSecret: v.string(),
+    registrationId: v.id("registrations"),
+    eventId: v.id("events"),
+  },
+  handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
+    const registration = await ctx.db.get(args.registrationId);
+    if (!registration) throw new Error("Profile not found");
+
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+    if (event.status === "cancelled" || event.status === "completed") throw new Error("Event registration is closed");
+    const now = Date.now();
+    if (event.registrationOpensAt && event.registrationOpensAt > now) throw new Error("Event registration is not open yet");
+    if (event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
+
+    const existing = await ctx.db
+      .query("eventRegistrations")
+      .withIndex("by_eventId_and_registrationId", (q) =>
+        q.eq("eventId", event._id).eq("registrationId", registration._id)
+      )
+      .unique();
+    if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
+      return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration };
+    }
+
+    await promoteWaitlist(ctx, event._id, registration.gender);
+    const registrationStatus = await registrationStatusForCapacity(ctx, event, registration.gender);
+    const payload = {
+      eventId: event._id,
+      registrationId: registration._id,
+      gender: registration.gender,
+      registrationStatus,
+      waitlistedAt: registrationStatus === "waitlisted" ? now : undefined,
+      approvedAt: undefined,
       confirmationStatus: "confirmed" as const,
       attendanceStatus: "not_checked_in" as const,
       eligibilityStatus: deriveEligibilityStatus(registration),
@@ -829,35 +724,42 @@ export const registerForEvent = mutation({
 
 export const updateRegistrationStatus = mutation({
   args: {
+    adminSecret: v.string(),
     eventRegistrationId: v.id("eventRegistrations"),
     registrationStatus: eventRegistrationStatus,
     overrideCapacity: v.optional(v.boolean()),
     adminNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
     const event = await ctx.db.get(row.eventId);
     if (!event) throw new Error("Event not found");
     const now = Date.now();
 
-    if (args.registrationStatus === "approved") {
-      const used = await countCapacityUsed(ctx, event._id, row.gender);
-      const alreadyCounts = row.registrationStatus === "approved";
-      const capacity = await eventCapacityForGender(event, row.gender);
-      if (!args.overrideCapacity && !alreadyCounts && used >= capacity) {
-        throw new Error("Event capacity is full for this gender");
-      }
+    if (args.overrideCapacity) throw new Error("Capacity overrides are not allowed");
+    if (args.registrationStatus === "approved" && row.registrationStatus !== "pending" && row.registrationStatus !== "approved") throw new Error("Only Pending registrations may be approved");
+    if (args.registrationStatus === "waitlisted") throw new Error("Waitlisting is determined by capacity");
+    if (row.registrationStatus === "waitlisted" && args.registrationStatus === "pending") {
+      await promoteWaitlist(ctx, event._id, row.gender);
+      return row._id; // Preserve queue position; manual clicks cannot jump the queue.
     }
-
+    let nextStatus: EventRegistration["registrationStatus"] = args.registrationStatus;
+    if (nextStatus === "pending" && !reservesCapacity(row.registrationStatus)) {
+      await promoteWaitlist(ctx, event._id, row.gender);
+      nextStatus = await registrationStatusForCapacity(ctx, event, row.gender);
+    }
     await ctx.db.patch(row._id, {
-      registrationStatus: args.registrationStatus,
-      approvedAt: args.registrationStatus === "approved" ? row.approvedAt ?? now : row.approvedAt,
+      registrationStatus: nextStatus,
+      waitlistedAt: nextStatus === "waitlisted" ? now : row.waitlistedAt,
+      approvedAt: nextStatus === "approved" ? row.approvedAt ?? now : undefined,
       rejectedAt: args.registrationStatus === "rejected" ? row.rejectedAt ?? now : row.rejectedAt,
       cancelledAt: args.registrationStatus === "withdrawn" ? row.cancelledAt ?? now : row.cancelledAt,
       adminNotes: args.adminNotes?.trim() || row.adminNotes,
       updatedAt: now,
     });
+    await promoteWaitlist(ctx, row.eventId, row.gender);
     return row._id;
   },
 });
@@ -885,10 +787,12 @@ export const updateAttendanceStatus = mutation({
 
 export const updateRegistrationConfirmation = mutation({
   args: {
+    adminSecret: v.string(),
     eventRegistrationId: v.id("eventRegistrations"),
     confirmationStatus: eventConfirmationStatus,
   },
   handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
     if (row.registrationStatus === "rejected" && args.confirmationStatus === "confirmed") {
@@ -916,6 +820,7 @@ export const updateRegistrationConfirmation = mutation({
               updatedAt: now,
             };
     await ctx.db.patch(row._id, patch);
+    if (args.confirmationStatus === "cancelled") await promoteWaitlist(ctx, row.eventId, row.gender);
     return row._id;
   },
 });
@@ -940,9 +845,11 @@ export const verifyEventRegistrationStatusAxes = query({
 
 export const requestConfirmation = mutation({
   args: {
+    adminSecret: v.string(),
     eventRegistrationId: v.id("eventRegistrations"),
   },
   handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
     const event = await ctx.db.get(row.eventId);
@@ -971,7 +878,7 @@ export const confirmParticipation = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
-    if (confirmationStatusForRow(row) === "confirmed") {
+    if (reservesCapacity(row.registrationStatus) && confirmationStatusForRow(row) === "confirmed") {
       return row._id;
     }
     if (row.confirmationRequestedAt && row.confirmationExpiresAt && row.confirmationExpiresAt < Date.now()) {
@@ -987,8 +894,10 @@ export const confirmParticipation = mutation({
     ) {
       throw new Error("This event registration cannot be confirmed");
     }
+    if (row.registrationStatus === "withdrawn") await promoteWaitlist(ctx, row.eventId, row.gender);
     await ctx.db.patch(row._id, {
-      registrationStatus: row.registrationStatus === "withdrawn" ? "pending" : row.registrationStatus,
+      registrationStatus: row.registrationStatus === "withdrawn" ? await registrationStatusForCapacity(ctx, (await ctx.db.get(row.eventId))!, row.gender) : row.registrationStatus,
+      waitlistedAt: row.registrationStatus === "withdrawn" ? Date.now() : row.waitlistedAt,
       confirmationStatus: "confirmed",
       confirmedAt: Date.now(),
       updatedAt: Date.now(),
@@ -1008,7 +917,7 @@ export const expireUnconfirmed = mutation({
         confirmationStatusForRow(row) === "not_confirmed" &&
         row.confirmationExpiresAt &&
         row.confirmationExpiresAt < now &&
-        !row.confirmedAt
+        !row.confirmedAt && reservesCapacity(row.registrationStatus)
       ) {
         await ctx.db.patch(row._id, {
           registrationStatus: "withdrawn",
@@ -1016,6 +925,7 @@ export const expireUnconfirmed = mutation({
           cancelledAt: now,
           updatedAt: now,
         });
+        await promoteWaitlist(ctx, row.eventId, row.gender);
         cancelled += 1;
       }
     }
@@ -1024,45 +934,38 @@ export const expireUnconfirmed = mutation({
 });
 
 export const claimRegistrationReceivedEmail = mutation({
-  args: {
-    eventRegistrationId: v.id("eventRegistrations"),
-  },
+  args: { eventRegistrationId: v.id("eventRegistrations"), adminSecret: v.string(), token: v.string(), receiptAttempt: v.optional(v.number()) },
   handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
-    if (row.registrationReceivedEmailSentAt) {
-      return { claimed: false, alreadySent: true };
-    }
+    if (args.receiptAttempt !== undefined && args.receiptAttempt !== (row.receiptAttempt ?? 0)) return { claimed: false };
+    if (row.registrationReceivedEmailSentAt || !["pending", "waitlisted"].includes(row.registrationStatus)) return { claimed: false };
+    const key = "event-registration-received/" + row._id + "/" + (row.receiptAttempt ?? 0);
+    const existing = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", key)).unique();
+    const now = Date.now();
+    if (existing?.sentAt) return { claimed: false };
+    if (existing && existing.leaseUntil > now) return { claimed: false, error: "Receipt delivery in progress; retry later" };
+    if (existing && now - existing.firstAttemptAt >= 23 * 60 * 60 * 1000) return { claimed: false, error: "Receipt delivery uncertain; manual reconciliation required" };
     const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(row.registrationId)]);
-    if (!event || !registration) throw new Error("Event registration is missing related records");
-    await ctx.db.patch(row._id, {
-      registrationReceivedEmailSentAt: Date.now(),
-      registrationReceivedEmailError: undefined,
-      updatedAt: Date.now(),
-    });
-    return {
-      claimed: true,
-      alreadySent: false,
-      eventRegistrationId: row._id,
-      eventTitle: event.title,
-      registrationStatus: row.registrationStatus,
-      name: registration.name,
-      email: registration.email,
-    };
+    if (!event || !registration) throw new Error("Missing receipt records");
+    const payload = { name: registration.name, email: registration.email, eventTitle: event.title, registrationStatus: row.registrationStatus as "pending" | "waitlisted" };
+    if (existing && existing.registrationStatus !== row.registrationStatus) return { claimed: false, error: "Receipt status changed; manual reconciliation required" };
+    if (existing) await ctx.db.patch(existing._id, { token: args.token, leaseUntil: now + 120000 });
+    else await ctx.db.insert("receiptDeliveries", { key, token: args.token, leaseUntil: now + 120000, firstAttemptAt: now, ...payload });
+    return { claimed: true, key, name: existing?.name ?? payload.name, email: existing?.email ?? payload.email, eventTitle: existing?.eventTitle ?? payload.eventTitle, registrationStatus: payload.registrationStatus };
   },
 });
-
 export const recordRegistrationReceivedEmailFailure = mutation({
-  args: {
-    eventRegistrationId: v.id("eventRegistrations"),
-    error: v.string(),
-  },
+  args: { eventRegistrationId: v.id("eventRegistrations"), adminSecret: v.string(), key: v.string(), token: v.string(), error: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.eventRegistrationId, {
-      registrationReceivedEmailSentAt: undefined,
-      registrationReceivedEmailError: args.error,
-      updatedAt: Date.now(),
-    });
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    const delivery = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", args.key)).unique();
+    if (!delivery || delivery.token !== args.token || delivery.sentAt) return;
+    const row = await ctx.db.get(args.eventRegistrationId);
+    if (!row || args.key !== "event-registration-received/" + row._id + "/" + (row.receiptAttempt ?? 0)) return;
+    await ctx.db.patch(delivery._id, { leaseUntil: 0, error: args.error, sentAt: args.error ? undefined : Date.now() });
+    await ctx.db.patch(row._id, { registrationReceivedEmailSentAt: args.error ? undefined : Date.now(), registrationReceivedEmailError: args.error });
   },
 });
 
@@ -1146,57 +1049,7 @@ export const recordEventRegistrationEmailFailure = mutation({
   },
 });
 
-export const backfillApril2026 = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const aprilEvent = await getOrCreateApril2026Event(ctx);
-    await getOrCreateManualAdminEvent(ctx);
-    const registrations = await ctx.db
-      .query("registrations")
-      .withIndex("by_status", (q) => q.eq("status", "approved"))
-      .take(1000);
-    let attendanceRows = 0;
-    for (const registration of registrations) {
-      const existing = await ctx.db
-        .query("eventRegistrations")
-        .withIndex("by_eventId_and_registrationId", (q) =>
-          q.eq("eventId", aprilEvent._id).eq("registrationId", registration._id)
-        )
-        .unique();
-      if (!existing) {
-        await ctx.db.insert("eventRegistrations", {
-          eventId: aprilEvent._id,
-          registrationId: registration._id,
-          gender: registration.gender,
-          registrationStatus: "approved",
-          confirmationStatus: "confirmed",
-          attendanceStatus: "attended",
-          eligibilityStatus: deriveEligibilityStatus(registration),
-          approvedAt: aprilEvent.endsAt,
-          confirmedAt: aprilEvent.endsAt,
-          checkedInAt: aprilEvent.endsAt,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
-        attendanceRows += 1;
-      }
-    }
-
-    const interests = await ctx.db.query("interests").take(1000);
-    let patchedInterests = 0;
-    for (const interest of interests) {
-      if (!interest.eventId) {
-        await ctx.db.patch(interest._id, {
-          eventId: aprilEvent._id,
-          updatedAt: Date.now(),
-        });
-        patchedInterests += 1;
-      }
-    }
-
-    return { eventId: aprilEvent._id, attendanceRows, patchedInterests };
-  },
-});
+export const backfillApril2026 = mutation({ args: {  }, handler: async () => { throw new Error("Legacy cross-event migration is retired; no data changed"); } });
 
 export const verifyEventBackfill = query({
   args: {},

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
-import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
+import { StatusPill } from "@/components/admin/primitives/status-pill";
 import { WhoCell } from "@/components/admin/primitives/who-cell";
 import { Ico } from "@/components/admin/primitives/icons";
 import { ProfileDetail } from "@/components/admin/profiles/profile-detail";
@@ -92,7 +92,6 @@ export function DashboardPageClient() {
           { label: "Approved applicants", count: data.counts.approved, href: "/admin/profiles?status=approved" },
           { label: "Pending review", count: data.counts.pending, href: "/admin/pending" },
           { label: "All applicants", count: data.counts.total, href: "/admin/profiles" },
-          { label: "Event waitlist", count: data.counts.waitlisted, href: "/admin/profiles?status=waitlisted" },
         ].map(metric => <Link key={metric.label} href={metric.href} className="stat" style={{ color: "inherit", textDecoration: "none" }}><h4>{metric.label}</h4><div className="big">{data.isLoading ? "—" : metric.count}</div></Link>)}
       </div>
 
@@ -128,7 +127,6 @@ export function DashboardPageClient() {
                     </div>
                   </div>
                   <StatusPill status={r.status} />
-                  {data.waitlistIds.has(r._id) ? <Pill tone="gold">Waitlist</Pill> : <span />}
                   <div className="actions">
                     <button className="btn btn-sm btn-ghost">Open</button>
                   </div>
@@ -211,7 +209,6 @@ export function DashboardPageClient() {
           <ProfileDetail
             profile={openProfile}
             registrationNumber={data.registrationNumbers.get(openProfile._id)}
-            isWaitlisted={data.waitlistIds.has(openProfile._id)}
             onUpdateNotes={data.actions.updateAdminNotes}
             onUpdateStatus={data.actions.updateStatus}
             onDelete={data.actions.deleteRegistration}

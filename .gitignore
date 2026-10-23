@@ -50,3 +50,4 @@ next-env.d.ts
 # remotion sub-project (tracked separately, not part of the Taaruf app)
 /remotion-video/
 
+/test-results/

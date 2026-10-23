@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ["card"],
       allow_promotion_codes: true,
       customer_email: email,
+      metadata: eventCode ? { eventCode: String(eventCode).trim() } : {},
       line_items: [
         {
           price_data: {

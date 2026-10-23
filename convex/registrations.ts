@@ -1,3 +1,4 @@
+import { registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
 // INVARIANT (see AGENTS.md): `registrations.publicApplicantNumber` is the
 // permanent public identifier. Once assigned it is never patched and never
 // re-used, not even after deleteRegistration. The `create` mutation and the
@@ -146,30 +147,6 @@ async function nextPublicApplicantNumber(ctx: MutationCtx) {
   return nextNumber;
 }
 
-async function countCapacityUsed(
-  ctx: MutationCtx,
-  eventId: Id<"events">,
-  gender: "male" | "female"
-) {
-  const rows = await ctx.db
-    .query("eventRegistrations")
-    .withIndex("by_eventId_and_gender_and_registrationStatus", (q) =>
-      q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", "approved")
-    )
-    .take(500);
-  return rows.length;
-}
-
-async function eventRegistrationStatusForCapacity(
-  ctx: MutationCtx,
-  event: Doc<"events">,
-  gender: "male" | "female"
-) {
-  const capacity = gender === "male" ? event.maleCapacity : event.femaleCapacity;
-  const used = await countCapacityUsed(ctx, event._id, gender);
-  return used < capacity ? "pending" as const : "pending" as const;
-}
-
 async function findExistingParticipantProfile(
   ctx: MutationCtx,
   args: {
@@ -258,12 +235,15 @@ async function createOrRestoreEventRegistration(
     throw new Error("This applicant is already registered for this event.");
   }
 
-  const registrationStatus = await eventRegistrationStatusForCapacity(ctx, args.event, args.registration.gender);
+  await promoteWaitlist(ctx, args.event._id, args.registration.gender);
+  const registrationStatus = await registrationStatusForCapacity(ctx, args.event, args.registration.gender);
   const payload = {
     eventId: args.event._id,
     registrationId: args.registration._id,
     gender: args.registration.gender,
     registrationStatus,
+    waitlistedAt: registrationStatus === "waitlisted" ? args.now : undefined,
+    approvedAt: undefined,
     confirmationStatus: "confirmed" as const,
     attendanceStatus: "not_checked_in" as const,
     eligibilityStatus: deriveEligibilityStatus(args.registration),
@@ -272,6 +252,9 @@ async function createOrRestoreEventRegistration(
     confirmationExpiresAt: undefined,
     cancelledAt: undefined,
     rejectedAt: undefined,
+    receiptAttempt: (existing?.receiptAttempt ?? 0) + 1,
+    registrationReceivedEmailSentAt: undefined,
+    registrationReceivedEmailError: undefined,
     createdAt: existing?.createdAt ?? args.now,
     updatedAt: args.now,
   };
@@ -442,7 +425,8 @@ export const create = mutation({
         stripeSessionId: args.stripeSessionId,
         paymentStatus: existingProfile.paymentStatus === "paid" ? "paid" : args.paymentStatus ?? "pending",
       });
-      await createOrRestoreEventRegistration(ctx, { event, registration: existingProfile, now });
+      const eventRegistrationId = await createOrRestoreEventRegistration(ctx, { event, registration: existingProfile, now });
+      await linkCheckout(ctx, args.stripeSessionId, existingProfile._id, eventRegistrationId);
       return existingProfile._id;
     }
 
@@ -488,9 +472,11 @@ export const create = mutation({
     if (event) {
       const registration = await ctx.db.get(registrationId);
       if (!registration) throw new Error("Registration not found after creation");
-      await createOrRestoreEventRegistration(ctx, { event, registration, now });
+      const eventRegistrationId = await createOrRestoreEventRegistration(ctx, { event, registration, now });
+      await linkCheckout(ctx, args.stripeSessionId, registrationId, eventRegistrationId);
     }
 
+    if (!event) await linkCheckout(ctx, args.stripeSessionId, registrationId);
     return registrationId;
   },
 });
@@ -539,7 +525,7 @@ export const getStats = query({
 });
 
 // Compatibility for older deployed admin bundles. Original registration waitlist
-// is retired, so old writes of "waitlisted" are normalized back to "pending".
+// is retired. Reject old writes rather than silently changing legacy records.
 export const updateStatus = mutation({
   args: {
     id: v.id("registrations"),
@@ -551,7 +537,8 @@ export const updateStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, { status: args.status === "waitlisted" ? "pending" : args.status });
+    if (args.status === "waitlisted") throw new Error("Global profile waitlisting is retired; use an event registration");
+    await ctx.db.patch(args.id, { status: args.status });
     return args.id;
   },
 });
@@ -719,7 +706,8 @@ export const updatePaymentStatus = mutation({
     amountPaid: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const registration = await ctx.db
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    const registration = link ? await ctx.db.get(link.registrationId) : await ctx.db
       .query("registrations")
       .withIndex("by_stripeSessionId", (q) => q.eq("stripeSessionId", args.stripeSessionId))
       .first();
@@ -768,6 +756,8 @@ export const getByEmail = query({
 export const getByStripeSession = query({
   args: { stripeSessionId: v.string() },
   handler: async (ctx, args) => {
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    if (link) return await ctx.db.get(link.registrationId);
     return await ctx.db
       .query("registrations")
       .withIndex("by_stripeSessionId", (q) => q.eq("stripeSessionId", args.stripeSessionId))
@@ -793,7 +783,8 @@ export const markEmailSent = mutation({
     stripeSessionId: v.string(),
   },
   handler: async (ctx, args) => {
-    const registration = await ctx.db
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    const registration = link ? await ctx.db.get(link.registrationId) : await ctx.db
       .query("registrations")
       .withIndex("by_stripeSessionId", (q) => q.eq("stripeSessionId", args.stripeSessionId))
       .first();
@@ -826,5 +817,56 @@ export const revokeApproval = mutation({
     if (!person || person.status !== "approved") throw new Error("Applicant is not approved");
     await ctx.db.patch(args.id, { status: "pending" });
     return args.id;
+  },
+});
+
+async function linkCheckout(ctx: MutationCtx, stripeSessionId: string | undefined, registrationId: Id<"registrations">, eventRegistrationId?: Id<"eventRegistrations">) {
+  if (!stripeSessionId) return;
+  const existing = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", stripeSessionId)).unique();
+  if (existing) throw new Error("Checkout session already linked");
+  const row = eventRegistrationId ? await ctx.db.get(eventRegistrationId) : null;
+  await ctx.db.insert("checkoutLinks", { stripeSessionId, registrationId, eventRegistrationId, receiptAttempt: row?.receiptAttempt, createdAt: Date.now() });
+}
+export const resolveCheckoutReceipt = query({
+  args: { stripeSessionId: v.string(), adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    return await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+  },
+});
+
+export const claimWelcomeReceipt = mutation({
+  args: { stripeSessionId: v.string(), adminSecret: v.string(), token: v.string(), profileUrl: v.string(), tokenHash: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    if (!link || link.eventRegistrationId) throw new Error("No safe non-event checkout association");
+    const registration = await ctx.db.get(link.registrationId);
+    if (!registration || registration.paymentStatus !== "paid") throw new Error("Paid registration not found");
+    if (registration.confirmationEmailSent) return { claimed: false };
+    const key = "welcome/" + registration._id;
+    const existing = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", key)).unique();
+    const now = Date.now();
+    if (existing?.sentAt) return { claimed: false };
+    if (existing && existing.leaseUntil > now) return { claimed: false, error: "Welcome delivery in progress; retry later" };
+    if (existing && now - existing.firstAttemptAt >= 23 * 3600000) return { claimed: false, error: "Welcome delivery uncertain; manual reconciliation required" };
+    if (existing) await ctx.db.patch(existing._id, { token: args.token, leaseUntil: now + 120000 });
+    else {
+      await ctx.db.insert("receiptDeliveries", { key, token: args.token, leaseUntil: now + 120000, firstAttemptAt: now, name: registration.name, email: registration.email, profileUrl: args.profileUrl });
+      await ctx.db.insert("applicantLoginTokens", { registrationId: registration._id, tokenHash: args.tokenHash, expiresAt: now + 7 * 86400000, createdAt: now });
+    }
+    return { claimed: true, key, name: existing?.name ?? registration.name, email: existing?.email ?? registration.email, profileUrl: existing?.profileUrl ?? args.profileUrl };
+  },
+});
+export const finishWelcomeReceipt = mutation({
+  args: { stripeSessionId: v.string(), adminSecret: v.string(), token: v.string(), error: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    if (!link || link.eventRegistrationId) throw new Error("No safe checkout association");
+    const delivery = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", "welcome/" + link.registrationId)).unique();
+    if (!delivery || delivery.token !== args.token || delivery.sentAt) return;
+    await ctx.db.patch(delivery._id, { leaseUntil: 0, sentAt: args.error ? undefined : Date.now(), error: args.error });
+    if (!args.error) await ctx.db.patch(link.registrationId, { confirmationEmailSent: true });
   },
 });

@@ -205,3 +205,14 @@ describe("applicant number", () => {
     expect(counts).toEqual({ registrations: 1, eventRegistrations: 1 });
   });
 });
+
+test("public checkout signup reserves Pending capacity and overflows only the matching event/gender", async () => {
+  const t = convexTest(schema, modules);
+  const eventId = await t.run(insertScheduledEvent);
+  await t.run(ctx => ctx.db.patch(eventId, {maleCapacity:1, femaleCapacity:1}));
+  for (let i = 0; i < 3; i++) await t.mutation(api.registrations.create, {...baseRegistrationArgs, name:"Queue " + i, phone:"555-020" + i, email:"queue" + i + "@example.com", eventCode:"may-workshop"});
+  const rows = await t.run(ctx => ctx.db.query("eventRegistrations").withIndex("by_eventId", q => q.eq("eventId",eventId)).take(10));
+  expect(rows.map(row => row.registrationStatus)).toEqual(["pending","waitlisted","waitlisted"]);
+  const profiles = await t.run(ctx => ctx.db.query("registrations").take(10));
+  expect(profiles.every(profile => profile.status === "pending")).toBe(true);
+});
