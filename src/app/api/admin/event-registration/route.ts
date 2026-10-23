@@ -29,5 +29,10 @@ export async function POST(request: NextRequest) {
       default: return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
     return NextResponse.json({ success: true, result });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to update event" }, { status: 400 }); }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to update event";
+    // Convex validator errors may echo the entire argument object, including the server credential.
+    const safeMessage = message.includes("ArgumentValidationError") ? "Invalid event request" : message.split(adminSecret).join("[redacted]");
+    return NextResponse.json({ error: safeMessage }, { status: 400 });
+  }
 }
