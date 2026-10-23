@@ -88,9 +88,9 @@ function SuccessContent() {
       tone: "success",
       title: "Welcome to 1Plus1.",
       body:
-        "Your payment has been received. We’ve sent you an email with a secure link to your applicant dashboard, where you can complete your profile.",
+        "Your payment has been received. Payment does not guarantee an event place or approval. Check your applicant dashboard and event receipt for your registration status.",
       bullets: [
-        "Check your email for your applicant dashboard link.",
+        "Open your applicant dashboard to check whether you are waitlisted, pending, or approved.",
         "Complete your profile so our team can review it.",
       ],
       action: { label: "Open applicant login", href: "/login" },

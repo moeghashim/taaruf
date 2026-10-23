@@ -600,3 +600,11 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-10-20
 - PR #39 preview build: declared and locked @playwright/test in package.json/package-lock.json; missing dependency was masked by shared local node_modules. Updated review documentation. 77 tests and isolated-URL production build pass; no backend/config changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-10-21
+- Local event-only waitlist implementation: shared gender-capacity/FIFO helper, authenticated explicit event approval bridge, checkout/admin/portal queue handling, removed profile waitlist views, additive legacy compatibility only; tests and migration decision gate documented in docs/event-only-waitlists-review.md. No live changes.
+
+- Parent audit correction: 23 existing eventWaitlistEntries (16 Approved/6 Pending profile links + 1 orphan), zero global/event waitlisted statuses. Removed unnecessary global schema widening; old records remain read-only/event-visible with orphan IDs; no Pending migration or profile changes. Staged queue compatibility documented.
+
+## 2026-10-23
+- Added persisted-status event receipt helper, portal/checkout/webhook/payment-repair integration, warm manual approval copy and 26 mocked tests; vitest config includes source tests. Backend retry/session-link follow-ups in docs/signup-receipt-review.md. No emails/deploys. <!-- project: github.com/moeghashim/clawscrewskill -->

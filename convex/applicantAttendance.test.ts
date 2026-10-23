@@ -93,7 +93,7 @@ test("retired attendance writer fails closed and preserves historical data", asy
     const args = { adminSecret: "test-secret", eventId: event, registrationId: people[0], attending: false };
     await expect(t.mutation(setAttendance, args)).rejects.toThrow("retired");
     expect((await t.query(list, { adminSecret: "test-secret", eventId: event })).total).toBe(5);
-    await expect(t.mutation(api.events.deleteEvent, { eventId: event })).rejects.toThrow("attendance history");
+    await expect(t.mutation(api.events.deleteEvent, { adminSecret: "test-secret", eventId: event })).rejects.toThrow("attendance history");
   } finally { vi.unstubAllEnvs(); }
 });
 

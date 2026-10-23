@@ -15,10 +15,12 @@ export async function sendConfirmationEmail({
   name,
   email,
   profileUrl,
+  idempotencyKey,
 }: {
   name: string;
   email: string;
   profileUrl: string;
+  idempotencyKey?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const resend = getResend();
@@ -63,7 +65,7 @@ export async function sendConfirmationEmail({
           </p>
         </div>
       `,
-    });
+    }, idempotencyKey ? { idempotencyKey } : undefined);
 
     if (result.error) {
       return { success: false, error: result.error.message };
@@ -85,6 +87,7 @@ export async function sendProfileCompletionEmail({
   name: string;
   email: string;
   profileUrl: string;
+  idempotencyKey?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const resend = getResend();
@@ -193,47 +196,36 @@ export async function sendApplicantMagicLoginEmail({
 }
 
 export async function sendEventRegistrationReceivedEmail({
-  name,
-  email,
-  eventTitle,
+  name, email, eventTitle, registrationStatus, eventRegistrationId, idempotencyKey,
 }: {
   name: string;
   email: string;
   eventTitle: string;
+  registrationStatus: "pending" | "waitlisted" | "approved" | "rejected" | "withdrawn";
+  eventRegistrationId: string;
+  idempotencyKey?: string;
 }): Promise<{ success: boolean; error?: string; id?: string }> {
+  // A receipt is never an approval notification, even on a delayed retry.
+  if (registrationStatus !== "pending" && registrationStatus !== "waitlisted") {
+    return { success: true };
+  }
+  const waitlisted = registrationStatus === "waitlisted";
+  const statusLine = waitlisted
+    ? "You are currently on the waitlist for this event. A spot is not reserved. We will follow up if a spot becomes available."
+    : "Your event registration is pending admin approval. Your attendance is not yet approved. We will notify you when there is an update.";
+  const text = `Assalamu Alaikum ${name},\n\nWe received your registration for ${eventTitle}.\n\n${statusLine}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`;
   try {
-    const resend = getResend();
-    const statusLine = "Your event registration is pending admin approval.";
-
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: defaultFrom,
       to: email,
-      subject: `Event registration received: ${eventTitle}`,
-      text: `Assalamu Alaikum ${name},\n\nWe received your registration for ${eventTitle}.\n\n${statusLine}\n\nWe will notify you once your attendance is approved.\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
-          <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
-          <p style="line-height: 1.6;">We received your registration for <strong>${eventTitle}</strong>.</p>
-          <p style="line-height: 1.6;">${statusLine}</p>
-          <p style="line-height: 1.6;">We will notify you once your attendance is approved.</p>
-          <p style="line-height: 1.6; margin-top: 24px;">
-            Warmly,<br />
-            <strong>Bader & Danielle</strong><br />
-            <strong>1 Plus 1 Leads</strong>
-          </p>
-        </div>
-      `,
-    });
-
-    if (result.error) {
-      return { success: false, error: result.error.message };
-    }
-
+      subject: waitlisted ? `Event waitlist registration received: ${eventTitle}` : `Event registration received — pending approval: ${eventTitle}`,
+      text,
+      html: '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">' + text.split("\n\n").map(paragraph => '<p>' + paragraph.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!).replace(/\n/g, "<br />") + '</p>').join("") + '</div>',
+    }, { idempotencyKey: idempotencyKey ?? `event-registration-received/${eventRegistrationId}` });
+    if (result.error) return { success: false, error: result.error.message };
     return { success: true, id: result.data?.id };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Failed to send event registration received email:", message);
-    return { success: false, error: message };
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -256,7 +248,7 @@ export async function sendEventRegistrationStatusEmail({
 }): Promise<{ success: boolean; error?: string; id?: string }> {
   const copy = {
     approved: {
-      subject: `Approved to attend: ${eventTitle}`,
+      subject: `You’re approved for ${eventTitle} — we look forward to seeing you!`,
       body: `Your attendance has been approved for ${eventTitle}.`,
     },
     waitlisted: {
@@ -300,14 +292,53 @@ export async function sendEventRegistrationStatusEmail({
           </p>`
     : "";
 
+  // Approval copy is intentionally isolated from all other status templates.
+  const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]!);
+  const profileUrl = applicantPortalUrl?.trim();
+  const approvedText = `Assalamu Alaikum ${name},
+
+We’re happy to let you know that your registration for ${eventTitle} has been approved! We’re looking forward to welcoming you and spending a meaningful time together, insha’Allah.
+
+Event: ${eventTitle}
+When: ${eventDate}
+Location: ${eventLocation}
+
+We’ll send a separate email with more details about the check-in process before the event, so please keep an eye on your inbox.
+
+In the meantime, please take a moment to review your profile and make sure your information is complete and up to date${profileUrl ? `:
+Open your profile: ${profileUrl}` : "."}
+
+We’d also love for you to join our 1 Plus 1 Announcements WhatsApp community for updates and upcoming events:
+https://chat.whatsapp.com/BBlrH8mAJtd4nyeTviHMiX
+
+Have any questions? Reach out to us at 1plus1@plus1htx.org—we’re happy to help!
+
+We look forward to seeing you soon, insha’Allah.
+
+Warmly,
+Bader & Danielle
+1 Plus 1 Leads`;
+  const approvedHtml = '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">' +
+    approvedText.split("\n\n").map((paragraph) => {
+      let html = escapeHtml(paragraph).replace(/\n/g, "<br />");
+      if (profileUrl && paragraph.endsWith(`Open your profile: ${profileUrl}`)) {
+        html = html.replace(`Open your profile: ${escapeHtml(profileUrl)}`, `<a href="${escapeHtml(profileUrl)}">Open your profile</a>`);
+      }
+      html = html.replace("https://chat.whatsapp.com/BBlrH8mAJtd4nyeTviHMiX", '<a href="https://chat.whatsapp.com/BBlrH8mAJtd4nyeTviHMiX">https://chat.whatsapp.com/BBlrH8mAJtd4nyeTviHMiX</a>');
+      html = html.replace("1plus1@plus1htx.org", '<a href="mailto:1plus1@plus1htx.org">1plus1@plus1htx.org</a>');
+      return `<p style="line-height: 1.6;">${html}</p>`;
+    }).join("") + "</div>";
+
   try {
     const resend = getResend();
     const result = await resend.emails.send({
       from: defaultFrom,
       to: email,
       subject: copy.subject,
-      text: `Assalamu Alaikum ${name},\n\n${copy.body}\n\nEvent: ${eventTitle}\nWhen: ${eventDate}\nLocation: ${eventLocation}${portalText}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
-      html: `
+      text: kind === "approved" ? approvedText : `Assalamu Alaikum ${name},\n\n${copy.body}\n\nEvent: ${eventTitle}\nWhen: ${eventDate}\nLocation: ${eventLocation}${portalText}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      html: kind === "approved" ? approvedHtml : `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
           <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
           <p style="line-height: 1.6;">${copy.body}</p>

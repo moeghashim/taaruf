@@ -718,7 +718,11 @@ export default function ApplicantDashboardPage() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Event registration failed");
-      setMessage("Event registration received. Your attendance is pending approval.");
+      setMessage(payload.result?.registrationStatus === "waitlisted"
+        ? "You are on this event’s waitlist. A place is not reserved; if one opens, your registration will move to Pending for review."
+        : payload.result?.registrationStatus === "pending"
+          ? "Event registration received. Your attendance is pending approval."
+          : "Your event registration is already recorded. Check its status below.");
       await loadEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -739,7 +743,7 @@ export default function ApplicantDashboardPage() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Event confirmation failed");
-      setMessage("Your participation has been confirmed.");
+      setMessage("Your response has been recorded. Check your event registration status below; confirmation does not grant approval.");
       await loadEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

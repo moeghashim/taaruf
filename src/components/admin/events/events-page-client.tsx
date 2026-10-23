@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { PageHead } from "@/components/admin/layout/page-head";
@@ -10,7 +10,7 @@ import { Pill } from "@/components/admin/primitives/status-pill";
 
 const eventStatuses = ["draft", "scheduled", "completed", "cancelled"] as const;
 const registrationDropdownStatuses = ["pending", "approved", "rejected", "withdrawn"] as const;
-const registrationFilterStatuses = ["pending", "approved", "rejected", "withdrawn"] as const;
+const registrationFilterStatuses = ["waitlisted", "pending", "approved", "rejected", "withdrawn"] as const;
 const confirmationStatuses = ["confirmed", "not_confirmed", "cancelled"] as const;
 const registrationSortOptions = ["registered_desc", "registered_asc", "applicant_number_asc", "name_asc"] as const;
 const profileApprovalStatuses = ["pending", "approved", "rejected"] as const;
@@ -71,14 +71,19 @@ function registrationSortLabel(value: (typeof registrationSortOptions)[number]) 
   return "Registered newest first";
 }
 
+async function eventAdmin(action: string, args: Record<string, unknown>) {
+  const response = await fetch("/api/admin/event-registration", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...args }) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Unable to update event");
+  return result.result;
+}
 export function EventsPageClient() {
   const events = useQuery(api.events.getAll);
-  const backfillStatus = useQuery(api.events.verifyEventBackfill);
-  const createEvent = useMutation(api.events.create);
-  const updateEvent = useMutation(api.events.update);
-  const deleteEvent = useMutation(api.events.deleteEvent);
-  const updateRegistrationStatus = useMutation(api.events.updateRegistrationStatus);
-  const updateRegistrationConfirmation = useMutation(api.events.updateRegistrationConfirmation);
+  const createEvent = (args: Record<string, unknown>) => eventAdmin("create", args);
+  const updateEvent = (args: Record<string, unknown>) => eventAdmin("update", args);
+  const deleteEvent = (args: Record<string, unknown>) => eventAdmin("deleteEvent", args);
+  const updateRegistrationStatus = (args: Record<string, unknown>) => eventAdmin("updateRegistrationStatus", args);
+  const updateRegistrationConfirmation = (args: Record<string, unknown>) => eventAdmin("updateRegistrationConfirmation", args);
   async function updateAttendanceStatus(args: { eventRegistrationId: Id<"eventRegistrations">; attendanceStatus: (typeof attendanceStatuses)[number] }) {
     try {
       const response = await fetch("/api/admin/event-check-in", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(args) });
@@ -87,10 +92,9 @@ export function EventsPageClient() {
       setMessage("Attendance updated.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update attendance"); }
   }
-  const requestConfirmation = useMutation(api.events.requestConfirmation);
-  const carryOverRegistrations = useMutation(api.events.carryOverRegistrations);
-  const moveEventRegistrationsToAprilWaitlist = useMutation(api.events.moveEventRegistrationsToAprilWaitlist);
-  const backfillApril = useMutation(api.events.backfillApril2026);
+  const requestConfirmation = (args: Record<string, unknown>) => eventAdmin("requestConfirmation", args);
+  const carryOverRegistrations = (args: Record<string, unknown>) => eventAdmin("carryOverRegistrations", args);
+
   const createRef = useRef<HTMLElement | null>(null);
   const detailRef = useRef<HTMLElement | null>(null);
 
@@ -109,6 +113,7 @@ export function EventsPageClient() {
   const [registrationGenderFilter, setRegistrationGenderFilter] = useState<"all" | (typeof genderFilterOptions)[number]>("all");
   const [registrationSort, setRegistrationSort] = useState<(typeof registrationSortOptions)[number]>("registered_desc");
   const [registrationSearch, setRegistrationSearch] = useState("");
+  const [addProfileId, setAddProfileId] = useState("");
   const [carryoverSourceEventId, setCarryoverSourceEventId] = useState<string>("");
   const [selectedCarryoverStatuses, setSelectedCarryoverStatuses] = useState<Array<(typeof carryoverStatuses)[number]>>([
     "waitlisted",
@@ -125,13 +130,7 @@ export function EventsPageClient() {
   });
 
   const sortedEvents = useMemo(() => events || [], [events]);
-  const isBackfillReady = Boolean(backfillStatus?.readyToRequireInterestEventId);
-  const eventRegistrationCount = useMemo(
-    () => detail?.registrations.length ?? 0,
-    [detail?.registrations]
-  );
   const waitlistEntryCount = detail?.waitlistEntries.length ?? 0;
-  const isAprilWaitlistEvent = detail?.eventCode === "apr26";
   const detailStats = useMemo(() => {
     const registrations = detail?.registrations ?? [];
     const waitlistEntries = detail?.waitlistEntries ?? [];
@@ -141,7 +140,7 @@ export function EventsPageClient() {
       pending: registrations.filter((row) => row.registrationStatus === "pending").length,
       rejected: registrations.filter((row) => row.registrationStatus === "rejected").length,
       withdrawn: registrations.filter((row) => row.registrationStatus === "withdrawn").length,
-      waitlisted: waitlistEntries.length,
+      waitlisted: registrations.filter(row => row.registrationStatus === "waitlisted").length,
       confirmed: registrations.filter((row) => row.confirmationStatus === "confirmed").length,
       notConfirmed: registrations.filter((row) => row.confirmationStatus === "not_confirmed").length,
       confirmationCancelled: registrations.filter((row) => row.confirmationStatus === "cancelled").length,
@@ -219,11 +218,11 @@ export function EventsPageClient() {
       status: "draft",
       maleCapacity: Number(form.maleCapacity),
       femaleCapacity: Number(form.femaleCapacity),
-      carryOverWaitlist: true,
+      carryOverWaitlist: false,
     });
     setSelectedEventId(result.eventId);
     setMessage(
-      `Draft event created. Carryover added ${result.carryover?.carried ?? 0} waitlisted applicant(s). Publish it when you're ready for applicants to see it.`
+      `Draft event created. Publish it when you're ready for applicants to see it.`
     );
     setForm({
       startsAt: "",
@@ -307,22 +306,6 @@ export function EventsPageClient() {
     );
   }
 
-  async function handleMoveEventRegistrationsToAprilWaitlist() {
-    if (!detail?._id || eventRegistrationCount === 0 || isAprilWaitlistEvent) return;
-    if (
-      !window.confirm(
-        `Move all ${eventRegistrationCount} applicant(s) from ${detail.title} to the Apr26 waitlist and remove them from this event?`
-      )
-    ) {
-      return;
-    }
-
-    const result = await moveEventRegistrationsToAprilWaitlist({ eventId: detail._id });
-    setRegistrationStatusFilter("all");
-    setMessage(
-      `Moved ${result.moved} applicant(s) to the Apr26 waitlist. Removed ${result.removedFromSource} from this event. Already waitlisted ${result.alreadyWaitlisted}.`
-    );
-  }
 
   async function handleBroadcastEmail() {
     if (!detail?._id || detail.registrations.length === 0 || isBroadcasting) return;
@@ -461,30 +444,8 @@ export function EventsPageClient() {
             </div>
             <button className="btn btn-primary" type="submit">Create</button>
           </form>
-          {backfillStatus && !isBackfillReady && (
-            <button
-              className="btn"
-              type="button"
-              style={{ marginTop: 12, width: "100%" }}
-              onClick={async () => {
-                const result = await backfillApril({});
-                setMessage(`Backfill complete. Created ${result.attendanceRows} attendance row(s), patched ${result.patchedInterests} interest(s).`);
-              }}
-            >
-              Run Apr26 Backfill
-            </button>
-          )}
-          {backfillStatus && (
-            <div style={{ marginTop: 12, fontSize: 12, color: "var(--ink-2)", display: "grid", gap: 4 }}>
-              <div>Apr26 event: {backfillStatus.aprilEventExists ? "ready" : "missing"}</div>
-              <div>Manual event: {backfillStatus.manualEventExists ? "ready" : "missing"}</div>
-              <div>Interests missing event: {backfillStatus.interestsMissingEventId}</div>
-              <div>Approved missing Apr26 attendance: {backfillStatus.approvedMissingAprilAttendance}</div>
-              <Pill tone={backfillStatus.readyToRequireInterestEventId ? "green" : "gold"}>
-                {backfillStatus.readyToRequireInterestEventId ? "Ready to require eventId" : "Backfill needed"}
-              </Pill>
-            </div>
-          )}
+
+
         </section>
 
         <section className="panel" style={{ padding: 16 }}>
@@ -669,19 +630,10 @@ export function EventsPageClient() {
               <div>
                 <h4 style={{ marginBottom: 4 }}>Event list actions</h4>
                 <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
-                  Move this event roster to the Apr26 waitlist before backfilling a new event, or broadcast an event email to every applicant on this event.
+                  Broadcast an event email to applicants on this event.
                 </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "end" }}>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={eventRegistrationCount === 0 || isAprilWaitlistEvent}
-                  title={isAprilWaitlistEvent ? "Apr26 is already the waitlist event" : undefined}
-                  onClick={handleMoveEventRegistrationsToAprilWaitlist}
-                >
-                  Move Event Applicants to Apr26 Waitlist ({eventRegistrationCount})
-                </button>
                 <label className="field" style={{ minWidth: 220 }}>
                   <span>Broadcast email</span>
                   <select
@@ -715,9 +667,9 @@ export function EventsPageClient() {
               }}
             >
               <div>
-                <h4 style={{ marginBottom: 4 }}>Backfill waitlist from another event</h4>
+                <h4 style={{ marginBottom: 4 }}>Explicitly add applicants from another event</h4>
                 <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
-                  Copy active waitlist entries, including the Apr26 waitlist, into this event as pending registrations.
+                  Create independent registrations in this event: Pending if space is available, otherwise Waitlisted. No approval is copied.
                 </p>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 10, alignItems: "end" }}>
@@ -743,7 +695,7 @@ export function EventsPageClient() {
                   disabled={!carryoverSourceEventId || selectedCarryoverStatuses.length === 0}
                   onClick={handleCarryover}
                 >
-                  Backfill Waitlist
+                  Add to This Event
                 </button>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
@@ -779,26 +731,26 @@ export function EventsPageClient() {
               }}
             >
               <div>
-                <h4 style={{ marginBottom: 4 }}>Event Waitlist ({waitlistEntryCount})</h4>
+                <h4 style={{ marginBottom: 4 }}>Existing waitlist records — retirement decision pending ({waitlistEntryCount})</h4>
                 <p style={{ color: "var(--ink-2)", fontSize: 12 }}>
-                  These applicants are available to backfill into another scheduled event.
+                  Read-only existing records. Profiles are unchanged. These entries are not automatically copied, promoted, or removed; the orphan decision is pending.
                 </p>
               </div>
               <div className="interest-list">
                 {detail.waitlistEntries.map((entry) => (
                   <div key={entry._id} className="interest-row">
                     <div className="interest-row-main">
-                      <h4>{entry.registration?.name ?? "Unknown applicant"}</h4>
+                      <h4>{entry.registration?.name ?? "Orphan — linked profile missing (decision pending)"}</h4>
                       <p>
                         {entry.registration?.publicApplicantNumber ? `#${entry.registration.publicApplicantNumber} · ` : ""}
-                        {titleize(entry.gender)} · {entry.registration?.email ?? "-"}
+                        {titleize(entry.gender)} · Added {formatDateTime(entry.createdAt)} · Record {entry._id} · Profile {entry.registrationId}
                       </p>
                     </div>
                     <div className="interest-row-meta">
                       {entry.registration?.publicApplicantNumber && (
                         <span className="mono">#{entry.registration.publicApplicantNumber}</span>
                       )}
-                      <Pill tone="gold">Waitlist</Pill>
+                      <Pill tone="gold">Existing waitlist record</Pill>
                       {entry.sourceEvent && <span>{entry.sourceEvent.title}</span>}
                     </div>
                   </div>
@@ -910,6 +862,17 @@ export function EventsPageClient() {
           <div style={{ color: "var(--ink-2)", fontSize: 12, marginBottom: 8 }}>
             Showing {filteredRegistrations.length} of {detail.registrations.length} registration(s).
           </div>
+          <form onSubmit={async event => {
+            event.preventDefault();
+            try {
+              const result = await eventAdmin("addRegistration", { eventId: detail._id, registrationId: addProfileId.trim() });
+              setMessage("Applicant added: " + titleize(result.registrationStatus) + ". Approval is a separate admin action.");
+              setAddProfileId("");
+            } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to add applicant"); }
+          }} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <input aria-label="Profile record ID to add" placeholder="Profile record ID" value={addProfileId} onChange={event => setAddProfileId(event.target.value)} required />
+            <button className="btn" type="submit">Add applicant to this event</button>
+          </form>
           <div className="interest-list">
             {filteredRegistrations.map((row) => (
               <div key={row._id} className="interest-row">
@@ -946,7 +909,8 @@ export function EventsPageClient() {
                       )
                     }
                   >
-                    {registrationDropdownStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
+                    {row.registrationStatus === "waitlisted" && <option value="waitlisted" disabled>Waitlisted</option>}
+                    {registrationDropdownStatuses.map((status) => <option key={status} value={status} disabled={status === "approved" && row.registrationStatus !== "pending" && row.registrationStatus !== "approved"}>{titleize(status)}</option>)}
                   </select>
                   <select
                     aria-label="Confirmation status"

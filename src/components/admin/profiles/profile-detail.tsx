@@ -11,7 +11,6 @@ import type { RegistrationDoc } from "@/components/admin/hooks/use-registrations
 type Props = {
   profile: RegistrationDoc;
   registrationNumber?: number;
-  isWaitlisted: boolean;
   onUpdateNotes: (id: string, notes: string) => Promise<unknown>;
   onUpdateStatus: (id: string, status: "approved" | "rejected") => Promise<unknown>;
   onDelete: (id: string) => Promise<unknown>;
@@ -74,7 +73,6 @@ function summarizeInterestStatuses(interests: Array<{ adminStatus?: string; stat
 export function ProfileDetail({
   profile,
   registrationNumber,
-  isWaitlisted,
   onUpdateNotes,
   onUpdateStatus,
   onDelete,
@@ -172,7 +170,6 @@ export function ProfileDetail({
     <div style={{ padding: 20 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <StatusPill status={profile.status} />
-        {isWaitlisted && <Pill tone="gold">Waitlisted</Pill>}
         {profile.paymentStatus && <StatusPill status={profile.paymentStatus} />}
       </div>
 
