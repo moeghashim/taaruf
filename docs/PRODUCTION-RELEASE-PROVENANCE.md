@@ -1,0 +1,7 @@
+# Production source of truth — 2026-10-23
+
+**Do not deploy main until this release branch is integrated.** Production event waitlists and receipts are from `release/event-waitlists-2026-10-23`, application commit `3819d32055dcf800daa79cf0eb0d4190ac524b36` (feature commit `074c18c1f06eb5c6bf2af7dea504f125df968c4b`). Main did not contain this feature at deployment. An older main deployment would revert the frontend and may deploy an incompatible narrow Convex schema. Integrate/review this branch before the next main release; do not blindly roll back backend schema or delete ledger data.
+
+Nov26 was explicitly published 2026-10-23 after validation via authenticated admin update, status-only request. Public URL: https://www.1plus1match.com/register/nov26 . Nov14 12:45–15:45 America/Chicago, ROIC, 60 male/60 female capacity preserved. Event-only overflow queues are active; promotion is FIFO to Pending, never automatic approval. No broadcasts, test attendees, or historical deletions were performed.
+
+Credential incident remediation uses a short-lived dual-credential backend overlap, Next production environment replacement and redeployment of the exact application snapshot, then primary Convex replacement and removal of overlap. No secret values belong in this document. See operator evidence at `.worktrees/event-waitlists-release-notes/` outside deployable checkout for final revocation proof. Preview/development did not contain the affected credential and were not modified.
