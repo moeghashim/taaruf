@@ -1,4 +1,5 @@
 "use client";
+import { educationOptions, isEducation } from "@/lib/education";
 
 import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
 import { useState } from "react";
@@ -359,7 +360,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
           <form.Field
             name="education"
             validators={{
-              onChange: ({ value }) => (!value ? "Education is required" : undefined),
+              onChange: ({ value }) => (!isEducation(value) ? "Select an education level" : undefined),
             }}
           >
             {(field) => (
@@ -372,14 +373,9 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
                   onBlur={field.handleBlur}
                 >
                   <option value="">Select education level</option>
-                  <option value="highSchool">High School</option>
-                  <option value="bachelor">Bachelor&apos;s</option>
-                  <option value="master">Master&apos;s</option>
-                  <option value="phd">PhD</option>
-                  <option value="jd">JD</option>
-                  <option value="md_do">MD/DO</option>
-                  <option value="md_phd">MD/PhD</option>
-                  <option value="jd_phd">JD/PhD</option>
+                  {educationOptions.map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
                 {field.state.meta.errors?.length > 0 && (
                   <p className="field-error">{field.state.meta.errors.join(", ")}</p>

@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
 
     await convex.mutation(api.applicantProfile.updateProfile, {
       sessionHash,
+      education: body.education,
       ethnicity: body.ethnicity,
       imageStorageIds: body.imageStorageIds,
       prayerCommitment: body.prayerCommitment,

@@ -1,4 +1,5 @@
 "use client";
+import { educationOptionsFor, formatEducation } from "@/lib/education";
 
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
 import { useCallback, useEffect, useState } from "react";
@@ -112,6 +113,7 @@ type ProfileData = {
   name: string;
   gender: "male" | "female";
   email: string;
+  education: string;
   ethnicity: string;
   imageStorageIds: string[];
   imageUrls: string[];
@@ -262,7 +264,7 @@ function canCloseConnection(interest: DashboardInterest) {
 function profileFactsFor(counterparty: NonNullable<DashboardInterest["counterparty"]>): Fact[] {
   return [
     { label: "Marital", value: titleizeValue(counterparty.maritalStatus) },
-    { label: "Education", value: titleizeValue(counterparty.education) },
+    { label: "Education", value: formatEducation(counterparty.education) },
     { label: "Job", value: counterparty.job || "-" },
     { label: "Ethnicity", value: counterparty.ethnicity || "-" },
     { label: "Prayer", value: titleizeValue(counterparty.prayerCommitment) },
@@ -826,6 +828,7 @@ export default function ApplicantDashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ethnicity: profile.ethnicity,
+          education: profile.education,
           imageStorageIds: uploadedImages.map((image) => image.storageId),
           prayerCommitment: profile.prayerCommitment,
           hijabResponse: profile.hijabResponse,
@@ -1123,7 +1126,7 @@ export default function ApplicantDashboardPage() {
                 <div className="panel-head">
                   <div>
                     <h3>Profile</h3>
-                    <p>Update the profile details the team uses for matching and bio review.</p>
+                    <p>Edit your education, ethnicity, photos and matching profile here.</p>
                   </div>
                   <Pill tone={completedProfile ? "green" : "amber"}>
                     {titleize(data.applicant.profileCompletionStatus)}
@@ -1136,6 +1139,16 @@ export default function ApplicantDashboardPage() {
                 ) : (
                   <form onSubmit={saveProfile} className="profile-form">
                     <div className="profile-grid two">
+                      <div className="field">
+                        <label htmlFor="education">Education level *</label>
+                        <select id="education" value={profile.education || ""}
+                          onChange={(event) => setProfile({ ...profile, education: event.target.value })} required>
+                          <option value="">Select education level</option>
+                          {educationOptionsFor(profile.education).map(({ value, label }) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
                       <div className="field">
                         <label htmlFor="ethnicity">Ethnicity *</label>
                         <input

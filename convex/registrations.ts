@@ -1,3 +1,4 @@
+import { isEducation, validateEducationUpdate } from "../src/lib/education";
 // INVARIANT (see AGENTS.md): `registrations.publicApplicantNumber` is the
 // permanent public identifier. Once assigned it is never patched and never
 // re-used, not even after deleteRegistration. The `create` mutation and the
@@ -424,6 +425,10 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    // "College" was accepted by older clients/imports; retain that legacy input.
+    if (!isEducation(args.education) && args.education !== "College") {
+      throw new Error("Invalid education level");
+    }
     const profileCompleted = hasCompletedProfile(args);
     const event = args.eventCode ? await validatePublicEventRegistration(ctx, args.eventCode) : null;
 
@@ -645,6 +650,7 @@ export const getByProfileAccessToken = query({
 export const updateProfile = mutation({
   args: {
     token: v.string(),
+    education: v.optional(v.string()),
     ethnicity: v.string(),
     imageStorageIds: v.array(v.id("_storage")),
     prayerCommitment,
@@ -668,6 +674,7 @@ export const updateProfile = mutation({
       throw new Error("Profile not found");
     }
 
+    validateEducationUpdate(args.education, registration.education);
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
@@ -685,6 +692,7 @@ export const updateProfile = mutation({
     const shareableBio = args.shareableBio.trim();
     const lookingFor = legacyLookingForText(args);
     await ctx.db.patch(registration._id, {
+      ...(args.education !== undefined ? { education: args.education } : {}),
       ethnicity: args.ethnicity.trim(),
       imageStorageIds: args.imageStorageIds,
       prayerCommitment: args.prayerCommitment,
