@@ -1,4 +1,5 @@
 "use client";
+import { formatEducation } from "@/lib/education";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -108,7 +109,7 @@ function ProfilesContent({
       r.gender,
       r.status,
       r.maritalStatus,
-      r.education,
+      formatEducation(r.education),
       r.job,
       r.email,
       r.phone,
@@ -248,7 +249,7 @@ function ProfilesContent({
                   <td style={{ fontSize: 12 }}>
                     <div>{r.maritalStatus || "—"}</div>
                     <div className="sub" style={{ color: "var(--mute)" }}>
-                      {r.job || r.education || ""}
+                      {r.job || formatEducation(r.education)}
                     </div>
                   </td>
                   <td>

@@ -1,4 +1,5 @@
 "use client";
+import { educationOptionsFor } from "@/lib/education";
 
 import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -25,6 +26,7 @@ interface ProfileData {
   name: string;
   gender: "male" | "female";
   email: string;
+  education: string;
   ethnicity: string;
   imageStorageIds: string[];
   imageUrls: string[];
@@ -182,6 +184,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ethnicity: profile.ethnicity,
+          education: profile.education,
           imageStorageIds: uploadedImages.map((image) => image.storageId),
           prayerCommitment: profile.prayerCommitment,
           hijabResponse: profile.hijabResponse,
@@ -256,6 +259,16 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         )}
 
         <div className="profile-grid two">
+          <div className="field">
+            <label htmlFor="education">Education level *</label>
+            <select id="education" value={profile.education || ""}
+              onChange={(event) => setProfile({ ...profile, education: event.target.value })} required>
+              <option value="">Select education level</option>
+              {educationOptionsFor(profile.education).map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
           <div className="field">
             <label htmlFor="ethnicity">Ethnicity *</label>
             <input

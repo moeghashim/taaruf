@@ -1,3 +1,4 @@
+import { isEducation } from "@/lib/education";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { api } from "../../../../convex/_generated/api";
@@ -26,6 +27,10 @@ export async function POST(request: NextRequest) {
       imageStorageIds,
       eventCode,
     } = body;
+
+    if (!isEducation(education)) {
+      return NextResponse.json({ error: "Invalid education level" }, { status: 400 });
+    }
 
     // Validate required fields
     if (

@@ -1,4 +1,5 @@
 "use client";
+import { formatEducation } from "@/lib/education";
 
 import { formatHijabResponse } from "@/lib/hijab";
 
@@ -111,7 +112,7 @@ export default function SharedProfilePage({
     { label: "Age", value: owner.age },
     { label: "Gender", value: titleizeValue(owner.gender) },
     { label: "Marital", value: titleizeValue(owner.maritalStatus) },
-    { label: "Education", value: titleizeValue(owner.education) },
+    { label: "Education", value: formatEducation(owner.education) },
     { label: "Job", value: owner.job || "—" },
     { label: "Ethnicity", value: owner.ethnicity || "—" },
     { label: "Prayer", value: titleizeValue(owner.prayerCommitment) },

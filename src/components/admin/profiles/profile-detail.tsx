@@ -1,4 +1,5 @@
 "use client";
+import { formatEducation } from "@/lib/education";
 
 import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
@@ -106,7 +107,7 @@ export function ProfileDetail({
   const facts: Fact[] = [
     { label: "Applicant #", value: registrationNumber ?? "—" },
     { label: "Marital status", value: profile.maritalStatus || "—" },
-    { label: "Education", value: profile.education || "—" },
+    { label: "Education", value: formatEducation(profile.education) },
     { label: "Occupation", value: profile.job || "—" },
     { label: "Email", value: profile.email },
     { label: "Phone", value: profile.phone || "—" },
