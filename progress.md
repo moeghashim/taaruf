@@ -608,3 +608,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-10-23
 - Added persisted-status event receipt helper, portal/checkout/webhook/payment-repair integration, warm manual approval copy and 26 mocked tests; vitest config includes source tests. Backend retry/session-link follow-ups in docs/signup-receipt-review.md. No emails/deploys. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-03
+- Removed remaining gender availability numbers from homepage rendering, preserving open/waitlist labels and admin counts; added public-render regression coverage and JSX test transform. Preview approval required before production. <!-- project: github.com/moeghashim/clawscrewskill -->
