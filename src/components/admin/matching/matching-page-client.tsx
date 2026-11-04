@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -1089,6 +1090,7 @@ function ShareProfileAction({
 }
 
 export function WorkbenchPageClient() {
+  const searchParams = useSearchParams();
   const data = useMatchingData();
   const notifyDecline = useNotifyDecline();
   const [selectedInterestId, setSelectedInterestId] = useState<string>("");
@@ -1097,15 +1099,12 @@ export function WorkbenchPageClient() {
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const interest = params.get("interest");
-    const match = params.get("match");
-    if (interest) setSelectedInterestId(interest);
-    if (match) setSelectedMatchId(match);
-  }, []);
+    setSelectedInterestId(searchParams.get("interest") ?? "");
+    setSelectedMatchId(searchParams.get("match") ?? "");
+  }, [searchParams]);
 
   const [mode, setMode] = useState<"interest" | "match">("interest");
-  useEffect(() => { const p = new URLSearchParams(window.location.search); setMode(p.has("match") && !p.has("interest") ? "match" : "interest"); }, []);
+  useEffect(() => { setMode(searchParams.has("match") && !searchParams.has("interest") ? "match" : "interest"); }, [searchParams]);
   const selectedInterest = mode === "match" ? null :
     data.interests.find((interest) => interest._id === selectedInterestId) ??
     (selectedMatchId ? null : data.interests.find((interest) => isOpenInterest(interest.status)) ?? data.interests[0]) ??
