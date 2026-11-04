@@ -41,6 +41,16 @@ test("fails closed with no configured admin password", async () => {
   expect((await POST(request())).status).toBe(401);
   expect(mutation).not.toHaveBeenCalled();
 });
+test("allows browser-facing loopback host despite Next URL normalization", async () => {
+  const req = request();
+  req.headers.set("host", "127.0.0.1:3342");
+  req.headers.set("origin", "http://127.0.0.1:3342");
+  expect((await POST(req)).status).toBe(200);
+});
+test.each(["null", "not-a-url", "file://synthetic.invalid", "https://synthetic.invalid:444"])("rejects invalid origin %s", async origin => {
+  expect((await POST(request(valid, token, origin))).status).toBe(403);
+  expect(mutation).not.toHaveBeenCalled();
+});
 test("rejects cross-origin writes", async () => {
   expect((await POST(request(valid, token, "https://attacker.invalid"))).status).toBe(403);
   expect(mutation).not.toHaveBeenCalled();

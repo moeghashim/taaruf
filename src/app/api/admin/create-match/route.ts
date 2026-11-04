@@ -10,7 +10,14 @@ export async function POST(request: NextRequest) {
   const token = request.cookies.get("admin_token")?.value;
   const expected = password ? crypto.createHash("sha256").update(password + (process.env.ADMIN_TOKEN_SALT || "taaruf-admin-salt")).digest("hex") : "";
   if (!token || !expected || token.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) return NextResponse.json({ error: "Your admin session has expired. Sign in again." }, { status: 401 });
-  if (request.headers.get("origin") && request.headers.get("origin") !== request.nextUrl.origin) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  const origin = request.headers.get("origin");
+  if (origin) {
+    try {
+      // Next normalizes loopback/proxy URLs; Host retains the browser-facing authority.
+      const parsed = new URL(origin);
+      if (!["http:", "https:"].includes(parsed.protocol) || parsed.host !== (request.headers.get("host") || request.nextUrl.host)) throw new Error("Origin mismatch");
+    } catch { return NextResponse.json({ error: "Invalid request origin." }, { status: 403 }); }
+  }
   try {
     const body = await request.json();
     if (!body || typeof body.maleRegistrationId !== "string" || !body.maleRegistrationId || typeof body.femaleRegistrationId !== "string" || !body.femaleRegistrationId || (body.adminNotes !== undefined && (typeof body.adminNotes !== "string" || body.adminNotes.length > 2000))) return NextResponse.json({ error: "Select both applicants and keep notes under 2,000 characters." }, { status: 400 });
