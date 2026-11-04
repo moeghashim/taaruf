@@ -611,3 +611,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-03
 - Removed remaining gender availability numbers from homepage rendering, preserving open/waitlist labels and admin counts; added public-render regression coverage and JSX test transform. Preview approval required before production. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-03
+- Repair inert admin New match control with guarded suggestion creation, synthetic regression tests, and same-page selection; production remains preview-gated.

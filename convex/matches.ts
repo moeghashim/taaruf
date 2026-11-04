@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import {
   demoteOpenInterestsInvolvingRegistration,
@@ -29,6 +29,29 @@ const interestFlowStatuses = [
   "declined",
   "closed",
 ] as const;
+
+/** Creates an admin-only suggestion. Consent and sharing remain separate. */
+export const create = mutation({
+  args: { adminSecret: v.string(), maleRegistrationId: v.id("registrations"), femaleRegistrationId: v.id("registrations"), adminNotes: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (!process.env.ADMIN_PASSWORD || args.adminSecret !== process.env.ADMIN_PASSWORD) throw new Error("Unauthorized");
+    if (args.maleRegistrationId === args.femaleRegistrationId) throw new ConvexError("Select two different applicants.");
+    const male = await ctx.db.get(args.maleRegistrationId);
+    const female = await ctx.db.get(args.femaleRegistrationId);
+    if (!male || !female) throw new ConvexError("An applicant no longer exists. Refresh and select again.");
+    if (male.gender !== "male" || female.gender !== "female") throw new ConvexError("Select one male and one female applicant.");
+    for (const person of [male, female]) {
+      if (person.status !== "approved" || person.profileCompletionStatus !== "completed" || (person.searchStatus ?? "active") !== "active") throw new ConvexError("Both applicants must be approved, have complete profiles, and be actively searching.");
+      if (person.activeMatchId) throw new ConvexError("An applicant already has an active match. Review it before creating another.");
+    }
+    if ((args.adminNotes?.length ?? 0) > 2000) throw new ConvexError("Admin notes must be 2,000 characters or fewer.");
+    for await (const match of ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", male._id))) {
+      if (match.femaleRegistrationId === female._id && !["closed", "declined"].includes(match.status)) throw new ConvexError("An open match already exists for this pair. Open it in the workbench.");
+    }
+    const now = Date.now();
+    return await ctx.db.insert("matches", { maleRegistrationId: male._id, femaleRegistrationId: female._id, status: "new", interestType: "admin_suggested", initiatedBy: "admin_recommendation", adminNotes: args.adminNotes?.trim() || undefined, createdAt: now, updatedAt: now });
+  },
+});
 
 export const getById = query({
   args: {
