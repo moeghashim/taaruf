@@ -616,3 +616,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Repair inert admin New match control with guarded suggestion creation, synthetic regression tests, and same-page selection; production remains preview-gated.
 
 - Verified New match against real loopback Convex + Next + desktop/mobile browsers; fixed browser-facing origin validation and proved live backend source parity.
+
+- Addressed independent auth review and added standalone-suggestion consent regression.

@@ -123,3 +123,11 @@ test("enforces 2,000-character notes boundary", async () => {
   const id = await t.mutation(api.matches.create, { ...args, adminNotes: "x".repeat(2000) });
   expect((await t.run(ctx => ctx.db.get(id)))?.adminNotes).toHaveLength(2000);
 });
+
+test("a new admin suggestion cannot bypass the linked-interest consent gate", async () => {
+  const { t, args } = await fixture();
+  const id = await t.mutation(api.matches.create, args);
+  const before = await snapshot(t);
+  await expect(t.mutation(api.matches.updateStatus, { id, status: "contact_shared", adminSecret: secret })).rejects.toThrow("Active linked interest required");
+  expect(await snapshot(t)).toEqual(before);
+});

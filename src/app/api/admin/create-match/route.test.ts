@@ -30,7 +30,7 @@ function request(body: unknown = valid, cookie = token, origin?: string, raw = f
   });
 }
 
-test.each(["", "forged", "0".repeat(64)])("fails closed for invalid cookie %j before parsing or backend access", async cookie => {
+test.each(["", "forged", "0".repeat(64), "é".repeat(64)])("fails closed for invalid cookie %j before parsing or backend access", async cookie => {
   const response = await POST(request("not json", cookie, undefined, true));
   expect(response.status).toBe(401);
   expect(await response.json()).toEqual({ error: "Your admin session has expired. Sign in again." });
