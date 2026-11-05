@@ -81,3 +81,27 @@ it("overlapping event checkouts retain immutable links after latest session chan
  await t.mutation(api.registrations.updatePaymentStatus,{stripeSessionId:"cs_first",paymentStatus:"paid"});
  expect((await t.query(api.registrations.getById,{id:registrationId}))?.paymentStatus).toBe("paid");
 });
+
+it("revalidates stale admission and reminder claims after archive without changing payment history", async () => {
+ const {t, registrationId, eventRegistrationId} = await setup();
+ const args = {eventRegistrationId, adminSecret: secret, token: "owner"};
+ const receipt = await t.mutation(api.events.claimRegistrationReceivedEmail, args);
+ const email = await t.mutation(api.events.claimEventRegistrationEmail, {eventRegistrationId, kind: "reminder"});
+ const receiptArgs = {...args, key: receipt.key!};
+ await t.mutation(api.events.validateRegistrationReceivedEmail, receiptArgs);
+ await t.mutation(api.events.validateEventRegistrationEmail, {emailId: email.emailId!});
+ await t.run(ctx => ctx.db.patch(registrationId, {archivedAt: 0}));
+ await expect(t.mutation(api.events.validateRegistrationReceivedEmail, receiptArgs)).rejects.toThrow("archived");
+ await expect(t.mutation(api.events.validateEventRegistrationEmail, {emailId: email.emailId!})).rejects.toThrow("archived");
+ await t.mutation(api.events.recordRegistrationReceivedEmailFailure, {...receiptArgs, error: "Participant is archived"});
+ await t.mutation(api.events.recordEventRegistrationEmailFailure, {emailId: email.emailId!, error: "Participant is archived"});
+ await t.run(async ctx => {
+   expect(await ctx.db.get(registrationId)).toMatchObject({paymentStatus: "paid"});
+   expect(await ctx.db.get(eventRegistrationId)).toMatchObject({registrationReceivedEmailError: "Participant is archived"});
+   expect((await ctx.db.get(eventRegistrationId))?.registrationReceivedEmailSentAt).toBeUndefined();
+   const delivery = await ctx.db.query("receiptDeliveries").first();
+   expect(delivery).toMatchObject({leaseUntil: 0, error: "Participant is archived"});
+   expect(delivery?.sentAt).toBeUndefined();
+   expect((await ctx.db.get(email.emailId!))?.sentAt).toBeUndefined();
+ });
+});

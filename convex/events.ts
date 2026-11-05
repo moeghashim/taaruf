@@ -964,6 +964,20 @@ export const claimRegistrationReceivedEmail = mutation({
     return { claimed: true, key, name: existing?.name ?? payload.name, email: existing?.email ?? payload.email, eventTitle: existing?.eventTitle ?? payload.eventTitle, registrationStatus: payload.registrationStatus };
   },
 });
+/** Admission messaging only; payment receipts remain independent. */
+export const validateRegistrationReceivedEmail = mutation({
+  args: { eventRegistrationId: v.id("eventRegistrations"), adminSecret: v.string(), key: v.string(), token: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    const row = await ctx.db.get(args.eventRegistrationId);
+    const delivery = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", args.key)).unique();
+    if (!row || !delivery || delivery.token !== args.token || delivery.sentAt || delivery.leaseUntil <= Date.now()
+      || args.key !== "event-registration-received/" + row._id + "/" + (row.receiptAttempt ?? 0)) throw new Error("Receipt claim is no longer current");
+    assertNotArchived(await ctx.db.get(row.registrationId));
+    if (!["pending", "waitlisted"].includes(row.registrationStatus) || row.registrationStatus !== delivery.registrationStatus) throw new Error("Receipt status changed");
+  },
+});
+
 export const recordRegistrationReceivedEmailFailure = mutation({
   args: { eventRegistrationId: v.id("eventRegistrations"), adminSecret: v.string(), key: v.string(), token: v.string(), error: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -1028,6 +1042,18 @@ export const claimEventRegistrationEmail = mutation({
       eventLocation: event.location,
       kind: args.kind,
     };
+  },
+});
+
+/** Run after token issuance, immediately before invoking the mail provider. */
+export const validateEventRegistrationEmail = mutation({
+  args: { emailId: v.id("eventRegistrationEmails") },
+  handler: async (ctx, args) => {
+    const email = await ctx.db.get(args.emailId);
+    if (!email) throw new Error("Email claim not found");
+    assertNotArchived(await ctx.db.get(email.registrationId));
+    const event = await ctx.db.get(email.eventId);
+    if (!event || event.status === "completed" || event.status === "cancelled") throw new Error("Notification actions are locked for completed or cancelled events");
   },
 });
 
