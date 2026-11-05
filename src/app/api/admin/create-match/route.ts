@@ -18,10 +18,12 @@ export async function POST(request: NextRequest) {
       if (!["http:", "https:"].includes(parsed.protocol) || parsed.host !== (request.headers.get("host") || request.nextUrl.host)) throw new Error("Origin mismatch");
     } catch { return NextResponse.json({ error: "Invalid request origin." }, { status: 403 }); }
   }
+  const adminSecret = process.env.ATTENDANCE_ADMIN_SECRET;
+  if (!adminSecret) return NextResponse.json({ error: "Matching service is not configured. Contact support." }, { status: 503 });
   try {
     const body = await request.json();
     if (!body || typeof body.maleRegistrationId !== "string" || !body.maleRegistrationId || typeof body.femaleRegistrationId !== "string" || !body.femaleRegistrationId || (body.adminNotes !== undefined && (typeof body.adminNotes !== "string" || body.adminNotes.length > 2000))) return NextResponse.json({ error: "Select both applicants and keep notes under 2,000 characters." }, { status: 400 });
-    const matchId = await getConvexClient().mutation(api.matches.create, { adminSecret: password!, maleRegistrationId: body.maleRegistrationId as Id<"registrations">, femaleRegistrationId: body.femaleRegistrationId as Id<"registrations">, adminNotes: body.adminNotes });
+    const matchId = await getConvexClient().mutation(api.matches.create, { adminSecret, maleRegistrationId: body.maleRegistrationId as Id<"registrations">, femaleRegistrationId: body.femaleRegistrationId as Id<"registrations">, adminNotes: body.adminNotes });
     return NextResponse.json({ matchId });
   } catch (error) {
     return NextResponse.json({ error: error instanceof ConvexError && typeof error.data === "string" ? error.data : "Unable to create match. Refresh and try again; if this continues, contact support." }, { status: 400 });
