@@ -1,3 +1,4 @@
+import { matchmakingPreference, MATCHMAKING_PREFERENCE_COPY_VERSION } from "./matchmakingPreference";
 import { registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
 // INVARIANT (see AGENTS.md): `registrations.publicApplicantNumber` is the
 // permanent public identifier. Once assigned it is never patched and never
@@ -375,6 +376,7 @@ function legacyLookingForText(args: {
 
 export const create = mutation({
   args: {
+    matchmakingPreference,
     name: v.string(),
     age: v.number(),
     gender: v.union(v.literal("male"), v.literal("female")),
@@ -414,6 +416,7 @@ export const create = mutation({
     const phoneCanonical = normalizePhone(args.phone);
     const nameCanonical = normalizeName(args.name);
     const existingProfile = await findExistingParticipantProfile(ctx, args, Boolean(event));
+    if (existingProfile?.archivedAt != null) throw new Error("This profile is archived. Contact the team before registering again.");
     if (existingProfile && !event) {
       throw new Error("An applicant is already registered with this email.");
     }
@@ -431,6 +434,9 @@ export const create = mutation({
     }
 
     const registrationId = await ctx.db.insert("registrations", {
+      matchmakingPreference: args.matchmakingPreference,
+      matchmakingPreferenceUpdatedAt: now,
+      matchmakingPreferenceCopyVersion: MATCHMAKING_PREFERENCE_COPY_VERSION,
       applicantNumber: await nextApplicantNumber(ctx),
       publicApplicantNumber: await nextPublicApplicantNumber(ctx),
       name: args.name.trim(),
@@ -467,6 +473,15 @@ export const create = mutation({
       photoSharingPermission: args.photoSharingPermission,
       interestSubmission: args.interestSubmission?.trim() || undefined,
       interestSubmissionNumbers: normalizeInterestSubmissionNumbers(args.interestSubmissionNumbers),
+    });
+
+    await ctx.db.insert("matchmakingPreferenceHistory", {
+      registrationId,
+      previousPreference: null,
+      matchmakingPreference: args.matchmakingPreference,
+      updatedAt: now,
+      copyVersion: MATCHMAKING_PREFERENCE_COPY_VERSION,
+      source: "registration",
     });
 
     if (event) {
@@ -538,6 +553,8 @@ export const updateStatus = mutation({
   },
   handler: async (ctx, args) => {
     if (args.status === "waitlisted") throw new Error("Global profile waitlisting is retired; use an event registration");
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Profile is archived");
     await ctx.db.patch(args.id, { status: args.status });
     return args.id;
   },
@@ -550,6 +567,8 @@ export const updateSearchStatus = mutation({
     searchStatusNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Profile is archived");
     await ctx.db.patch(args.id, {
       searchStatus: args.searchStatus,
       searchStatusNote: args.searchStatusNote,
@@ -564,6 +583,8 @@ export const setProfileAccessToken = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Profile is archived");
     await ctx.db.patch(args.id, {
       profileAccessToken: args.token,
       profileCompletionStatus: "in_progress",
@@ -629,6 +650,7 @@ export const getByProfileAccessToken = query({
   },
 });
 
+// Deliberately excludes matchmaking consent: stale profile forms cannot restore it.
 export const updateProfile = mutation({
   args: {
     token: v.string(),
@@ -655,6 +677,7 @@ export const updateProfile = mutation({
       throw new Error("Profile not found");
     }
 
+    if (registration.archivedAt != null) throw new Error("Profile is archived");
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
@@ -804,6 +827,8 @@ export const deleteRegistration = mutation({
   // The persisted high-water-mark in settings is intentionally left untouched
   // so the deleted applicant number can never be re-issued to a new registration.
   handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Archived profile history cannot be deleted through this action");
     await ctx.db.delete(args.id);
     return args.id;
   },

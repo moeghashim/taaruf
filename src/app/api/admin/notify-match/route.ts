@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
     const results = [] as { registrationId: string; email: string; success: boolean; error?: string; providerId?: string }[];
 
     for (const registration of [male, female]) {
+      await convexClient.mutation(api.matches.assertNotificationEligible, { id: match._id, adminSecret: process.env.ADMIN_PASSWORD || "" });
       const emailResult = await sendMatchNotificationEmail({
         name: registration.name,
         email: registration.email,
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
       },
     }, { status: success ? 200 : 502 });
   } catch (error) {
+    if (/archived|not active/i.test(String(error))) return NextResponse.json({ success: false, skipped: "ineligible", error: "Matching notification stopped because the connection is no longer eligible." }, { status: 409 });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },
       { status: 500 }

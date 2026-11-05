@@ -1,5 +1,7 @@
 "use client";
 
+import { ArchiveParticipant } from "@/components/archive-participant";
+import { matchmakingPreferenceLabel } from "@/lib/matchmaking-preference";
 import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -9,7 +11,7 @@ import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
 import type { RegistrationDoc } from "@/components/admin/hooks/use-registrations";
 
 type Props = {
-  profile: RegistrationDoc;
+  profile: RegistrationDoc & { archivedAt?: number };
   registrationNumber?: number;
   onUpdateNotes: (id: string, notes: string) => Promise<unknown>;
   onUpdateStatus: (id: string, status: "approved" | "rejected") => Promise<unknown>;
@@ -78,6 +80,8 @@ export function ProfileDetail({
   onDelete,
   onClose,
 }: Props) {
+  const [archivedId, setArchivedId] = useState<string | null>(null);
+  const archived = profile.archivedAt != null || archivedId === profile._id;
   const [actionError, setActionError] = useState<string | null>(null);
   const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
   const eventHistory = useQuery(api.events.getByRegistration, {
@@ -108,6 +112,8 @@ export function ProfileDetail({
     { label: "Occupation", value: profile.job || "—" },
     { label: "Email", value: profile.email },
     { label: "Phone", value: profile.phone || "—" },
+    { label: "Matchmaking preference", value: matchmakingPreferenceLabel(profile.matchmakingPreference) },
+    { label: "Preference updated", value: formatDate(profile.matchmakingPreferenceUpdatedAt) },
     { label: "Registered", value: formatDate(profile._creationTime) },
   ];
 
@@ -168,6 +174,7 @@ export function ProfileDetail({
 
   return (
     <div style={{ padding: 20 }}>
+      <ArchiveParticipant key={profile._id} archivedAt={profile.archivedAt} registrationId={profile._id} name={profile.name} onArchived={() => setArchivedId(profile._id)} />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <StatusPill status={profile.status} />
         {profile.paymentStatus && <StatusPill status={profile.paymentStatus} />}
@@ -415,8 +422,8 @@ export function ProfileDetail({
         }}
       >
         {actionError && <p role="alert">{actionError}</p>}
-        {profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke approval"}</button>}
-        {profile.status === "pending" && (
+        {!archived && profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke approval"}</button>}
+        {!archived && profile.status === "pending" && (
           <>
             <button
               className="btn btn-primary"

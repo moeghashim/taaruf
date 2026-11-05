@@ -1,3 +1,4 @@
+import { assertNotArchived } from "./archiveRules";
 import { requireEventAdmin, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -137,7 +138,7 @@ async function carryOverRegistrationsFromEvent(
     seenSourceRegistrationIds.add(registrationId);
 
     const registration = await ctx.db.get(registrationId);
-    if (!registration) {
+    if (!registration || registration.archivedAt !== undefined) {
       skippedMissingRegistration += 1;
       return;
     }
@@ -393,7 +394,7 @@ export const getApplicantEvents = query({
           registration: byEventId.get(event._id) ?? null,
         })),
       history: await Promise.all(eventRegistrations.map((row) => serializeEventRegistration(ctx, row))),
-      canSubmitInterest: Boolean(eligibleEvent),
+      canSubmitInterest: registration.archivedAt === undefined && Boolean(eligibleEvent),
     };
   },
 });
@@ -611,6 +612,7 @@ export const registerForEvent = mutation({
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    assertNotArchived(registration);
     requireCompletedProfile(registration);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
@@ -673,6 +675,7 @@ export const addRegistration = mutation({
     requireEventAdmin(args.adminSecret);
     const registration = await ctx.db.get(args.registrationId);
     if (!registration) throw new Error("Profile not found");
+    assertNotArchived(registration);
 
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
@@ -738,6 +741,7 @@ export const updateRegistrationStatus = mutation({
     if (!event) throw new Error("Event not found");
     const now = Date.now();
 
+    if (["pending", "approved", "waitlisted"].includes(args.registrationStatus)) assertNotArchived(await ctx.db.get(row.registrationId));
     if (args.overrideCapacity) throw new Error("Capacity overrides are not allowed");
     if (args.registrationStatus === "approved" && row.registrationStatus !== "pending" && row.registrationStatus !== "approved") throw new Error("Only Pending registrations may be approved");
     if (args.registrationStatus === "waitlisted") throw new Error("Waitlisting is determined by capacity");
@@ -795,6 +799,7 @@ export const updateRegistrationConfirmation = mutation({
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
+    if (args.confirmationStatus !== "cancelled") assertNotArchived(await ctx.db.get(row.registrationId));
     if (row.registrationStatus === "rejected" && args.confirmationStatus === "confirmed") {
       throw new Error("Rejected event registrations cannot be confirmed");
     }
@@ -852,6 +857,7 @@ export const requestConfirmation = mutation({
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
+    assertNotArchived(await ctx.db.get(row.registrationId));
     const event = await ctx.db.get(row.eventId);
     if (!event) throw new Error("Event not found");
     if (event.status === "completed" || event.status === "cancelled") {
@@ -876,6 +882,7 @@ export const confirmParticipation = mutation({
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    assertNotArchived(registration);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
     if (reservesCapacity(row.registrationStatus) && confirmationStatusForRow(row) === "confirmed") {
@@ -949,6 +956,7 @@ export const claimRegistrationReceivedEmail = mutation({
     if (existing && now - existing.firstAttemptAt >= 23 * 60 * 60 * 1000) return { claimed: false, error: "Receipt delivery uncertain; manual reconciliation required" };
     const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(row.registrationId)]);
     if (!event || !registration) throw new Error("Missing receipt records");
+    assertNotArchived(registration);
     const payload = { name: registration.name, email: registration.email, eventTitle: event.title, registrationStatus: row.registrationStatus as "pending" | "waitlisted" };
     if (existing && existing.registrationStatus !== row.registrationStatus) return { claimed: false, error: "Receipt status changed; manual reconciliation required" };
     if (existing) await ctx.db.patch(existing._id, { token: args.token, leaseUntil: now + 120000 });
@@ -956,6 +964,20 @@ export const claimRegistrationReceivedEmail = mutation({
     return { claimed: true, key, name: existing?.name ?? payload.name, email: existing?.email ?? payload.email, eventTitle: existing?.eventTitle ?? payload.eventTitle, registrationStatus: payload.registrationStatus };
   },
 });
+/** Admission messaging only; payment receipts remain independent. */
+export const validateRegistrationReceivedEmail = mutation({
+  args: { eventRegistrationId: v.id("eventRegistrations"), adminSecret: v.string(), key: v.string(), token: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    const row = await ctx.db.get(args.eventRegistrationId);
+    const delivery = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", args.key)).unique();
+    if (!row || !delivery || delivery.token !== args.token || delivery.sentAt || delivery.leaseUntil <= Date.now()
+      || args.key !== "event-registration-received/" + row._id + "/" + (row.receiptAttempt ?? 0)) throw new Error("Receipt claim is no longer current");
+    assertNotArchived(await ctx.db.get(row.registrationId));
+    if (!["pending", "waitlisted"].includes(row.registrationStatus) || row.registrationStatus !== delivery.registrationStatus) throw new Error("Receipt status changed");
+  },
+});
+
 export const recordRegistrationReceivedEmailFailure = mutation({
   args: { eventRegistrationId: v.id("eventRegistrations"), adminSecret: v.string(), key: v.string(), token: v.string(), error: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -980,6 +1002,7 @@ export const claimEventRegistrationEmail = mutation({
     if (!row) throw new Error("Event registration not found");
     const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(row.registrationId)]);
     if (!event || !registration) throw new Error("Event registration is missing related records");
+    assertNotArchived(registration);
     if (event.status === "completed" || event.status === "cancelled") {
       throw new Error("Notification actions are locked for completed or cancelled events");
     }
@@ -1019,6 +1042,18 @@ export const claimEventRegistrationEmail = mutation({
       eventLocation: event.location,
       kind: args.kind,
     };
+  },
+});
+
+/** Run after token issuance, immediately before invoking the mail provider. */
+export const validateEventRegistrationEmail = mutation({
+  args: { emailId: v.id("eventRegistrationEmails") },
+  handler: async (ctx, args) => {
+    const email = await ctx.db.get(args.emailId);
+    if (!email) throw new Error("Email claim not found");
+    assertNotArchived(await ctx.db.get(email.registrationId));
+    const event = await ctx.db.get(email.eventId);
+    if (!event || event.status === "completed" || event.status === "cancelled") throw new Error("Notification actions are locked for completed or cancelled events");
   },
 });
 

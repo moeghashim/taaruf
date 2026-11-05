@@ -6,6 +6,7 @@ import { modules } from "./test.setup";
 import type { Doc, Id } from "./_generated/dataModel";
 
 const baseRegistrationArgs = {
+  matchmakingPreference: "events_only" as const,
   name: "Test Applicant",
   age: 28,
   gender: "male" as const,

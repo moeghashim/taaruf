@@ -8,10 +8,12 @@ const SESSION_TTL_MS = 30 * DAY_MS;
 export const createLoginToken = mutation({
   args: {
     email: v.string(),
+    adminSecret: v.string(),
     tokenHash: v.string(),
     expiresInMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    if (!process.env.ADMIN_PASSWORD || args.adminSecret !== process.env.ADMIN_PASSWORD) throw new Error("Unauthorized");
     const email = args.email.trim().toLowerCase();
     const exactRegistration = await ctx.db
       .query("registrations")

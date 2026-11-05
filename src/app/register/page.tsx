@@ -36,11 +36,8 @@ export default function RegisterPage() {
             The $10 registration fee covers the cost of a background check conducted by the 1Plus1 team to ensure the safety and integrity of all participants.
           </p>
           <p className="mute">
-            By registering, you consent to be added to our internal matching program{" "}
-            <a href="https://1plus1match.com" target="_blank" rel="noopener noreferrer">
-              1plus1match.com
-            </a>{" "}
-            where we track potential matches.
+            Registration does not automatically opt you in to matchmaking beyond events.
+            Choose your preference below; you can change it later in your applicant portal.
           </p>
         </section>
 

@@ -47,6 +47,16 @@ export async function POST(request: NextRequest) {
       throw new Error("Decline notification claim did not include requester contact details");
     }
 
+    try {
+      await convexClient.mutation(api.interests.assertNotificationEligible, { id: interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+    } catch (error) {
+      // The claim is optimistic: suppression must release its sent marker.
+      await convexClient.mutation(api.interests.recordDeclineNotificationFailure, {
+        id: interestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
     const emailResult = await sendInterestClosedEmail({
       requesterEmail: claim.requesterEmail,
       requesterName: claim.requesterName,
@@ -70,6 +80,7 @@ export async function POST(request: NextRequest) {
       providerId: emailResult.id,
     });
   } catch (error) {
+    if (/archived/i.test(String(error))) return NextResponse.json({ success: false, skipped: "ineligible", error: "Matching notification stopped because a participant is archived." }, { status: 409 });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },
       { status: 500 }

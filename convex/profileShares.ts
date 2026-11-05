@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { assertProfileCompleted, getRegistrationOrThrow } from "./interestRules";
+import { assertProfileCompleted, getRegistrationOrThrow, assertMatchingParticipants } from "./interestRules";
 
 export const getAll = query({
   args: {},
@@ -32,6 +32,7 @@ export const create = mutation({
     matchId: v.optional(v.id("matches")),
   },
   handler: async (ctx, args) => {
+    await assertMatchingParticipants(ctx, args.ownerRegistrationId, args.recipientRegistrationId);
     const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
     assertProfileCompleted(ownerRegistration, "Profile owner");
     if (args.includeImages && ownerRegistration.photoSharingPermission !== "yes") {
