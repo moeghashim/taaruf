@@ -611,3 +611,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-03
 - Removed remaining gender availability numbers from homepage rendering, preserving open/waitlist labels and admin counts; added public-render regression coverage and JSX test transform. Preview approval required before production. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-04
+- Audited matching provenance and local PR48 without merging; added docs/matchmaking-scope-audit.md documenting scope/product release blockers and convex/matchingScope.test.ts preserving event eligibility and non-destructive preference revocation. Matching suites: 28/28; scoped lint and typecheck pass. No live reads or deployment. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Implemented explicit registration preference and session-owned withdrawal/re-opt-in with history and stale-write guard; repaired consent authorization prerequisites after independent review. 171 tests, typecheck, lint (7 existing warnings), build, desktop/mobile synthetic and real loopback integration pass. Production blocked on matching scope and legacy session remediation; no live changes. <!-- project: github.com/moeghashim/clawscrewskill -->

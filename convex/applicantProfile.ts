@@ -1,3 +1,4 @@
+import { matchmakingPreference, changeMatchmakingPreference } from "./matchmakingPreference";
 import { hijabResponse } from "./hijab";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -130,6 +131,9 @@ export const getProfile = query({
 
     return {
       registration: {
+        matchmakingPreference: registration.matchmakingPreference ?? null,
+        matchmakingPreferenceUpdatedAt: registration.matchmakingPreferenceUpdatedAt ?? null,
+        matchmakingPreferenceCopyVersion: registration.matchmakingPreferenceCopyVersion ?? null,
         name: registration.name,
         gender: registration.gender,
         email: registration.email,
@@ -153,6 +157,19 @@ export const getProfile = query({
   },
 });
 
+export const updateMatchmakingPreference = mutation({
+  args: {
+    sessionHash: v.string(),
+    matchmakingPreference,
+    expectedUpdatedAt: v.union(v.number(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    return await changeMatchmakingPreference(ctx, registration, args.matchmakingPreference, args.expectedUpdatedAt);
+  },
+});
+
+// Generic saves intentionally cannot modify matchmaking consent.
 export const updateProfile = mutation({
   args: {
     sessionHash: v.string(),

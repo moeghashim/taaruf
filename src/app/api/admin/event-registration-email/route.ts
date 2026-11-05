@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       const loginToken = createToken();
       const loginRegistration = await convex.mutation(api.applicantAuth.createLoginToken, {
         email: claim.email,
+        adminSecret: process.env.ADMIN_PASSWORD || "",
         tokenHash: hashToken(loginToken),
         expiresInMs: 48 * 60 * 60 * 1000,
       });

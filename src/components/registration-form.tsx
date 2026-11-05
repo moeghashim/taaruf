@@ -1,6 +1,8 @@
 "use client";
 
 import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
+import { MatchmakingChoices } from "@/components/matchmaking-preference";
+import { isMatchmakingPreference, type MatchmakingPreference } from "@/lib/matchmaking-preference";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -44,6 +46,7 @@ interface RegistrationFormData {
   spouseRequirement3: string;
   basicBio: string;
   photoSharingPermission: PhotoSharingPermission;
+  matchmakingPreference: MatchmakingPreference | "";
   backgroundCheckConsent: boolean;
 }
 
@@ -109,9 +112,14 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
       spouseRequirement3: "",
       basicBio: "",
       photoSharingPermission: "",
+      matchmakingPreference: "",
       backgroundCheckConsent: false,
     } as RegistrationFormData,
     onSubmit: async ({ value }) => {
+      if (!isMatchmakingPreference(value.matchmakingPreference)) {
+        setSubmitError("Please choose a matchmaking preference.");
+        return;
+      }
       if (uploadedImages.length < 1) {
         setUploadError("Please upload at least 1 photo.");
         return;
@@ -142,6 +150,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
             spouseRequirement3: value.spouseRequirement3,
             shareableBio: value.basicBio,
             photoSharingPermission: value.photoSharingPermission,
+            matchmakingPreference: value.matchmakingPreference,
             imageStorageIds: uploadedImages.map((image) => image.storageId),
             eventCode: event?.eventCode,
           }),
@@ -695,6 +704,13 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
               )}
             </div>
           )}
+        </form.Field>
+
+        <form.Field name="matchmakingPreference" validators={{ onChange: ({ value }) => !isMatchmakingPreference(value) ? "Please choose a matchmaking preference." : undefined }}>
+          {(field) => <div className="field">
+            <MatchmakingChoices value={field.state.value} onChange={field.handleChange} disabled={isSubmitting} />
+            {field.state.meta.errors.length > 0 && <p className="field-error" role="alert">{field.state.meta.errors.join(", ")}</p>}
+          </div>}
         </form.Field>
 
         <form.Field
