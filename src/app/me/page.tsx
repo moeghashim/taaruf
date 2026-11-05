@@ -1,6 +1,7 @@
 "use client";
 
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
+import { ArchiveParticipant } from "@/components/archive-participant";
 import { MatchmakingPreferenceControl } from "@/components/matchmaking-preference";
 import type { MatchmakingPreference } from "@/lib/matchmaking-preference";
 import { useCallback, useEffect, useState } from "react";
@@ -111,6 +112,7 @@ type ProfileImagePayload = {
 };
 
 type ProfileData = {
+  archivedAt?: number | null;
   matchmakingPreference?: MatchmakingPreference | null;
   matchmakingPreferenceUpdatedAt?: number | null;
   name: string;
@@ -597,6 +599,9 @@ export default function ApplicantDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [locallyArchivedAt, setLocallyArchivedAt] = useState<number | null>(null);
+  const archivedAt = locallyArchivedAt ?? profile?.archivedAt;
+  const archived = archivedAt != null;
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
   const [message, setMessage] = useState<string | null>(null);
@@ -680,6 +685,7 @@ export default function ApplicantDashboardPage() {
 
 
   async function runAction(body: Record<string, unknown>) {
+    if (archived) return false;
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -711,6 +717,7 @@ export default function ApplicantDashboardPage() {
   }
 
   async function registerForEvent(eventId: string) {
+    if (archived) return;
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -736,6 +743,7 @@ export default function ApplicantDashboardPage() {
   }
 
   async function confirmEventParticipation(eventRegistrationId: string) {
+    if (archived) return;
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -816,7 +824,7 @@ export default function ApplicantDashboardPage() {
 
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!profile) return;
+    if (!profile || archived) return;
 
     setIsSavingProfile(true);
     setMessage(null);
@@ -997,6 +1005,8 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
+            {profile && <ArchiveParticipant archivedAt={archivedAt} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
+
             <div className="stats">
               <div className="stat">
                 <h4>Inbound</h4>
@@ -1051,7 +1061,7 @@ export default function ApplicantDashboardPage() {
                               <button
                                 type="button"
                                 className="btn btn-primary"
-                                disabled={busy}
+                                disabled={busy || archived}
                                 onClick={() => confirmEventParticipation(event.registration!._id)}
                               >
                                 Confirm
@@ -1059,7 +1069,7 @@ export default function ApplicantDashboardPage() {
                             ) : null}
                           </>
                         ) : (
-                          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => registerForEvent(event._id)}>
+                          <button type="button" className="btn btn-primary" disabled={busy || archived} onClick={() => registerForEvent(event._id)}>
                             Register
                           </button>
                         )}
@@ -1097,12 +1107,12 @@ export default function ApplicantDashboardPage() {
               <div className="panel-head">
                 <div>
                   <h3>Submit Interest</h3>
-                  <p>{data.canSubmitInterest
+                  <p>{!archived && data.canSubmitInterest
                     ? "Enter the applicant's number and first name. Maximum 3 interests per event."
-                    : "You'll be able to submit interests after attending our next event."}</p>
+                    : archived ? "Archived participants cannot submit new interests." : "You'll be able to submit interests after attending our next event."}</p>
                 </div>
               </div>
-              {data.canSubmitInterest && [0, 1, 2].map(index => {
+              {!archived && data.canSubmitInterest && [0, 1, 2].map(index => {
                 const submitted = data.interestSubmissions?.[index];
                 return <form key={index} onSubmit={event => submitNumber(event, index)} className="applicant-number-form" aria-label={`Interest ${index + 1}`}>
                   <div className="field">
@@ -1128,7 +1138,7 @@ export default function ApplicantDashboardPage() {
             {error && <p className="notice error">{error}</p>}
 
             <div className="applicant-sections">
-              {profile && <MatchmakingPreferenceControl initial={profile} />}
+              {profile && !archived && <MatchmakingPreferenceControl initial={profile} />}
 
               <section id="profile" className="panel applicant-section">
                 <div className="panel-head">
@@ -1146,6 +1156,8 @@ export default function ApplicantDashboardPage() {
                   </div>
                 ) : (
                   <form onSubmit={saveProfile} className="profile-form">
+                    {archived && <p>Archived profile details are read-only.</p>}
+                    <fieldset disabled={archived} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
                     <div className="profile-grid two">
                       <div className="field">
                         <label htmlFor="ethnicity">Ethnicity *</label>
@@ -1285,6 +1297,7 @@ export default function ApplicantDashboardPage() {
                         {isSavingProfile ? "Saving..." : "Save Profile"}
                       </button>
                     </div>
+                    </fieldset>
                   </form>
                 )}
               </section>
@@ -1294,14 +1307,14 @@ export default function ApplicantDashboardPage() {
                 description="People who expressed interest in you."
                 interests={data.inbound}
                 onAction={async body => { await runAction(body); }}
-                busy={busy}
+                busy={busy || archived}
               />
               <Section
                 title="Outbound Interests"
                 description="Visible interests you sent."
                 interests={data.outbound}
                 onAction={async body => { await runAction(body); }}
-                busy={busy}
+                busy={busy || archived}
               />
               {data.applicant.gender === "female" && (
                 <Section
@@ -1309,7 +1322,7 @@ export default function ApplicantDashboardPage() {
                   description="Interests you documented for yourself and the admin team. These are not visible to men before a match."
                   interests={data.privateDocumented}
                   onAction={async body => { await runAction(body); }}
-                  busy={busy}
+                  busy={busy || archived}
                 />
               )}
             </div>

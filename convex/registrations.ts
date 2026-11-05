@@ -416,6 +416,7 @@ export const create = mutation({
     const phoneCanonical = normalizePhone(args.phone);
     const nameCanonical = normalizeName(args.name);
     const existingProfile = await findExistingParticipantProfile(ctx, args, Boolean(event));
+    if (existingProfile?.archivedAt != null) throw new Error("This profile is archived. Contact the team before registering again.");
     if (existingProfile && !event) {
       throw new Error("An applicant is already registered with this email.");
     }
@@ -552,6 +553,8 @@ export const updateStatus = mutation({
   },
   handler: async (ctx, args) => {
     if (args.status === "waitlisted") throw new Error("Global profile waitlisting is retired; use an event registration");
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Profile is archived");
     await ctx.db.patch(args.id, { status: args.status });
     return args.id;
   },
@@ -564,6 +567,8 @@ export const updateSearchStatus = mutation({
     searchStatusNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Profile is archived");
     await ctx.db.patch(args.id, {
       searchStatus: args.searchStatus,
       searchStatusNote: args.searchStatusNote,
@@ -578,6 +583,8 @@ export const setProfileAccessToken = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Profile is archived");
     await ctx.db.patch(args.id, {
       profileAccessToken: args.token,
       profileCompletionStatus: "in_progress",
@@ -670,6 +677,7 @@ export const updateProfile = mutation({
       throw new Error("Profile not found");
     }
 
+    if (registration.archivedAt != null) throw new Error("Profile is archived");
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
@@ -819,6 +827,8 @@ export const deleteRegistration = mutation({
   // The persisted high-water-mark in settings is intentionally left untouched
   // so the deleted applicant number can never be re-issued to a new registration.
   handler: async (ctx, args) => {
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Archived profile history cannot be deleted through this action");
     await ctx.db.delete(args.id);
     return args.id;
   },

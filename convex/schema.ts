@@ -160,6 +160,9 @@ export default defineSchema({
     source: v.union(v.literal("registration"), v.literal("applicant_update")),
   }).index("by_registrationId_and_updatedAt", ["registrationId", "updatedAt"]),
   registrations: defineTable({
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.union(v.literal("participant"), v.literal("admin"))),
+    archivedByRegistrationId: v.optional(v.id("registrations")),
     // Absent means legacy/unknown, never implicit consent.
     matchmakingPreference: v.optional(matchmakingPreference),
     matchmakingPreferenceUpdatedAt: v.optional(v.number()),

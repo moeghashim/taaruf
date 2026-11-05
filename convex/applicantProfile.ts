@@ -131,6 +131,7 @@ export const getProfile = query({
 
     return {
       registration: {
+        archivedAt: registration.archivedAt ?? null,
         matchmakingPreference: registration.matchmakingPreference ?? null,
         matchmakingPreferenceUpdatedAt: registration.matchmakingPreferenceUpdatedAt ?? null,
         matchmakingPreferenceCopyVersion: registration.matchmakingPreferenceCopyVersion ?? null,
@@ -189,6 +190,7 @@ export const updateProfile = mutation({
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
 
+    if (registration.archivedAt != null) throw new Error("Profile is archived");
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");

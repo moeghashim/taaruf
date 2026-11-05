@@ -15,6 +15,7 @@ function rawErrorMessage(error: unknown) {
 
 function applicantInterestErrorResponse(error: unknown) {
   const message = rawErrorMessage(error);
+  if (/archived|not active/i.test(message)) return NextResponse.json({ success: false, skipped: "ineligible", error: "Matching activity stopped because the connection is no longer eligible." }, { status: 409 });
   for (const safeMessage of ["Applicant details could not be verified", "You can submit a maximum of 3 interests per event", "Interest already submitted for this event"]) {
     if (message.includes(safeMessage)) return NextResponse.json({ error: safeMessage }, { status: 400 });
   }
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        await convex.mutation(api.interests.assertNotificationEligible, { id: result.inboundInterestNotification.interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
         const emailResult = await sendInboundInterestReceivedEmail({
           name: result.inboundInterestNotification.name,
           email: result.inboundInterestNotification.email,
@@ -188,6 +190,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        await convex.mutation(api.interests.assertNotificationEligible, { id: body.interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
         const emailResult = await sendFinalApprovalRequestedEmail({
           name: result.finalApprovalNotification.name,
           email: result.finalApprovalNotification.email,
@@ -230,14 +233,15 @@ export async function POST(request: NextRequest) {
         }
 
         const emailResults = await Promise.all(
-          result.contactSharedNotification.recipients.map(async (recipient) => ({
-            recipient,
+          result.contactSharedNotification.recipients.map(async (recipient) => {
+            await convex.mutation(api.matches.assertNotificationEligible, { id: result.contactSharedNotification!.matchId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+            return { recipient,
             result: await sendContactSharedEmail({
               name: recipient.name,
               email: recipient.email,
               applicantPortalUrl: `${appUrl}/me`,
             }),
-          }))
+          }; })
         );
         const failures = emailResults.filter((item) => !item.result.success);
         const success = failures.length === 0;

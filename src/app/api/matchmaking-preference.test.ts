@@ -49,3 +49,9 @@ it.each(["events_only", "beyond_events"])("forwards %s through general and event
     expect(mocks.mutation).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ matchmakingPreference, eventCode }));
   }
 });
+
+it("archived returning event applicant is rejected before creating checkout", async () => {
+  mocks.query.mockResolvedValue({ archivedAt: 10 });
+  expect((await checkout(request({ ...registration, matchmakingPreference: "events_only", eventCode: "synthetic-event" }))).status).toBe(409);
+  expect(mocks.stripe).not.toHaveBeenCalled();
+});

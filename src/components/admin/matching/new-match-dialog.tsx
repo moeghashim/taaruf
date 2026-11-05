@@ -1,9 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useQuery } from "convex/react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "../../../../convex/_generated/api";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Ico } from "@/components/admin/primitives/icons";
 
@@ -18,7 +16,9 @@ export function NewMatchDialog() {
 }
 
 function NewMatchForm({ onCreated }: { onCreated: () => void }) {
-  const registrations = useQuery(api.registrations.getAll);
+  const [registrations, setRegistrations] = useState<Array<{ _id: string; name: string; gender: string; publicApplicantNumber?: number }>>();
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => { let active = true; fetch("/api/admin/match-candidates", { cache: "no-store" }).then(async r => { if (!r.ok) throw new Error("Unable to load eligible applicants. Refresh and try again."); return r.json(); }).then(rows => { if (active) setRegistrations(rows); }).catch(e => { if (active) setLoadError(String(e.message)); }); return () => { active = false; }; }, []);
   const router = useRouter();
   const [male, setMale] = useState("");
   const [female, setFemale] = useState("");
@@ -26,7 +26,8 @@ function NewMatchForm({ onCreated }: { onCreated: () => void }) {
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const eligible = (registrations ?? []).filter(r => r.status === "approved" && r.profileCompletionStatus === "completed" && (r.searchStatus ?? "active") === "active" && !r.activeMatchId);
+  const eligible = registrations ?? [];
+  if (loadError) return <p role="alert">{loadError}</p>;
   if (registrations === undefined) return <p role="status">Loading applicants…</p>;
   return <form style={{ display: "grid", gap: 16, minWidth: 0 }} onSubmit={async event => {
     event.preventDefault();
