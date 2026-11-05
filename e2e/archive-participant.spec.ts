@@ -26,6 +26,7 @@ for (const width of [1280, 390]) {
     await expect(dialog).toContainText("queued matching communications");
     await expect(dialog).toContainText("waitlist entries will be cancelled");
     await expect(dialog).toContainText("No refund is issued automatically");
+    await expect(dialog).toContainText("Messages already sent or being delivered cannot be recalled");
     await page.screenshot({ path: "/tmp/archive-confirm-" + width + ".png" });
     await page.keyboard.press("Enter");
     await expect(dialog).not.toBeVisible(); expect(writes).toBe(0);

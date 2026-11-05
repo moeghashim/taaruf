@@ -47,7 +47,7 @@ export function ArchiveParticipant({ archivedAt, registrationId, name, onArchive
           <DialogContent onOpenAutoFocus={event => { event.preventDefault(); cancel.current?.focus(); }}>
             <DialogTitle>Archive {name ? name : "your participant profile"}?</DialogTitle>
             <DialogDescription className="text-foreground">This stops active matching, active workflows, and queued matching communications. Upcoming event registrations and waitlist entries will be cancelled.</DialogDescription>
-            <p className="text-sm">Profile history and payment receipts are preserved. No refund is issued automatically. Already-sent messages and shared contacts cannot be recalled. You cannot reactivate from this screen.</p>
+            <p className="text-sm">Profile history and payment receipts are preserved. No refund is issued automatically. Messages already sent or being delivered cannot be recalled. Previously shared contacts cannot be recalled. You cannot reactivate from this screen.</p>
             {error && <p role="alert" className="text-sm">{error}</p>}
             <div className="flex flex-wrap justify-end gap-3">
               <button ref={cancel} type="button" className="rounded-md border px-4 py-2 text-sm focus-visible:outline-2" disabled={busy} onClick={() => setOpen(false)}>Cancel</button>
