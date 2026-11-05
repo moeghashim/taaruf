@@ -6,7 +6,7 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 
 const secret = "synthetic-new-match-secret";
-beforeEach(() => vi.stubEnv("ADMIN_PASSWORD", secret));
+beforeEach(() => vi.stubEnv("ATTENDANCE_ADMIN_SECRET", secret));
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 async function fixture() {
   const t = convexTest(schema, modules);
@@ -48,7 +48,7 @@ test.each(["", "wrong"])("rejects invalid admin secret %j without writes", async
 });
 test("fails closed when server password is absent", async () => {
   const { t, args } = await fixture();
-  vi.stubEnv("ADMIN_PASSWORD", "");
+  vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "");
   await expect(t.mutation(api.matches.create, args)).rejects.toThrow("Unauthorized");
   expect(await t.run(ctx => ctx.db.query("matches").collect())).toEqual([]);
 });
@@ -128,6 +128,18 @@ test("a new admin suggestion cannot bypass the linked-interest consent gate", as
   const { t, args } = await fixture();
   const id = await t.mutation(api.matches.create, args);
   const before = await snapshot(t);
+  vi.stubEnv("ADMIN_PASSWORD", secret);
   await expect(t.mutation(api.matches.updateStatus, { id, status: "contact_shared", adminSecret: secret })).rejects.toThrow("Active linked interest required");
   expect(await snapshot(t)).toEqual(before);
+});
+
+test("creation uses service credential with no browser password configured on backend", async () => {
+  const { t, args } = await fixture();
+  vi.stubEnv("ADMIN_PASSWORD", "");
+  expect(await t.mutation(api.matches.create, args)).toBeTruthy();
+});
+test("browser password is not accepted as the service credential", async () => {
+  const { t, args } = await fixture();
+  vi.stubEnv("ADMIN_PASSWORD", "different-browser-password");
+  await expect(t.mutation(api.matches.create, { ...args, adminSecret: "different-browser-password" })).rejects.toThrow("Unauthorized");
 });

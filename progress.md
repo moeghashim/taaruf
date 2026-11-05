@@ -618,3 +618,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Verified New match against real loopback Convex + Next + desktop/mobile browsers; fixed browser-facing origin validation and proved live backend source parity.
 
 - Addressed independent auth review and added standalone-suggestion consent regression.
+
+## 2026-11-04
+- Correct New Match service credential mismatch; prove actual submit through both side-by-side requirements with isolated production-like credentials.

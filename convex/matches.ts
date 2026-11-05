@@ -34,7 +34,7 @@ const interestFlowStatuses = [
 export const create = mutation({
   args: { adminSecret: v.string(), maleRegistrationId: v.id("registrations"), femaleRegistrationId: v.id("registrations"), adminNotes: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    if (!process.env.ADMIN_PASSWORD || args.adminSecret !== process.env.ADMIN_PASSWORD) throw new Error("Unauthorized");
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     if (args.maleRegistrationId === args.femaleRegistrationId) throw new ConvexError("Select two different applicants.");
     const male = await ctx.db.get(args.maleRegistrationId);
     const female = await ctx.db.get(args.femaleRegistrationId);
