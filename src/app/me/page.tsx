@@ -1,6 +1,8 @@
 "use client";
 
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
+import { MatchmakingPreferenceControl } from "@/components/matchmaking-preference";
+import type { MatchmakingPreference } from "@/lib/matchmaking-preference";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -109,6 +111,8 @@ type ProfileImagePayload = {
 };
 
 type ProfileData = {
+  matchmakingPreference?: MatchmakingPreference | null;
+  matchmakingPreferenceUpdatedAt?: number | null;
   name: string;
   gender: "male" | "female";
   email: string;
@@ -930,6 +934,7 @@ export default function ApplicantDashboardPage() {
                 <span>Outbound</span>
                 <span className="count">{data.outbound.length}</span>
               </a>
+              <a className="nav-item" href="#matchmaking-preference" onClick={() => setSideOpen(false)}><span className="icon">{Ico.heart}</span><span>Matchmaking preference</span></a>
               <a className="nav-item" href="#profile" onClick={() => setSideOpen(false)}>
                 <span className="icon">{Ico.people}</span>
                 <span>Profile</span>
@@ -1123,6 +1128,8 @@ export default function ApplicantDashboardPage() {
             {error && <p className="notice error">{error}</p>}
 
             <div className="applicant-sections">
+              {profile && <MatchmakingPreferenceControl initial={profile} />}
+
               <section id="profile" className="panel applicant-section">
                 <div className="panel-head">
                   <div>

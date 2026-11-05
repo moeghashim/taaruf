@@ -1,3 +1,4 @@
+import { matchmakingPreference, MATCHMAKING_PREFERENCE_COPY_VERSION } from "./matchmakingPreference";
 import { registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
 // INVARIANT (see AGENTS.md): `registrations.publicApplicantNumber` is the
 // permanent public identifier. Once assigned it is never patched and never
@@ -375,6 +376,7 @@ function legacyLookingForText(args: {
 
 export const create = mutation({
   args: {
+    matchmakingPreference,
     name: v.string(),
     age: v.number(),
     gender: v.union(v.literal("male"), v.literal("female")),
@@ -431,6 +433,9 @@ export const create = mutation({
     }
 
     const registrationId = await ctx.db.insert("registrations", {
+      matchmakingPreference: args.matchmakingPreference,
+      matchmakingPreferenceUpdatedAt: now,
+      matchmakingPreferenceCopyVersion: MATCHMAKING_PREFERENCE_COPY_VERSION,
       applicantNumber: await nextApplicantNumber(ctx),
       publicApplicantNumber: await nextPublicApplicantNumber(ctx),
       name: args.name.trim(),
@@ -467,6 +472,15 @@ export const create = mutation({
       photoSharingPermission: args.photoSharingPermission,
       interestSubmission: args.interestSubmission?.trim() || undefined,
       interestSubmissionNumbers: normalizeInterestSubmissionNumbers(args.interestSubmissionNumbers),
+    });
+
+    await ctx.db.insert("matchmakingPreferenceHistory", {
+      registrationId,
+      previousPreference: null,
+      matchmakingPreference: args.matchmakingPreference,
+      updatedAt: now,
+      copyVersion: MATCHMAKING_PREFERENCE_COPY_VERSION,
+      source: "registration",
     });
 
     if (event) {
@@ -629,6 +643,7 @@ export const getByProfileAccessToken = query({
   },
 });
 
+// Deliberately excludes matchmaking consent: stale profile forms cannot restore it.
 export const updateProfile = mutation({
   args: {
     token: v.string(),
