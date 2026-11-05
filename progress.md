@@ -618,3 +618,7 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Verified New match against real loopback Convex + Next + desktop/mobile browsers; fixed browser-facing origin validation and proved live backend source parity.
 
 - Addressed independent auth review and added standalone-suggestion consent regression.
+## 2026-11-04
+- Audited matching provenance and local PR48 without merging; added docs/matchmaking-scope-audit.md documenting scope/product release blockers and convex/matchingScope.test.ts preserving event eligibility and non-destructive preference revocation. Matching suites: 28/28; scoped lint and typecheck pass. No live reads or deployment. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Implemented explicit registration preference and session-owned withdrawal/re-opt-in with history and stale-write guard; repaired consent authorization prerequisites after independent review. 171 tests, typecheck, lint (7 existing warnings), build, desktop/mobile synthetic and real loopback integration pass. Production blocked on matching scope and legacy session remediation; no live changes. <!-- project: github.com/moeghashim/clawscrewskill -->

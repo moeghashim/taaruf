@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isMatchmakingPreference } from "@/lib/matchmaking-preference";
 import { getStripe } from "@/lib/stripe";
 import { api } from "../../../../convex/_generated/api";
 
@@ -23,9 +24,14 @@ export async function POST(request: NextRequest) {
       spouseRequirement3,
       shareableBio,
       photoSharingPermission,
+      matchmakingPreference,
       imageStorageIds,
       eventCode,
     } = body;
+
+    if (!isMatchmakingPreference(matchmakingPreference)) {
+      return NextResponse.json({ error: "Please choose a matchmaking preference." }, { status: 400 });
+    }
 
     // Validate required fields
     if (
@@ -110,6 +116,7 @@ export async function POST(request: NextRequest) {
       spouseRequirement3,
       shareableBio,
       photoSharingPermission,
+      matchmakingPreference,
       describeYourself: shareableBio,
       lookingFor: [spouseRequirement1, spouseRequirement2, spouseRequirement3].join(", "),
       stripeSessionId: session.id,

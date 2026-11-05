@@ -1,5 +1,6 @@
 "use client";
 
+import { matchmakingPreferenceLabel } from "@/lib/matchmaking-preference";
 import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -108,6 +109,8 @@ export function ProfileDetail({
     { label: "Occupation", value: profile.job || "—" },
     { label: "Email", value: profile.email },
     { label: "Phone", value: profile.phone || "—" },
+    { label: "Matchmaking preference", value: matchmakingPreferenceLabel(profile.matchmakingPreference) },
+    { label: "Preference updated", value: formatDate(profile.matchmakingPreferenceUpdatedAt) },
     { label: "Registered", value: formatDate(profile._creationTime) },
   ];
 

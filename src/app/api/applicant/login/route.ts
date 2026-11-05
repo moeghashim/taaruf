@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     const convex = getConvexClient();
     const registration = await convex.mutation(api.applicantAuth.createLoginToken, {
       email,
+      adminSecret: process.env.ADMIN_PASSWORD || "",
       tokenHash: hashToken(token),
     });
 

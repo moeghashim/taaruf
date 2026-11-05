@@ -15,6 +15,7 @@ const profileFields = {
   photoSharingPermission: "ask_me_first" as const,
 };
 const registrationFields = {
+  matchmakingPreference: "events_only" as const,
   name: "Test Applicant", age: 28, maritalStatus: "single",
   education: "College", job: "Engineer", phone: "555-0100",
   email: "test@example.com", profileAccessToken: "test-profile-token",
