@@ -79,3 +79,31 @@ test("queue promotion skips archived counterpart but advances next eligible inte
   expect((await t.run(ctx => ctx.db.get(interest)))?.status).toBe("queued");
   expect((await t.run(ctx => ctx.db.get(next)))?.status).toBe("active");
 });
+
+test("suppressed delivery recorders clear optimistic claims even after archive", async () => {
+  const { t, male, interest, flow, match } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.patch(interest, { status: "declined", inboundInterestNotificationSentAt: 1 });
+    await ctx.db.patch(flow, { finalApprovalNotificationSentAt: 1 });
+    await ctx.db.patch(match, { contactSharedNotificationSentAt: 1 });
+  });
+  expect((await t.mutation(api.interests.claimDeclineNotification, { id: interest })).claimed).toBe(true);
+  await t.run(ctx => ctx.db.patch(male, { archivedAt: 1 }));
+  const error = "Participant is archived";
+  await t.mutation(api.interests.recordDeclineNotificationFailure, { id: interest, error });
+  await t.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { interestId: interest, error });
+  await t.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, { interestId: interest, error });
+  await t.mutation(api.matches.markContactSharedNotificationSent, { id: match, sent: false, error });
+  const rows = await t.run(async ctx => ({ interest: (await ctx.db.get(interest))!, flow: (await ctx.db.get(flow))!, match: (await ctx.db.get(match))! }));
+  expect(rows.interest.declineNotificationSentAt).toBeUndefined();
+  expect(rows.interest.inboundInterestNotificationSentAt).toBeUndefined();
+  expect(rows.flow.finalApprovalNotificationSentAt).toBeUndefined();
+  expect(rows.match.contactSharedNotificationSentAt).toBeUndefined();
+  expect(rows.interest.declineNotificationError).toBe(error);
+  expect(rows.interest.inboundInterestNotificationError).toBe(error);
+  expect(rows.flow.finalApprovalNotificationError).toBe(error);
+  expect(rows.match.contactSharedNotificationError).toBe(error);
+  await expect(t.mutation(api.interests.claimDeclineNotification, { id: interest })).rejects.toThrow("Archived");
+  await t.run(ctx => ctx.db.patch(male, { archivedAt: undefined }));
+  expect((await t.mutation(api.interests.claimDeclineNotification, { id: interest })).claimed).toBe(true);
+});

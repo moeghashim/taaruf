@@ -122,7 +122,16 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        await convex.mutation(api.interests.assertNotificationEligible, { id: result.inboundInterestNotification.interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+        try {
+          await convex.mutation(api.interests.assertNotificationEligible, { id: result.inboundInterestNotification.interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+        } catch (error) {
+          // The claim is optimistic: suppression must release its sent marker.
+          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, {
+            interestId: result.inboundInterestNotification.interestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
         const emailResult = await sendInboundInterestReceivedEmail({
           name: result.inboundInterestNotification.name,
           email: result.inboundInterestNotification.email,
@@ -190,7 +199,16 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        await convex.mutation(api.interests.assertNotificationEligible, { id: body.interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+        try {
+          await convex.mutation(api.interests.assertNotificationEligible, { id: body.interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+        } catch (error) {
+          // The claim is optimistic: suppression must release its sent marker.
+          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, {
+            interestId: body.interestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
         const emailResult = await sendFinalApprovalRequestedEmail({
           name: result.finalApprovalNotification.name,
           email: result.finalApprovalNotification.email,
@@ -234,7 +252,12 @@ export async function POST(request: NextRequest) {
 
         const emailResults = await Promise.all(
           result.contactSharedNotification.recipients.map(async (recipient) => {
-            await convex.mutation(api.matches.assertNotificationEligible, { id: result.contactSharedNotification!.matchId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+            try {
+              await convex.mutation(api.matches.assertNotificationEligible, { id: result.contactSharedNotification!.matchId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+            } catch (error) {
+              // Settle every recipient before recording the aggregate failure.
+              return { recipient, result: { success: false, error: rawErrorMessage(error) } };
+            }
             return { recipient,
             result: await sendContactSharedEmail({
               name: recipient.name,

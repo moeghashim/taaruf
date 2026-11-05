@@ -47,7 +47,16 @@ export async function POST(request: NextRequest) {
       throw new Error("Decline notification claim did not include requester contact details");
     }
 
-    await convexClient.mutation(api.interests.assertNotificationEligible, { id: interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+    try {
+      await convexClient.mutation(api.interests.assertNotificationEligible, { id: interestId, adminSecret: process.env.ADMIN_PASSWORD || "" });
+    } catch (error) {
+      // The claim is optimistic: suppression must release its sent marker.
+      await convexClient.mutation(api.interests.recordDeclineNotificationFailure, {
+        id: interestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
     const emailResult = await sendInterestClosedEmail({
       requesterEmail: claim.requesterEmail,
       requesterName: claim.requesterName,
