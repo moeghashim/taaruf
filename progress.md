@@ -600,3 +600,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-10-20
 - PR #39 preview build: declared and locked @playwright/test in package.json/package-lock.json; missing dependency was masked by shared local node_modules. Updated review documentation. 77 tests and isolated-URL production build pass; no backend/config changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-06
+- Added manual event interest on/off selection, authenticated admin bridge, atomic single-active-event enforcement and server-side submission gating; preserved eligibility and history. Added regression tests and helper copy. No data migration or live deployment.

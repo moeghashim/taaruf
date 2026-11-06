@@ -22,7 +22,7 @@ async function createRegistration(
       title: "1Plus1 Match Event - Apr26",
       eventCode: "apr26",
       eventMonth: "2026-04",
-      series: "1plus1_match",
+      series: "1plus1_match", interestSubmissionsEnabled: true,
       location: "ROIC",
       startsAt: now - 60 * 60 * 1000,
       endsAt: now - 30 * 60 * 1000,
