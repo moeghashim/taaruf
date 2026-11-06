@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "evidence": [
+    "Events opened detail has accessible ON switch and exact helper",
+    "desktop-admin-on no overflow {\"width\":1440,\"scroll\":1440}",
+    "Second ON conflict visibly instructs turn current OFF first",
+    "desktop-on-conflict no overflow {\"width\":1440,\"scroll\":1440}",
+    "Future ON event eligible despite expired historical close time",
+    "desktop-applicant-eligible no overflow {\"width\":1440,\"scroll\":1440}",
+    "Undo attendance removes applicant interest forms without reload",
+    "Admin attended reveals applicant interest forms without reload",
+    "OFF removes applicant interest forms without reload",
+    "desktop-applicant-off no overflow {\"width\":1440,\"scroll\":1440}",
+    "No applicant navigation/reload throughout live changes",
+    "Real stale browser form rejected HTTP 409 with actionable visible error",
+    "desktop-stale-rejected no overflow {\"width\":1440,\"scroll\":1440}",
+    "Browser submit succeeds to recipient 910 with no roster rows",
+    "desktop-submitted no overflow {\"width\":1440,\"scroll\":1440}",
+    "mobile-admin-on no overflow {\"width\":390,\"scroll\":390}",
+    "mobile-applicant-on no overflow {\"width\":390,\"scroll\":390}",
+    "mobile-applicant-off no overflow {\"width\":390,\"scroll\":390}",
+    "Mobile live OFF/ON tested in real browser",
+    "Zero event email records; app URL/email credentials absent"
+  ],
+  "blocked": [],
+  "applicantNavigations": 1
+}
