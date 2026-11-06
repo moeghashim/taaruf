@@ -624,3 +624,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-06
 - Integrate scoped PR55 on live 784bb73 with reactive eligibility and stale/cancellation safety; provenance recorded in docs/pr55-scoped-release.md. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-06
+- Added explicit authenticated per-submission test reset, retained audit and quota indexes, stale-action/share guards, safe deletion feedback and backend/bridge regressions; preview-only, no live data reset. <!-- project: github.com/moeghashim/clawscrewskill -->

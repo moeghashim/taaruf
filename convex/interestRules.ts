@@ -87,19 +87,14 @@ async function assertNoDuplicateOpenInterest(
   toRegistrationId: Id<"registrations">,
   eventId: Id<"events">
 ) {
-  const existingInterests = await ctx.db
+  const existingInterests = ctx.db
     .query("interests")
     .withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", (q) =>
       q.eq("fromRegistrationId", fromRegistrationId).eq("toRegistrationId", toRegistrationId).eq("eventId", eventId)
-    )
-    .take(20);
+    );
 
-  const duplicateOpenInterest = existingInterests.find((interest) =>
-    openInterestStatusSet.has(interest.status)
-  );
-
-  if (duplicateOpenInterest) {
-    throw new Error("An open interest already exists for this applicant pair at this event");
+  for await (const interest of existingInterests) {
+    if (openInterestStatusSet.has(interest.status)) throw new Error("An open interest already exists for this applicant pair at this event");
   }
 }
 
@@ -169,14 +164,16 @@ async function findReciprocalOpenInterest(
   toRegistrationId: Id<"registrations">,
   eventId: Id<"events">
 ) {
-  const reciprocalInterests = await ctx.db
+  const reciprocalInterests = ctx.db
     .query("interests")
     .withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", (q) =>
       q.eq("fromRegistrationId", fromRegistrationId).eq("toRegistrationId", toRegistrationId).eq("eventId", eventId)
-    )
-    .take(20);
+    );
 
-  return reciprocalInterests.find((interest) => openInterestStatusSet.has(interest.status)) ?? null;
+  for await (const interest of reciprocalInterests) {
+    if (openInterestStatusSet.has(interest.status)) return interest;
+  }
+  return null;
 }
 
 export async function createMatchFromInterest(
@@ -184,6 +181,7 @@ export async function createMatchFromInterest(
   interest: Doc<"interests">,
   adminNotes?: string
 ) {
+  if (interest.testReset) throw new Error("Reset test interest is read-only");
   if (interest.matchId) {
     throw new Error("Interest already linked to a match");
   }
@@ -325,7 +323,7 @@ export async function createInterestWithRules(
   });
 
   const interest = await ctx.db.get(interestId);
-  if (!interest) {
+  if (!interest || interest.testReset) {
     throw new Error("Interest not found after creation");
   }
   await createInitialInterestFlow(ctx, interest);
@@ -371,7 +369,7 @@ export async function createApplicantInterestWithRules(
   const target = await getRegistrationOrThrow(ctx, args.toRegistrationId);
   if (target.status !== "approved") throw new Error("Applicant details could not be verified");
   const submissions = await ctx.db.query("interests")
-    .withIndex("by_fromRegistrationId_and_eventId_and_source", q => q.eq("fromRegistrationId", args.fromRegistrationId).eq("eventId", event._id).eq("source", "platform_submission")).take(3);
+    .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", args.fromRegistrationId).eq("eventId", event._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3);
   if (submissions.some(row => row.toRegistrationId === args.toRegistrationId)) throw new Error("Interest already submitted for this event");
   if (submissions.length >= 3) {
     throw new Error("You can submit a maximum of 3 interests per event");
@@ -390,7 +388,7 @@ export async function activateInterestAndQueueCompetitors(
   interestId: Id<"interests">
 ) {
   const interest = await ctx.db.get(interestId);
-  if (!interest) {
+  if (!interest || interest.testReset) {
     throw new Error("Interest not found");
   }
 

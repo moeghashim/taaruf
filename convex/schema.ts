@@ -224,6 +224,7 @@ export default defineSchema({
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
   interests: defineTable({
+    testReset: v.optional(v.object({ at: v.number(), reason: v.string(), actor: v.literal("admin") })),
     fromRegistrationId: v.id("registrations"),
     toRegistrationId: v.id("registrations"),
     eventId: v.id("events"),
@@ -244,6 +245,9 @@ export default defineSchema({
     .index("by_fromRegistrationId", ["fromRegistrationId"])
     .index("by_toRegistrationId", ["toRegistrationId"])
     .index("by_fromRegistrationId_and_eventId_and_source", ["fromRegistrationId", "eventId", "source"])
+    .index("by_fromRegistrationId_and_testReset", ["fromRegistrationId", "testReset"])
+    .index("by_toRegistrationId_and_testReset", ["toRegistrationId", "testReset"])
+    .index("by_submission_quota", ["fromRegistrationId", "eventId", "source", "testReset"])
     .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
     .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])
     .index("by_fromRegistrationId_and_toRegistrationId_and_eventId", ["fromRegistrationId", "toRegistrationId", "eventId"])

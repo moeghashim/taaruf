@@ -16,6 +16,7 @@ import type * as eventAttendees from "../eventAttendees.js";
 import type * as eventRules from "../eventRules.js";
 import type * as events from "../events.js";
 import type * as interestRules from "../interestRules.js";
+import type * as interestTestReset from "../interestTestReset.js";
 import type * as interests from "../interests.js";
 import type * as matches from "../matches.js";
 import type * as migrations_profileCompletion from "../migrations/profileCompletion.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   events: typeof events;
   interestRules: typeof interestRules;
   interests: typeof interests;
+  interestTestReset: typeof interestTestReset;
   matches: typeof matches;
   "migrations/profileCompletion": typeof migrations_profileCompletion;
   "migrations/publicApplicantNumbers": typeof migrations_publicApplicantNumbers;

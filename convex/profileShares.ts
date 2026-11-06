@@ -32,6 +32,10 @@ export const create = mutation({
     matchId: v.optional(v.id("matches")),
   },
   handler: async (ctx, args) => {
+    if (args.interestId) {
+      const interest = await ctx.db.get(args.interestId);
+      if (!interest || interest.testReset) throw new Error("Interest is unavailable for sharing");
+    }
     const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
     assertProfileCompleted(ownerRegistration, "Profile owner");
     if (args.includeImages && ownerRegistration.photoSharingPermission !== "yes") {
@@ -65,6 +69,7 @@ export const getByShareToken = query({
       .first();
 
     if (!share) return null;
+    if (share.interestId && (await ctx.db.get(share.interestId))?.testReset) return null;
 
     const owner = await ctx.db.get(share.ownerRegistrationId);
     const recipient = await ctx.db.get(share.recipientRegistrationId);
