@@ -1,0 +1,20 @@
+PASS Events opened detail has accessible ON switch and exact helper
+PASS desktop-admin-on no overflow {"width":1440,"scroll":1440}
+PASS Second ON conflict visibly instructs turn current OFF first
+PASS desktop-on-conflict no overflow {"width":1440,"scroll":1440}
+PASS Future ON event eligible despite expired historical close time
+PASS desktop-applicant-eligible no overflow {"width":1440,"scroll":1440}
+PASS Undo attendance removes applicant interest forms without reload
+PASS Admin attended reveals applicant interest forms without reload
+PASS OFF removes applicant interest forms without reload
+PASS desktop-applicant-off no overflow {"width":1440,"scroll":1440}
+PASS No applicant navigation/reload throughout live changes
+PASS Real stale browser form rejected HTTP 409 with actionable visible error
+PASS desktop-stale-rejected no overflow {"width":1440,"scroll":1440}
+PASS Browser submit succeeds to recipient 910 with no roster rows
+PASS desktop-submitted no overflow {"width":1440,"scroll":1440}
+PASS mobile-admin-on no overflow {"width":390,"scroll":390}
+PASS mobile-applicant-on no overflow {"width":390,"scroll":390}
+PASS mobile-applicant-off no overflow {"width":390,"scroll":390}
+PASS Mobile live OFF/ON tested in real browser
+PASS Zero event email records; app URL/email credentials absent

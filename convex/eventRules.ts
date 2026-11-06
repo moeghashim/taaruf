@@ -151,21 +151,22 @@ export async function ensureEventRegistration(
   });
 }
 
-// Real Talk and other attendance-only series never supersede matching events.
-export async function latestMatchingEvent(ctx: ReadCtx, now = Date.now()) {
+// Explicit admin selection only. Dates and historical close windows never select or close it.
+export async function selectedInterestEvent(ctx: ReadCtx) {
   const events = await ctx.db.query("events")
-    .withIndex("by_series_and_startsAt", q => q.eq("series", DEFAULT_EVENT_SERIES).lte("startsAt", now))
-    .order("desc").take(100);
-  return events.filter(event => (event.status !== "cancelled" && event.status !== "draft") && event.eventCode !== MANUAL_ADMIN_EVENT_CODE)
-    .sort((a, b) => b.endsAt - a.endsAt)[0] ?? null;
+    .withIndex("by_interestSubmissionsEnabled", q => q.eq("interestSubmissionsEnabled", true)).take(2);
+  if (events.length !== 1) return null; // Fail closed even if invalid data bypassed the mutation.
+  const event = events[0];
+  return event.series === DEFAULT_EVENT_SERIES && event.eventCode !== MANUAL_ADMIN_EVENT_CODE &&
+    event.status !== "cancelled" && event.status !== "draft" ? event : null;
 }
 export async function hasApprovedEventAttendance(ctx: ReadCtx, eventId: Id<"events">, registrationId: Id<"registrations">) {
   const registration = await ctx.db.query("eventRegistrations")
     .withIndex("by_eventId_and_registrationId", q => q.eq("eventId", eventId).eq("registrationId", registrationId)).unique();
-  return registration?.registrationStatus === "approved" && registration.attendanceStatus === "attended";
+  return registration?.registrationStatus === "approved" && registration.confirmationStatus === "confirmed" && registration.attendanceStatus === "attended";
 }
-export async function findEligibleInterestSubmissionEvent(ctx: ReadCtx, registrationId: Id<"registrations">, now = Date.now()) {
-  const event = await latestMatchingEvent(ctx, now);
+export async function findEligibleInterestSubmissionEvent(ctx: ReadCtx, registrationId: Id<"registrations">) {
+  const event = await selectedInterestEvent(ctx);
   if (!event || !await hasApprovedEventAttendance(ctx, event._id, registrationId)) return null;
   return event;
 }

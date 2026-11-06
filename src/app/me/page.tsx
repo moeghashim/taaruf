@@ -602,6 +602,8 @@ export default function ApplicantDashboardPage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+  const hasDashboard = Boolean(data);
   const [sideOpen, setSideOpen] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(false);
 
@@ -626,6 +628,50 @@ export default function ApplicantDashboardPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!hasDashboard || busy) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let active: AbortController | null = null;
+    async function refresh() {
+      if (stopped || active) return;
+      clearTimeout(timer);
+      if (document.hidden) { timer = setTimeout(refresh, 3000); return; }
+      active = new AbortController();
+      try {
+        const response = await fetch("/api/applicant/interest-eligibility", { cache: "no-store", signal: active.signal });
+        if (stopped) return;
+        if (response.status === 401) { router.replace("/login"); return; }
+        if (!response.ok) throw new Error("Availability refresh failed");
+        const eligibility = await response.json();
+        if (stopped) return;
+        setData(current => current ? { ...current, ...eligibility } : current);
+        setEligibilityError(null);
+      } catch {
+        if (!stopped) setEligibilityError("Unable to refresh interest availability. Submitting is paused while we reconnect.");
+      } finally {
+        active = null;
+        if (!stopped) timer = setTimeout(refresh, 3000);
+      }
+    }
+    void refresh();
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      active?.abort();
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // Poll only eligibility; do not refetch the profile or write touchSession.
+  }, [hasDashboard, busy, router]);
+
+  useEffect(() => {
+    setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "" })));
+  }, [data?.interestSubmissionEventId]);
 
   const loadProfile = useCallback(async () => {
     setIsProfileLoading(true);
@@ -686,7 +732,10 @@ export default function ApplicantDashboardPage() {
         body: JSON.stringify(body),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Action failed");
+      if (!response.ok) {
+        if (response.status === 409) await load();
+        throw new Error(payload.error || "Action failed");
+      }
       setMessage(typeof payload.message === "string" ? payload.message : "Updated.");
       await Promise.all([load(), loadEvents()]);
       return true;
@@ -699,9 +748,9 @@ export default function ApplicantDashboardPage() {
 
   async function submitNumber(event: React.FormEvent<HTMLFormElement>, index: number) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || eligibilityError || !data?.canSubmitInterest || !data.interestSubmissionEventId) return;
     const row = interestRows[index];
-    if (await runAction({ action: "submit_number", applicantNumber: Number(row.number), applicantName: row.name })) {
+    if (await runAction({ action: "submit_number", expectedEventId: data.interestSubmissionEventId, applicantNumber: Number(row.number), applicantName: row.name })) {
       setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "" })));
     }
   }
@@ -1092,27 +1141,28 @@ export default function ApplicantDashboardPage() {
               <div className="panel-head">
                 <div>
                   <h3>Submit Interest</h3>
-                  <p>{data.canSubmitInterest
+                  <p aria-live="polite">{data.canSubmitInterest
                     ? "Enter the applicant's number and first name. Maximum 3 interests per event."
-                    : "You'll be able to submit interests after attending our next event."}</p>
+                    : "Interest submissions are closed. Your event must have submissions turned ON, and you must be approved, confirmed, and checked in."}</p>
                 </div>
               </div>
+              {eligibilityError && <p role="status" className="notice error">{eligibilityError}</p>}
               {data.canSubmitInterest && [0, 1, 2].map(index => {
                 const submitted = data.interestSubmissions?.[index];
                 return <form key={index} onSubmit={event => submitNumber(event, index)} className="applicant-number-form" aria-label={`Interest ${index + 1}`}>
                   <div className="field">
                     <label htmlFor={`interest-number-${index}`}>Interest {index + 1} · Applicant #</label>
-                    <input id={`interest-number-${index}`} type="number" min="1" step="1" inputMode="numeric" required disabled={busy || Boolean(submitted)}
+                    <input id={`interest-number-${index}`} type="number" min="1" step="1" inputMode="numeric" required disabled={busy || Boolean(eligibilityError) || Boolean(submitted)}
                       placeholder={submitted ? "Submitted" : "Applicant #"} value={submitted ? "" : interestRows[index].number}
                       onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, number: event.target.value } : row))} />
                   </div>
                   <div className="field">
                     <label htmlFor={`interest-name-${index}`}>First name</label>
-                    <input id={`interest-name-${index}`} required maxLength={200} disabled={busy || Boolean(submitted)} placeholder="First name"
+                    <input id={`interest-name-${index}`} required maxLength={200} disabled={busy || Boolean(eligibilityError) || Boolean(submitted)} placeholder="First name"
                       value={submitted ? "" : interestRows[index].name}
                       onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, name: event.target.value } : row))} />
                   </div>
-                  <button type="submit" className="btn btn-primary" disabled={busy || Boolean(submitted)}>
+                  <button type="submit" className="btn btn-primary" disabled={busy || Boolean(eligibilityError) || Boolean(submitted)}>
                     {submitted ? "Submitted" : "Submit interest"}
                   </button>
                 </form>;

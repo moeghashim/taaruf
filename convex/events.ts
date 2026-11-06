@@ -1,6 +1,6 @@
 import { requireEventAdmin, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
@@ -353,7 +353,7 @@ export const getDetail = query({
       .withIndex("by_eventId_and_kind", (q) => q.eq("eventId", args.eventId))
       .first();
     const attendee = await ctx.db.query("eventAttendees").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", args.eventId)).first();
-    const deleteBlockedReason = attendee ? "Cannot delete an event with attendance history." : rows.length
+    const deleteBlockedReason = event.interestSubmissionsEnabled ? "Turn off interest submissions before deleting this event." : attendee ? "Cannot delete an event with attendance history." : rows.length
       ? "Cannot delete an event after someone has signed up."
       : linkedInterest
         ? "Cannot delete an event linked to interest history."
@@ -472,6 +472,30 @@ export const create = mutation({
   },
 });
 
+export const setInterestSubmissionsEnabled = mutation({
+  args: { adminSecret: v.string(), eventId: v.id("events"), enabled: v.boolean(), actor: v.string() },
+  handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
+    if (!args.actor.trim()) throw new ConvexError("Admin audit actor is required");
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+    if (args.enabled) {
+      if (event.series !== DEFAULT_EVENT_SERIES || event.eventCode === "manual-admin" || event.status === "draft" || event.status === "cancelled") {
+        throw new ConvexError("Interest submissions can only be enabled for scheduled or completed matching events");
+      }
+      // The empty/nonempty index range participates in OCC: two ON transactions cannot both commit.
+      const enabled = await ctx.db.query("events").withIndex("by_interestSubmissionsEnabled", q => q.eq("interestSubmissionsEnabled", true)).take(2);
+      const other = enabled.find(row => row._id !== event._id);
+      if (other) throw new ConvexError('Turn off interest submissions for "' + other.title + '" first. Only one event can be ON.');
+    }
+    if (Boolean(event.interestSubmissionsEnabled) === args.enabled) return event._id;
+    const now = Date.now();
+    await ctx.db.patch(event._id, { interestSubmissionsEnabled: args.enabled, interestSubmissionsChangedAt: now, interestSubmissionsChangedBy: args.actor.trim(), updatedAt: now });
+    await ctx.db.insert("interestSubmissionToggleAudit", { eventId: event._id, enabled: args.enabled, actor: args.actor.trim(), createdAt: now });
+    return event._id;
+  },
+});
+
 export const update = mutation({
   args: {
     adminSecret: v.string(),
@@ -493,6 +517,9 @@ export const update = mutation({
     requireEventAdmin(args.adminSecret);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
+    if (event.interestSubmissionsEnabled && (args.status === "cancelled" || args.status === "draft")) {
+      throw new ConvexError("Turn off interest submissions before cancelling this event or changing it to draft.");
+    }
     const startsAt = args.startsAt ?? event.startsAt;
     const endsAt = args.endsAt ?? event.endsAt;
     assertValidEventTimes(startsAt, endsAt);
@@ -535,6 +562,7 @@ export const deleteEvent = mutation({
     if (!event) throw new Error("Event not found");
 
     const attendee = await ctx.db.query("eventAttendees").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", args.eventId)).first();
+    if (event.interestSubmissionsEnabled) throw new ConvexError("Turn off interest submissions before deleting this event.");
     if (attendee) throw new Error("Cannot delete an event with attendance history.");
     const existingRegistration = await ctx.db
       .query("eventRegistrations")

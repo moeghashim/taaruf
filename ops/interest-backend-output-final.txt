@@ -1,0 +1,37 @@
+PASS independent-client simultaneous ON wave 1 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 2 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 3 [ 'rejected', 'fulfilled' ]
+PASS independent-client simultaneous ON wave 4 [ 'rejected', 'fulfilled' ]
+PASS independent-client simultaneous ON wave 5 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 6 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 7 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 8 [ 'rejected', 'fulfilled' ]
+PASS independent-client simultaneous ON wave 9 [ 'rejected', 'fulfilled' ]
+PASS independent-client simultaneous ON wave 10 [ 'rejected', 'fulfilled' ]
+PASS independent-client simultaneous ON wave 11 [ 'rejected', 'fulfilled' ]
+PASS independent-client simultaneous ON wave 12 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 13 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 14 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 15 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 16 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 17 [ 'rejected', 'fulfilled' ]
+PASS independent-client simultaneous ON wave 18 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 19 [ 'fulfilled', 'rejected' ]
+PASS independent-client simultaneous ON wave 20 [ 'fulfilled', 'rejected' ]
+PASS repeat ON idempotent and audit unchanged
+PASS future event + expired historical window still ON
+PASS rejection: missing approval
+PASS rejection: missing confirmation
+PASS rejection: missing attendance
+PASS rejection: cancelled confirmation
+PASS rejection: attendance only wrong event
+PASS rejection: missing roster
+PASS rejection: wrong selected expectedEventId
+PASS approved confirmed attended sender; recipient has no roster rows
+PASS rejection: cancellation while ON
+PASS OFF history retained; repeat OFF idempotent
+PASS rejection: OFF stale form
+PASS rejection: event switched stale form
+PASS simultaneous ON/cancellation conflict [ 'rejected', 'fulfilled' ]
+PASS ALL; profile invariance; zero email records; audit rows 45
+READY browser: event k17fyjnqbnzz42bgbrfb3fxdfh8hqbgb ; eligible session synthetic-interest-7 (unused), recipient 910 Synthetic10

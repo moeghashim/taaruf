@@ -104,6 +104,30 @@ export function EventsPageClient() {
     selectedEventId ? { eventId: selectedEventId as Id<"events"> } : "skip"
   );
   const [message, setMessage] = useState<string | null>(null);
+  const [isChangingInterests, setIsChangingInterests] = useState(false);
+  const [interestToggleError, setInterestToggleError] = useState<string | null>(null);
+  async function toggleInterestSubmissions() {
+    if (!detail || isChangingInterests) return;
+    setIsChangingInterests(true);
+    setInterestToggleError(null);
+    try {
+      const response = await fetch("/api/admin/interest-submissions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: detail._id, enabled: !detail.interestSubmissionsEnabled }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to change interest submissions.");
+      setMessage("Interest submissions turned " + (detail.interestSubmissionsEnabled ? "OFF." : "ON."));
+    } catch (error) {
+      setInterestToggleError(error instanceof Error ? error.message : "Unable to change interest submissions.");
+    } finally { setIsChangingInterests(false); }
+  }
+  async function changeEventStatus(status: (typeof eventStatuses)[number]) {
+    if (!detail) return;
+    try {
+      await updateEvent({ eventId: detail._id, status });
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update event status."); }
+  }
   const [emailKindByRegistration, setEmailKindByRegistration] = useState<Record<string, (typeof emailKinds)[number]>>({});
   const [broadcastEmailKind, setBroadcastEmailKind] = useState<(typeof emailKinds)[number]>("reminder");
   const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -490,12 +514,8 @@ export function EventsPageClient() {
                 <button
                   type="button"
                   className={detail.status === "draft" ? "btn btn-primary" : "btn"}
-                  onClick={() =>
-                    updateEvent({
-                      eventId: detail._id,
-                      status: detail.status === "draft" ? "scheduled" : "draft",
-                    })
-                  }
+                  disabled={Boolean(detail.interestSubmissionsEnabled) && detail.status === "scheduled"}
+                  onClick={() => void changeEventStatus(detail.status === "draft" ? "scheduled" : "draft")}
                   title={
                     detail.status === "draft"
                       ? "Make this event visible to applicants"
@@ -507,11 +527,10 @@ export function EventsPageClient() {
               )}
               <select
                 value={detail.status}
-                onChange={(event) =>
-                  updateEvent({ eventId: detail._id, status: event.target.value as (typeof eventStatuses)[number] })
-                }
+                aria-label="Event status"
+                onChange={(event) => void changeEventStatus(event.target.value as (typeof eventStatuses)[number])}
               >
-                {eventStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
+                {eventStatuses.map((status) => <option key={status} value={status} disabled={Boolean(detail.interestSubmissionsEnabled) && (status === "draft" || status === "cancelled")}>{titleize(status)}</option>)}
               </select>
               <button
                 type="button"
@@ -524,6 +543,22 @@ export function EventsPageClient() {
                 Delete
               </button>
             </div>
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <h4 id="interest-toggle-label">Interest submissions</h4>
+              <button type="button" role="switch" aria-checked={Boolean(detail.interestSubmissionsEnabled)}
+                aria-labelledby="interest-toggle-label" aria-describedby="interest-toggle-help"
+                className={detail.interestSubmissionsEnabled ? "btn btn-primary" : "btn"}
+                disabled={isChangingInterests || (!detail.interestSubmissionsEnabled && (detail.series !== "1plus1_match" || detail.status === "draft" || detail.status === "cancelled"))}
+                onClick={() => void toggleInterestSubmissions()}>
+                {isChangingInterests ? "Saving…" : detail.interestSubmissionsEnabled ? "ON" : "OFF"}
+              </button>
+            </div>
+            <p id="interest-toggle-help">Enables interest submissions for participants approved, confirmed, and checked in to this event. Remains on until an admin turns it off, regardless of event date.</p>
+            <p>Turn OFF before cancelling this event or moving it to draft. Only scheduled or completed 1Plus1 Match events can be turned ON.</p>
+            {detail.interestSubmissionsChangedAt && <p>Last changed {formatDateTime(detail.interestSubmissionsChangedAt)} by shared admin.</p>}
+            {interestToggleError && <p role="alert" className="notice error">{interestToggleError}</p>}
           </div>
           <div
             style={{

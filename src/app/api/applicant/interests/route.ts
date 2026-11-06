@@ -15,6 +15,9 @@ function rawErrorMessage(error: unknown) {
 
 function applicantInterestErrorResponse(error: unknown) {
   const message = rawErrorMessage(error);
+  if (/interest submissions|submission event|approved and have attended|expectedEventId/i.test(message)) {
+    return NextResponse.json({ error: "Interest availability has changed. Submissions require an enabled event and approved, confirmed, checked-in attendance. Please check the updated availability and try again." }, { status: 409 });
+  }
   for (const safeMessage of ["Applicant details could not be verified", "You can submit a maximum of 3 interests per event", "Interest already submitted for this event"]) {
     if (message.includes(safeMessage)) return NextResponse.json({ error: safeMessage }, { status: 400 });
   }
@@ -71,7 +74,7 @@ function applicantInterestErrorResponse(error: unknown) {
     );
   }
 
-  if (message === "Unauthorized") {
+  if (message.includes("Unauthorized")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -99,7 +102,11 @@ export async function POST(request: NextRequest) {
       if (typeof body.applicantName !== "string" || !body.applicantName.trim() || body.applicantName.length > 200) {
         return NextResponse.json({ error: "Applicant first name is required" }, { status: 400 });
       }
+      if (typeof body.expectedEventId !== "string" || !body.expectedEventId.trim()) {
+        return NextResponse.json({ error: "Refresh interest availability before submitting." }, { status: 400 });
+      }
       const result = await convex.mutation(api.applicantInterests.submitInterestNumber, {
+        expectedEventId: body.expectedEventId,
         sessionHash,
         applicantNumber: body.applicantNumber,
         applicantName: body.applicantName,

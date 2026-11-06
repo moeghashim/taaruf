@@ -1,0 +1,3 @@
+# Independent review resolution
+
+2026-11-06: independent read-only review found no high-severity selection/auth/transaction issues. One medium: eligibility polling used full dashboard query, reading unrelated registrations, flows and photo URLs every three seconds. Resolved by dedicated authenticated `applicantInterests.getInterestEligibility`, using only the current session/registration, selected event, same-event attendance and bounded three submission rows. The refresh API now calls that query; no session touches or profile serialization. Audit actor is honestly `shared admin`, not an attributed named individual.

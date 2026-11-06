@@ -267,6 +267,9 @@ export default defineSchema({
     registrationOpensAt: v.optional(v.number()),
     registrationClosesAt: v.optional(v.number()),
     interestSubmissionClosesAt: v.optional(v.number()),
+    interestSubmissionsEnabled: v.optional(v.boolean()),
+    interestSubmissionsChangedAt: v.optional(v.number()),
+    interestSubmissionsChangedBy: v.optional(v.string()),
     adminNotes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -275,7 +278,15 @@ export default defineSchema({
     .index("by_startsAt", ["startsAt"])
     .index("by_series_and_eventMonth", ["series", "eventMonth"])
     .index("by_series_and_startsAt", ["series", "startsAt"])
-    .index("by_eventCode", ["eventCode"]),
+    .index("by_eventCode", ["eventCode"])
+    .index("by_interestSubmissionsEnabled", ["interestSubmissionsEnabled"]),
+
+  interestSubmissionToggleAudit: defineTable({
+    eventId: v.id("events"),
+    enabled: v.boolean(),
+    actor: v.string(),
+    createdAt: v.number(),
+  }).index("by_eventId", ["eventId"]),
 
   eventAttendees: defineTable({
     eventId: v.id("events"),
