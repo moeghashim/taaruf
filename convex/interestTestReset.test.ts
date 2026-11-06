@@ -181,3 +181,17 @@ test("more than 100 retained reset rows cannot hide a fresh submission or defeat
  expect(dashboard.interestSubmissions).toHaveLength(1);
  await expect(f.submit(0)).rejects.toThrow("already submitted");
 });
+
+test("older same-direction contact/reset history blocks a fresh submission reset", async () => {
+ const f = await fixture(); const old = await f.submit(0);
+ await f.t.mutation(api.matches.resetPair, { registrationAId: f.from, registrationBId: f.targets[0] });
+ const current = await f.t.run(async ctx => {
+   const original = await ctx.db.get(old.interestId); const { _id, _creationTime, ...fields } = original!; void _id; void _creationTime;
+   const id = await ctx.db.insert("interests", { ...fields, status: "new" });
+   const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", old.interestId)).unique();
+   const { _id: flowId, _creationTime: creation, ...flowFields } = flow!; void flowId; void creation;
+   await ctx.db.insert("interestFlows", { ...flowFields, interestId: id, flowStatus: "awaiting_inbound_response", closedReason: undefined }); return id;
+ });
+ await expect(f.reset(current)).rejects.toThrow("manual review");
+ expect((await f.t.run(ctx => ctx.db.get(current)))!.testReset).toBeUndefined();
+});

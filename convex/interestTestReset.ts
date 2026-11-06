@@ -26,8 +26,13 @@ export const reset = mutation({
         if ([interest.fromRegistrationId, interest.toRegistrationId].includes(share.recipientRegistrationId) || share.interestId === interest._id) throw new Error("Profile-share history requires manual review");
       }
     }
-    for await (const event of ctx.db.query("interestFlowEvents").withIndex("by_interestId", q => q.eq("interestId", args.id))) {
-      if (["contacts_disclosed_in_portal", "pair_reset"].includes(event.eventType)) throw new Error("Linked match or contact history requires manual review");
+    // Same-direction older events may retain contact history after pair reset deleted the match.
+    for await (const historical of ctx.db.query("interests").withIndex("by_fromRegistrationId_and_toRegistrationId", q => q.eq("fromRegistrationId", interest.fromRegistrationId).eq("toRegistrationId", interest.toRegistrationId))) {
+      const historicalFlow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", historical._id)).unique();
+      if (historical.matchId || historicalFlow?.contactSharedAt) throw new Error("Linked match or contact history requires manual review");
+      for await (const event of ctx.db.query("interestFlowEvents").withIndex("by_interestId", q => q.eq("interestId", historical._id))) {
+        if (["contacts_disclosed_in_portal", "pair_reset"].includes(event.eventType)) throw new Error("Linked match or contact history requires manual review");
+      }
     }
     const now = Date.now();
     await ctx.db.patch(args.id, { testReset: { at: now, reason, actor: "admin" }, status: "closed", adminStatus: "pending", updatedAt: now });
