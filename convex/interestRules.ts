@@ -298,6 +298,10 @@ export async function createInterestWithRules(
     throw new Error("Interest event not found");
   }
 
+  if (event.eventCode !== "manual-admin" && event.interestSubmissionsEnabled !== true) {
+    throw new Error("Interest submissions are closed for this event");
+  }
+
   const { visibility, initialStatus } = await assertCanCreateInterest(
     ctx,
     args.fromRegistrationId,
@@ -361,7 +365,7 @@ export async function createApplicantInterestWithRules(
   if (!matchesInterestFirstName(recipient.name, args.applicantName)) throw new Error("Applicant details could not be verified");
   const event = await findEligibleInterestSubmissionEvent(ctx, args.fromRegistrationId);
   if (!event) {
-    throw new Error("Applicant must be approved and have attended the latest matching event");
+    throw new Error("Interest submissions are closed or you are not approved and checked in for the selected event");
   }
 
   const target = await getRegistrationOrThrow(ctx, args.toRegistrationId);

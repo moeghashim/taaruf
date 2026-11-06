@@ -17,19 +17,19 @@ for (const gender of ["male", "female"]) test("three slots and check-in states f
   });
   await page.goto("/me");
   const card = page.locator(".interest-submit-panel");
-  await expect(card).toContainText("You'll be able to submit interests after attending our next event.");
+  await expect(card).toContainText("Interests are available when the team enables submissions for an event you are approved and checked in for.");
   await expect(card.locator("input")).toHaveCount(0);
   await expect(card).not.toContainText("Maximum 3");
   for (const state of [{ approved: true, checked: false }, { approved: false, checked: true }]) {
     approved = state.approved; checked = state.checked;
     await page.reload();
     await expect(card.locator("input")).toHaveCount(0);
-    await expect(card).toContainText("after attending our next event");
+    await expect(card).toContainText("the team enables submissions");
   }
   approved = true; checked = true;
   await page.reload();
   await expect(card).toContainText("Enter the applicant's number and first name. Maximum 3 interests per event.");
-  await expect(card).not.toContainText("after attending");
+  await expect(card).not.toContainText("the team enables submissions");
   await expect(card.locator("form")).toHaveCount(3);
   await expect(card.locator("input")).toHaveCount(6);
   await expect(card.locator("button")).toHaveCount(3);
@@ -53,8 +53,8 @@ for (const gender of ["male", "female"]) test("three slots and check-in states f
   expect(styles).toEqual({ aligned: true, height: 40, sameLine: true, size: "12px" });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  checked = false; // Revoked check-in / latest-event rollover.
+  checked = false; // Revoked check-in / manual event closure.
   await page.reload();
   await expect(card.locator("input")).toHaveCount(0);
-  await expect(card).toContainText("after attending our next event");
+  await expect(card).toContainText("the team enables submissions");
 });

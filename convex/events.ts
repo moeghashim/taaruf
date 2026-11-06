@@ -12,6 +12,8 @@ import {
   getOrCreateManualAdminEvent,
   interestSubmissionClosesAt,
   findEligibleInterestSubmissionEvent,
+  activeInterestEvent,
+  MANUAL_ADMIN_EVENT_CODE,
 } from "./eventRules";
 
 const eventStatus = v.union(
@@ -449,7 +451,7 @@ export const getDetail = query({
       .withIndex("by_eventId_and_kind", (q) => q.eq("eventId", args.eventId))
       .first();
     const attendee = await ctx.db.query("eventAttendees").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", args.eventId)).first();
-    const deleteBlockedReason = attendee ? "Cannot delete an event with attendance history." : rows.length
+    const deleteBlockedReason = event.interestSubmissionsEnabled === true ? "Turn off interest submissions before deleting this event." : attendee ? "Cannot delete an event with attendance history." : rows.length
       ? "Cannot delete an event after someone has signed up."
       : linkedInterest
         ? "Cannot delete an event linked to interest history."
@@ -609,6 +611,31 @@ export const update = mutation({
   },
 });
 
+// Separate authenticated writer: generic create/update cannot set this flag.
+export const setInterestSubmissionsEnabled = mutation({
+  args: { adminSecret: v.string(), eventId: v.id("events"), enabled: v.boolean() },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) {
+      throw new Error("Unauthorized");
+    }
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found");
+    if (args.enabled) {
+      if (event.series !== DEFAULT_EVENT_SERIES || event.eventCode === MANUAL_ADMIN_EVENT_CODE) {
+        throw new Error("Only matching events can accept applicant interests");
+      }
+      // The indexed read and patch share a transaction. Concurrent enables conflict
+      // and retry, so another event can never be silently switched off.
+      const active = await activeInterestEvent(ctx);
+      if (active && active._id !== event._id) {
+        throw new Error(`Turn off interest submissions for "${active.title}" before enabling this event.`);
+      }
+    }
+    await ctx.db.patch(event._id, { interestSubmissionsEnabled: args.enabled, updatedAt: Date.now() });
+    return { enabled: args.enabled };
+  },
+});
+
 export const deleteEvent = mutation({
   args: {
     eventId: v.id("events"),
@@ -617,6 +644,7 @@ export const deleteEvent = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
 
+    if (event.interestSubmissionsEnabled === true) throw new Error("Turn off interest submissions before deleting this event");
     const attendee = await ctx.db.query("eventAttendees").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", args.eventId)).first();
     if (attendee) throw new Error("Cannot delete an event with attendance history.");
     const existingRegistration = await ctx.db

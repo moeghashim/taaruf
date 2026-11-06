@@ -253,7 +253,8 @@ export default defineSchema({
     femaleCapacity: v.number(),
     registrationOpensAt: v.optional(v.number()),
     registrationClosesAt: v.optional(v.number()),
-    interestSubmissionClosesAt: v.optional(v.number()),
+    interestSubmissionClosesAt: v.optional(v.number()), // Legacy metadata; never gates submissions.
+    interestSubmissionsEnabled: v.optional(v.boolean()),
     adminNotes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -262,6 +263,7 @@ export default defineSchema({
     .index("by_startsAt", ["startsAt"])
     .index("by_series_and_eventMonth", ["series", "eventMonth"])
     .index("by_series_and_startsAt", ["series", "startsAt"])
+    .index("by_interestSubmissionsEnabled", ["interestSubmissionsEnabled"])
     .index("by_eventCode", ["eventCode"]),
 
   eventAttendees: defineTable({
