@@ -4,32 +4,32 @@ for (const gender of ["male", "female"]) test("three slots and check-in states f
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
-    if (path === "/api/applicant/me") body = {
+    if (path === "/api/applicant/me" || path === "/api/applicant/interest-eligibility") body = {
       applicant: { name: "Synthetic Applicant", gender, applicantNumber: 1, profileCompletionStatus: "completed" },
       inbound: [], outbound: [], privateDocumented: [], canSubmitInterest: checked && approved,
       interestSubmissionLimit: 3, interestSubmissionEventId: checked ? "synthetic" : null,
       interestSubmissions: Array.from({ length: count }, (_, i) => ({ interestId: String(i), status: "new" })),
     };
     if (path === "/api/applicant/events") body = { upcoming: [], history: [], eligibleInterestEvents: [] };
-    if (path === "/api/applicant/interests") { posts++; count++; body = { success: true }; }
+    if (path === "/api/applicant/interests") { expect(route.request().postDataJSON().expectedEventId).toBe("synthetic"); posts++; count++; body = { success: true }; }
     if (path === "/api/applicant/profile") return route.fulfill({ status: 400, json: { error: "Synthetic profile not loaded" } });
     return route.fulfill({ json: body });
   });
   await page.goto("/me");
   const card = page.locator(".interest-submit-panel");
-  await expect(card).toContainText("You'll be able to submit interests after attending our next event.");
+  await expect(card).toContainText("Interest submissions are closed. Your event must have submissions turned ON, and you must be approved, confirmed, and checked in.");
   await expect(card.locator("input")).toHaveCount(0);
   await expect(card).not.toContainText("Maximum 3");
   for (const state of [{ approved: true, checked: false }, { approved: false, checked: true }]) {
     approved = state.approved; checked = state.checked;
-    await page.reload();
+
     await expect(card.locator("input")).toHaveCount(0);
-    await expect(card).toContainText("after attending our next event");
+    await expect(card).toContainText("Interest submissions are closed");
   }
   approved = true; checked = true;
-  await page.reload();
+
   await expect(card).toContainText("Enter the applicant's number and first name. Maximum 3 interests per event.");
-  await expect(card).not.toContainText("after attending");
+  await expect(card).not.toContainText("Interest submissions are closed");
   await expect(card.locator("form")).toHaveCount(3);
   await expect(card.locator("input")).toHaveCount(6);
   await expect(card.locator("button")).toHaveCount(3);
@@ -53,8 +53,8 @@ for (const gender of ["male", "female"]) test("three slots and check-in states f
   expect(styles).toEqual({ aligned: true, height: 40, sameLine: true, size: "12px" });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  checked = false; // Revoked check-in / latest-event rollover.
+  checked = false; // Revoked check-in / manual event closure.
   await page.reload();
   await expect(card.locator("input")).toHaveCount(0);
-  await expect(card).toContainText("after attending our next event");
+  await expect(card).toContainText("Interest submissions are closed");
 });

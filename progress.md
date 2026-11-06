@@ -621,3 +621,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-04
 - Correct New Match service credential mismatch; prove actual submit through both side-by-side requirements with isolated production-like credentials.
+
+## 2026-11-06
+- Integrate scoped PR55 on live 784bb73 with reactive eligibility and stale/cancellation safety; provenance recorded in docs/pr55-scoped-release.md. <!-- project: github.com/moeghashim/clawscrewskill -->
