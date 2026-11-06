@@ -116,6 +116,7 @@ export const resetPair = mutation({
     );
 
     for (const interest of interestsToReset) {
+      if (interest.testReset) continue;
       await ctx.db.patch(interest._id, {
         status: "closed",
         adminStatus: "declined",
@@ -218,6 +219,8 @@ export const deletePairConnection = mutation({
     const interestsToDelete = [...outboundA, ...outboundB].filter(
       (interest) => pairIds.has(interest.fromRegistrationId) && pairIds.has(interest.toRegistrationId)
     );
+
+    if (interestsToDelete.some(interest => interest.source === "platform_submission" || interest.testReset)) throw new Error("Submitted interests must be retained; use explicit test reset after review");
 
     const flowCandidates: Doc<"interestFlows">[] = [];
     for (const status of interestFlowStatuses) {

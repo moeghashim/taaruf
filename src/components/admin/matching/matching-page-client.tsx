@@ -517,18 +517,24 @@ function InterestActions({
 }) {
   const notifyDecline = useNotifyDecline();
   const [busy, setBusy] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const run = async (label: string, action: () => Promise<unknown>, success: string) => {
     setBusy(label);
     try {
       await action();
       onMessage(success);
+      setFeedback(success);
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      onMessage(message);
+      setFeedback(message);
     } finally {
       setBusy(null);
     }
   };
+
+  if (interest.testReset) return <span role="status">Test reset — audit retained</span>;
 
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -574,7 +580,7 @@ function InterestActions({
           {busy === "notify-decline" ? "Sending..." : interest.declineNotificationError ? "Retry notice" : "Send notice"}
         </button>
       )}
-      {!interest.matchId && (
+      {!interest.matchId && interest.source !== "platform_submission" && (
         <button
           className="btn btn-sm btn-ghost"
           type="button"
@@ -588,6 +594,20 @@ function InterestActions({
           Delete
         </button>
       )}
+      {!interest.matchId && interest.source === "platform_submission" && (
+        <button className="btn btn-sm btn-ghost" type="button" disabled={busy !== null} onClick={() => {
+          const pair = `#${interest.fromRegistration?.publicApplicantNumber ?? "?"} → #${interest.toRegistration?.publicApplicantNumber ?? "?"}`;
+          if (!window.confirm(`Reset TEST submission ${pair} at ${interest.event?.title ?? "this event"}? Confirm this exact record is test data. Restores one submission slot, closes this workflow and removes its photo access. Audit is retained. Real interests must not be reset.`)) return;
+          const reason = window.prompt("Why is this submission test data? (10–500 characters)");
+          if (reason === null) return;
+          void run("reset", async () => {
+            const response = await fetch("/api/admin/interest-test-reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: interest._id, confirmTest: true, reason }) });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Test reset failed. Please retry.");
+          }, "Test submission reset. One event slot restored; audit retained.");
+        }}>{busy === "reset" ? "Resetting…" : "Reset test submission"}</button>
+      )}
+      {feedback && <p role="alert" style={{ flexBasis: "100%", margin: 0 }}>{feedback}</p>}
     </div>
   );
 }

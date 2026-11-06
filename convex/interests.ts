@@ -78,7 +78,7 @@ export const updateAdminStatus = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -98,7 +98,7 @@ export const claimDeclineNotification = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -146,7 +146,7 @@ export const recordDeclineNotificationFailure = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -167,7 +167,7 @@ export const updateNotes = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -188,7 +188,7 @@ export const updateStatus = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -210,7 +210,7 @@ export const updateRank = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -229,7 +229,7 @@ export const remove = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -259,7 +259,7 @@ export const convertToMatch = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.interestId);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 

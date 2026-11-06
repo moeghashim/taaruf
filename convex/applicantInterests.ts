@@ -225,7 +225,7 @@ export const getInterestEligibility = query({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const event = await findEligibleInterestSubmissionEvent(ctx, registration._id);
     const submissions = event ? await ctx.db.query("interests")
-      .withIndex("by_fromRegistrationId_and_eventId_and_source", q => q.eq("fromRegistrationId", registration._id).eq("eventId", event._id).eq("source", "platform_submission")).take(3) : [];
+      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", event._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3) : [];
     return {
       interestSubmissionEventId: event?._id ?? null,
       interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
@@ -245,11 +245,11 @@ export const getDashboard = query({
     const eligibleEvent = await findEligibleInterestSubmissionEvent(ctx, registration._id);
     const inboundRows = await ctx.db
       .query("interests")
-      .withIndex("by_toRegistrationId", (q) => q.eq("toRegistrationId", registration._id))
+      .withIndex("by_toRegistrationId_and_testReset", (q) => q.eq("toRegistrationId", registration._id).eq("testReset", undefined))
       .take(100);
     const outboundRows = await ctx.db
       .query("interests")
-      .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", registration._id))
+      .withIndex("by_fromRegistrationId_and_testReset", (q) => q.eq("fromRegistrationId", registration._id).eq("testReset", undefined))
       .take(100);
 
     const visibleInbound = inboundRows.filter(
@@ -269,7 +269,7 @@ export const getDashboard = query({
         : [];
 
     const submissions = eligibleEvent ? await ctx.db.query("interests")
-      .withIndex("by_fromRegistrationId_and_eventId_and_source", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id).eq("source", "platform_submission")).take(3) : [];
+      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3) : [];
     return {
       interestSubmissionEventId: eligibleEvent?._id ?? null,
       interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
@@ -368,7 +368,7 @@ export const recordInboundInterestNotificationFailure = mutation({
   },
   handler: async (ctx, args) => {
     const interest = await ctx.db.get(args.interestId);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -392,7 +392,7 @@ export const respondToInbound = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
-    if (!interest) throw new Error("Interest not found");
+    if (!interest || interest.testReset) throw new Error("Interest not found");
     if (interest.toRegistrationId !== registration._id || interest.visibility === "internal_only") {
       throw new Error("Interest is not available for this applicant");
     }
@@ -456,7 +456,7 @@ export const withdrawOutbound = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
-    if (!interest) throw new Error("Interest not found");
+    if (!interest || interest.testReset) throw new Error("Interest not found");
     if (interest.fromRegistrationId !== registration._id) {
       throw new Error("Interest does not belong to this applicant");
     }
@@ -498,7 +498,7 @@ export const closeConnection = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
-    if (!interest) throw new Error("Interest not found");
+    if (!interest || interest.testReset) throw new Error("Interest not found");
     if (interest.fromRegistrationId !== registration._id && interest.toRegistrationId !== registration._id) {
       throw new Error("Interest is not available for this applicant");
     }
@@ -564,7 +564,7 @@ export const giveFinalApproval = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
-    if (!interest) throw new Error("Interest not found");
+    if (!interest || interest.testReset) throw new Error("Interest not found");
     if (interest.fromRegistrationId !== registration._id && interest.toRegistrationId !== registration._id) {
       throw new Error("Interest is not available for this applicant");
     }
@@ -722,6 +722,7 @@ export const recordFinalApprovalNotificationFailure = mutation({
     error: v.string(),
   },
   handler: async (ctx, args) => {
+    if ((await ctx.db.get(args.interestId))?.testReset) throw new Error("Reset test interest is read-only");
     const flow = await getFlowByInterestId(ctx, args.interestId);
     if (!flow) {
       throw new Error("Interest flow not found");
