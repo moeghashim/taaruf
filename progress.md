@@ -621,3 +621,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-04
 - Correct New Match service credential mismatch; prove actual submit through both side-by-side requirements with isolated production-like credentials.
+
+## 2026-11-06
+- Add explicit single-event interest ON/OFF with audit, confirmed check-in eligibility, stale-request binding and read-only availability refresh; regression and real isolated backend proof.

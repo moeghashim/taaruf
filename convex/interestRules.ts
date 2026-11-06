@@ -361,7 +361,7 @@ export async function createApplicantInterestWithRules(
   if (!matchesInterestFirstName(recipient.name, args.applicantName)) throw new Error("Applicant details could not be verified");
   const event = await findEligibleInterestSubmissionEvent(ctx, args.fromRegistrationId);
   if (!event) {
-    throw new Error("Applicant must be approved and have attended the latest matching event");
+    throw new Error("Applicant must be approved, confirmed, and have attended the matching event selected by an admin");
   }
 
   const target = await getRegistrationOrThrow(ctx, args.toRegistrationId);
