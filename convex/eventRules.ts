@@ -151,21 +151,23 @@ export async function ensureEventRegistration(
   });
 }
 
-// Real Talk and other attendance-only series never supersede matching events.
-export async function latestMatchingEvent(ctx: ReadCtx, now = Date.now()) {
-  const events = await ctx.db.query("events")
-    .withIndex("by_series_and_startsAt", q => q.eq("series", DEFAULT_EVENT_SERIES).lte("startsAt", now))
-    .order("desc").take(100);
-  return events.filter(event => (event.status !== "cancelled" && event.status !== "draft") && event.eventCode !== MANUAL_ADMIN_EVENT_CODE)
-    .sort((a, b) => b.endsAt - a.endsAt)[0] ?? null;
-}
 export async function hasApprovedEventAttendance(ctx: ReadCtx, eventId: Id<"events">, registrationId: Id<"registrations">) {
   const registration = await ctx.db.query("eventRegistrations")
     .withIndex("by_eventId_and_registrationId", q => q.eq("eventId", eventId).eq("registrationId", registrationId)).unique();
-  return registration?.registrationStatus === "approved" && registration.attendanceStatus === "attended";
+  return registration?.registrationStatus === "approved" && registration.confirmationStatus === "confirmed" && registration.attendanceStatus === "attended";
 }
-export async function findEligibleInterestSubmissionEvent(ctx: ReadCtx, registrationId: Id<"registrations">, now = Date.now()) {
-  const event = await latestMatchingEvent(ctx, now);
-  if (!event || !await hasApprovedEventAttendance(ctx, event._id, registrationId)) return null;
+// Only an explicit admin selection opens submissions. Missing flags are off.
+export async function activeInterestEvent(ctx: ReadCtx) {
+  return await ctx.db.query("events")
+    .withIndex("by_interestSubmissionsEnabled", q => q.eq("interestSubmissionsEnabled", true))
+    .unique();
+}
+
+export async function findEligibleInterestSubmissionEvent(ctx: ReadCtx, registrationId: Id<"registrations">) {
+  const enabled = await ctx.db.query("events")
+    .withIndex("by_interestSubmissionsEnabled", q => q.eq("interestSubmissionsEnabled", true)).take(2);
+  const event = enabled.length === 1 ? enabled[0] : null;
+  if (!event || event.series !== DEFAULT_EVENT_SERIES || event.eventCode === MANUAL_ADMIN_EVENT_CODE
+    || (event.status !== "scheduled" && event.status !== "completed") || !await hasApprovedEventAttendance(ctx, event._id, registrationId)) return null;
   return event;
 }

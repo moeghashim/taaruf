@@ -29,6 +29,7 @@ async function createRegistration(
       status: "completed",
       maleCapacity: 60,
       femaleCapacity: 60,
+      interestSubmissionsEnabled: true,
       interestSubmissionClosesAt: now + 60 * 60 * 1000,
       createdAt: now,
       updatedAt: now,
@@ -395,6 +396,7 @@ describe("interest rules", () => {
     const femaleSession = await createSession(t, female);
 
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
       applicantName: "Portal",
@@ -438,6 +440,7 @@ describe("interest rules", () => {
     const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash: maleSession });
     expect(dashboard).not.toHaveProperty("eligibleInterestTargets");
     await expect(t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: maleSession, applicantNumber: 2, applicantName: "Cross",
     })).resolves.toHaveProperty("interestId");
   });
@@ -453,6 +456,7 @@ describe("interest rules", () => {
     });
 
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
       applicantName: "Approved",
@@ -498,6 +502,7 @@ describe("interest rules", () => {
     });
 
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 3,
       applicantName: "Numbered",
@@ -517,6 +522,7 @@ describe("interest rules", () => {
     const femaleSession = await createSession(t, female);
 
     await t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
       applicantName: "Visible",
@@ -572,6 +578,7 @@ describe("interest rules", () => {
     const femaleSession = await createSession(t, female);
 
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
       applicantName: "Approving",
@@ -623,6 +630,7 @@ describe("interest rules", () => {
     const femaleSession = await createSession(t, female);
 
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
       applicantName: "Final",
@@ -740,6 +748,7 @@ describe("interest rules", () => {
     const femaleSession = await createSession(t, female);
 
     await t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: femaleSession,
       applicantNumber: 1,
       applicantName: "Documented",
@@ -771,6 +780,7 @@ describe("interest rules", () => {
     const femaleSession = await createSession(t, female);
 
     const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+      expectedEventId: await getTestEvent(t),
       sessionHash: femaleSession,
       applicantNumber: 1,
       applicantName: "Private",

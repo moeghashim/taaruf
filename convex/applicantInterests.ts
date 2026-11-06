@@ -218,6 +218,23 @@ async function serializeInterest(
   };
 }
 
+// Narrow read-only refresh: no profile serialization or unrelated applicant scans.
+export const getInterestEligibility = query({
+  args: { sessionHash: v.string() },
+  handler: async (ctx, args) => {
+    const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    const event = await findEligibleInterestSubmissionEvent(ctx, registration._id);
+    const submissions = event ? await ctx.db.query("interests")
+      .withIndex("by_fromRegistrationId_and_eventId_and_source", q => q.eq("fromRegistrationId", registration._id).eq("eventId", event._id).eq("source", "platform_submission")).take(3) : [];
+    return {
+      interestSubmissionEventId: event?._id ?? null,
+      interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
+      canSubmitInterest: Boolean(event) && ["pending", "approved"].includes(registration.status) && registration.profileCompletionStatus === "completed",
+      interestSubmissionLimit: 3,
+    };
+  },
+});
+
 export const getDashboard = query({
   args: {
     sessionHash: v.string(),
@@ -283,10 +300,15 @@ export const submitInterestNumber = mutation({
     sessionHash: v.string(),
     applicantNumber: v.number(),
     applicantName: v.string(),
+    expectedEventId: v.id("events"),
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requirePendingOrApprovedForInterestSubmission(registration);
+    const selected = await findEligibleInterestSubmissionEvent(ctx, registration._id);
+    if (!selected || selected._id !== args.expectedEventId) {
+      throw new Error("Interest submissions are unavailable or the selected event changed. You must be approved, confirmed, and checked in to the event that is ON.");
+    }
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique()
       : null;

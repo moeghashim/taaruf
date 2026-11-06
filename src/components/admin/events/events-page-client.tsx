@@ -8,6 +8,8 @@ import { PageHead } from "@/components/admin/layout/page-head";
 import { Ico } from "@/components/admin/primitives/icons";
 import { Pill } from "@/components/admin/primitives/status-pill";
 
+import { InterestSubmissionsToggle } from "./interest-submissions-toggle";
+
 const eventStatuses = ["draft", "scheduled", "completed", "cancelled"] as const;
 const registrationDropdownStatuses = ["pending", "approved", "rejected", "withdrawn"] as const;
 const registrationFilterStatuses = ["waitlisted", "pending", "approved", "rejected", "withdrawn"] as const;
@@ -525,6 +527,9 @@ export function EventsPageClient() {
               </button>
             </div>
           </div>
+          {detail.series === "1plus1_match" && detail.eventCode !== "manual-admin" && (
+            <InterestSubmissionsToggle key={detail._id} eventId={detail._id} enabled={detail.interestSubmissionsEnabled === true} />
+          )}
           <div
             style={{
               border: "1px solid var(--line)",

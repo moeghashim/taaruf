@@ -14,6 +14,7 @@ const eslintConfig = [
   {
     ignores: [
       "node_modules/**",
+      "ops/interest-runtime/**",
       ".next/**",
       ".agents/**",
       ".claude/**",
