@@ -358,7 +358,13 @@ export default defineSchema({
     .index("by_registrationId", ["registrationId"])
     .index("by_eventId_and_kind", ["eventId", "kind"]),
 
+  // Restricted operational audit: intentionally no public query or mutation.
+  pairTestResetAudits: defineTable({
+    operationKey: v.string(), request: v.string(), snapshot: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
+
   matches: defineTable({
+    testResetAt: v.optional(v.number()),
     maleRegistrationId: v.id("registrations"),
     femaleRegistrationId: v.id("registrations"),
     interestType,
@@ -381,6 +387,7 @@ export default defineSchema({
     .index("by_status", ["status"]),
 
   profileShares: defineTable({
+    revokedAt: v.optional(v.number()),
     ownerRegistrationId: v.id("registrations"),
     recipientRegistrationId: v.id("registrations"),
     includeImages: v.boolean(),

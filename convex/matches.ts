@@ -58,7 +58,8 @@ export const getById = query({
     id: v.id("matches"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const match = await ctx.db.get(args.id);
+    return match?.testResetAt !== undefined ? null : match;
   },
 });
 
@@ -68,7 +69,7 @@ export const getAll = query({
     const matches = await ctx.db.query("matches").take(1000);
 
     return await Promise.all(
-      matches.map(async (match) => {
+      matches.filter(match => match.testResetAt === undefined).map(async (match) => {
         const maleRegistration = await ctx.db.get(match.maleRegistrationId);
         const femaleRegistration = await ctx.db.get(match.femaleRegistrationId);
         const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
@@ -111,6 +112,7 @@ export const resetPair = mutation({
       .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", args.registrationBId))
       .collect();
 
+    if ([...outboundA, ...outboundB].some(i => pairIds.has(i.toRegistrationId) && i.matchId && i.testReset)) throw new Error("Reset pair audit is read-only");
     const interestsToReset = [...outboundA, ...outboundB].filter(
       (interest) => pairIds.has(interest.fromRegistrationId) && pairIds.has(interest.toRegistrationId)
     );
@@ -171,6 +173,7 @@ export const resetPair = mutation({
     );
 
     for (const match of matchesToDelete) {
+      if (match.testResetAt !== undefined) throw new Error("Reset test match is read-only");
       await ctx.db.delete(match._id);
     }
 
@@ -312,6 +315,7 @@ export const deletePairConnection = mutation({
     const deletedMatchIds = new Set(matchesToDelete.map((match) => match._id));
 
     for (const match of matchesToDelete) {
+      if (match.testResetAt !== undefined) throw new Error("Reset test match is read-only");
       await ctx.db.delete(match._id);
     }
 
@@ -366,6 +370,8 @@ export const updateStatus = mutation({
     if (!match) {
       throw new Error("Match not found");
     }
+
+    if (match.testResetAt !== undefined) throw new Error("Reset test match is read-only");
 
     // Contact disclosure is a privileged, consent-gated transaction, not a status label.
     if (args.status === "contact_shared") {
@@ -535,6 +541,7 @@ export const markNotificationSent = mutation({
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    if ((await ctx.db.get(args.id))?.testResetAt !== undefined) throw new Error("Reset test match is read-only");
     await ctx.db.patch(args.id, {
       matchNotificationSentAt: args.sent ? Date.now() : undefined,
       matchNotificationError: args.error,
@@ -552,6 +559,7 @@ export const markContactSharedNotificationSent = mutation({
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    if ((await ctx.db.get(args.id))?.testResetAt !== undefined) throw new Error("Reset test match is read-only");
     await ctx.db.patch(args.id, {
       contactSharedNotificationSentAt: args.sent ? Date.now() : undefined,
       contactSharedNotificationError: args.error,

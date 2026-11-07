@@ -38,7 +38,8 @@ export const getAll = query({
       interests.map(async (interest) => {
         const fromRegistration = await ctx.db.get(interest.fromRegistrationId);
         const toRegistration = await ctx.db.get(interest.toRegistrationId);
-        const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+        const linkedMatch = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+        const match = linkedMatch?.testResetAt !== undefined ? null : linkedMatch;
         const event = interest.eventId ? await ctx.db.get(interest.eventId) : null;
 
         return {
@@ -281,12 +282,15 @@ export const getByRegistration = query({
       .withIndex("by_toRegistrationId", (q) => q.eq("toRegistrationId", args.registrationId))
       .collect();
 
-    const enrich = async (interest: (typeof outbound)[number]) => ({
-      ...interest,
-      fromRegistration: await ctx.db.get(interest.fromRegistrationId),
-      toRegistration: await ctx.db.get(interest.toRegistrationId),
-      match: interest.matchId ? await ctx.db.get(interest.matchId) : null,
-    });
+    const enrich = async (interest: (typeof outbound)[number]) => {
+      const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+      return {
+        ...interest,
+        fromRegistration: await ctx.db.get(interest.fromRegistrationId),
+        toRegistration: await ctx.db.get(interest.toRegistrationId),
+        match: match?.testResetAt !== undefined ? null : match,
+      };
+    };
 
     return {
       outbound: await Promise.all(outbound.map(enrich)),
