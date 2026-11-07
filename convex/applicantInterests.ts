@@ -133,7 +133,8 @@ async function safeCounterparty(
   counterparty: Registration | null,
   counterpartyNumber: number | undefined,
   flow: InterestFlow | null,
-  direction: "inbound" | "outbound" | "private"
+  direction: "inbound" | "outbound" | "private",
+  interest: Interest
 )
  {
   if (!counterparty) return null;
@@ -147,8 +148,14 @@ async function safeCounterparty(
       direction === "private" ||
       (direction === "inbound" && viewer.gender === "female"));
   // Neither gender nor contact sharing is photo consent.
-  const imagesVisible = showProfile && (counterparty.photoSharingPermission === "yes" ||
-    (flow?.photoDecision === "approved" && flow.photoRequestedByRegistrationId === viewer._id));
+  const explicitChoice = counterparty._id === interest.fromRegistrationId && viewer._id === interest.toRegistrationId
+    ? interest.senderPhotoConsent : undefined;
+  const imagesVisible = showProfile && isVisibleInApplicantDashboard(interest) &&
+    !["closed", "declined"].includes(flow?.flowStatus ?? "") &&
+    (explicitChoice !== undefined
+      ? explicitChoice === "yes" && !interest.senderPhotoConsentRevokedAt
+      : (counterparty.photoSharingPermission === "yes" ||
+        (flow?.photoDecision === "approved" && flow.photoRequestedByRegistrationId === viewer._id)));
   const imageUrls = imagesVisible
     ? await Promise.all((counterparty.imageStorageIds || []).map((storageId) => ctx.storage.getUrl(storageId)))
     : [];
@@ -214,7 +221,9 @@ async function serializeInterest(
     requesterFinalApproval: flow?.requesterFinalApproval ?? "pending",
     recipientFinalApproval: flow?.recipientFinalApproval ?? "pending",
     photoDecision: flow?.photoDecision ?? "pending",
-    counterparty: await safeCounterparty(ctx, viewer, counterparty, counterparty ? numberById.get(counterparty._id) : undefined, flow, direction),
+    senderPhotoConsent: viewer._id === interest.fromRegistrationId ? interest.senderPhotoConsent ?? null : null,
+    senderPhotoConsentRevokedAt: viewer._id === interest.fromRegistrationId ? interest.senderPhotoConsentRevokedAt ?? null : null,
+    counterparty: await safeCounterparty(ctx, viewer, counterparty, counterparty ? numberById.get(counterparty._id) : undefined, flow, direction, interest),
   };
 }
 
@@ -276,6 +285,7 @@ export const getDashboard = query({
       applicant: {
         registrationId: registration._id,
         name: registration.name,
+        hasPhotos: Boolean(registration.imageStorageIds?.length),
         gender: registration.gender,
         applicantNumber: byId.get(registration._id) ?? null,
         profileCompletionStatus: registration.profileCompletionStatus ?? "not_started",
@@ -301,6 +311,7 @@ export const submitInterestNumber = mutation({
     applicantNumber: v.number(),
     applicantName: v.string(),
     expectedEventId: v.id("events"),
+    photoConsent: v.union(v.literal("yes"), v.literal("no")),
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
@@ -317,6 +328,14 @@ export const submitInterestNumber = mutation({
       throw new Error("Applicant details could not be verified");
     }
 
+    const previous = await ctx.db.query("interests")
+      .withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", q => q.eq("fromRegistrationId", registration._id).eq("toRegistrationId", target._id).eq("eventId", selected._id)).take(100);
+    const retry = previous.find(row => row.source === "platform_submission");
+    if (retry) {
+      if (retry.senderPhotoConsent !== args.photoConsent || !isVisibleInApplicantDashboard(retry)) throw new Error("Interest already submitted for this event");
+      return { interestId: retry._id, matchId: retry.matchId ?? null, private: retry.visibility === "internal_only", inboundInterestNotification: null };
+    }
+
     const result = await createApplicantInterestWithRules(ctx, {
       fromRegistrationId: registration._id,
       toRegistrationId: target._id,
@@ -330,6 +349,7 @@ export const submitInterestNumber = mutation({
 
     const interest = await ctx.db.get(result.interestId);
     if (!interest) throw new Error("Interest not found after creation");
+    await ctx.db.patch(interest._id, { senderPhotoConsent: args.photoConsent });
     const flow = await ensureFlow(ctx, interest);
     await appendEvent(ctx, flow, "interest_number_submitted", registration._id);
 
@@ -734,5 +754,17 @@ export const recordFinalApprovalNotificationFailure = mutation({
     });
 
     return flow._id;
+  },
+});
+
+export const revokeSenderPhotoConsent = mutation({
+  args: { sessionHash: v.string(), interestId: v.id("interests") },
+  handler: async (ctx, args) => {
+    const owner = await getRegistrationForSession(ctx, args.sessionHash);
+    const interest = await ctx.db.get(args.interestId);
+    if (!interest || interest.fromRegistrationId !== owner._id) throw new Error("Unauthorized");
+    if (interest.senderPhotoConsent === undefined) throw new Error("No submission photo choice exists");
+    if (!interest.senderPhotoConsentRevokedAt) await ctx.db.patch(interest._id, { senderPhotoConsentRevokedAt: Date.now() });
+    return null;
   },
 });

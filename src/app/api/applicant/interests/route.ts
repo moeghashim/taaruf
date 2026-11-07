@@ -92,10 +92,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     const convex = getConvexClient();
 
+    if (body.action === "revoke_photos") {
+      if (typeof body.interestId !== "string" || !body.interestId) return NextResponse.json({ error: "interestId is required" }, { status: 400 });
+      await convex.mutation(api.applicantInterests.revokeSenderPhotoConsent, { sessionHash, interestId: body.interestId });
+      return NextResponse.json({ success: true, message: "Photo sharing revoked for this interest. Previously obtained photos or links cannot be recalled." });
+    }
+
     if (body.action === "submit_number") {
+      if (!["yes", "no"].includes(body.photoConsent)) return NextResponse.json({ error: "Choose whether to share your photos with this recipient" }, { status: 400 });
       if (!Number.isInteger(body.applicantNumber) || body.applicantNumber <= 0) {
         return NextResponse.json({ error: "A valid applicant number is required" }, { status: 400 });
       }
@@ -107,6 +115,7 @@ export async function POST(request: NextRequest) {
       }
       const result = await convex.mutation(api.applicantInterests.submitInterestNumber, {
         expectedEventId: body.expectedEventId,
+        photoConsent: body.photoConsent,
         sessionHash,
         applicantNumber: body.applicantNumber,
         applicantName: body.applicantName,

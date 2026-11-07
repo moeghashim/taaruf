@@ -224,6 +224,8 @@ export default defineSchema({
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
   interests: defineTable({
+    senderPhotoConsent: v.optional(v.union(v.literal("yes"), v.literal("no"))),
+    senderPhotoConsentRevokedAt: v.optional(v.number()),
     fromRegistrationId: v.id("registrations"),
     toRegistrationId: v.id("registrations"),
     eventId: v.id("events"),
