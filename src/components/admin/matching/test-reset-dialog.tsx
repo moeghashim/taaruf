@@ -27,7 +27,7 @@ export function TestResetDialog({ selection, onClose, onSuccess }: { selection: 
  return <Dialog open={Boolean(selection)} onOpenChange={open => { if (!open && !pending.current) onClose(); }}>
    <DialogContent onInteractOutside={event => { if (busy) event.preventDefault(); }} onEscapeKeyDown={event => { if (busy) event.preventDefault(); }}>
      <DialogTitle>Reset test submission</DialogTitle>
-     <DialogDescription>Confirm one test record only. Real interests must not be reset.</DialogDescription>
+     <DialogDescription className="text-foreground">Confirm one test record only. Real interests must not be reset.</DialogDescription>
      <p><strong>{selection?.pair}</strong><br />{selection?.event}</p>
      <p>This closes the workflow and its photo access, restores one event submission slot, and retains the audit. Linked history may require manual review.</p>
      {!done && <form onSubmit={event => { event.preventDefault(); void submit(); }} style={{ display: "grid", gap: 12 }}>
