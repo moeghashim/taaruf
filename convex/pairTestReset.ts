@@ -38,7 +38,10 @@ async function snapshot(ctx: QueryCtx, scope: Scope) {
   const allInterests = await bounded("interests");
   const interests = allInterests.filter(r => isPair(r.fromRegistrationId, r.toRegistrationId));
   exact(interests.map(r => r._id), scope.interestIds);
-  const flows = (await bounded("interestFlows")).filter(r => scope.interestIds.includes(r.interestId) || isPair(r.fromRegistrationId, r.toRegistrationId));
+  const pairFlows = (await bounded("interestFlows")).filter(r => scope.interestIds.includes(r.interestId) || isPair(r.fromRegistrationId, r.toRegistrationId));
+  const orphanFlows = pairFlows.filter(r => !scope.interestIds.includes(r.interestId));
+  for (const f of orphanFlows) if (await ctx.db.get(f.interestId) || !["closed", "declined"].includes(f.flowStatus) || f.contactSharedAt || f.photosVisibleAt || f.bioVisibleAt) throw new Error("Unexpected active or linked historical workflow");
+  const flows = pairFlows.filter(r => scope.interestIds.includes(r.interestId));
   exact(flows.map(r => r._id), scope.flowIds);
   for (const flow of flows) {
     const interest = interests.find(i => i._id === flow.interestId);
@@ -61,7 +64,7 @@ async function snapshot(ctx: QueryCtx, scope: Scope) {
   exact(registrations.map(r => r._id), scope.registrationIds);
   if (allRegistrations.some(r => !pair.has(r._id) && r.activeMatchId && scope.matchIds.includes(r.activeMatchId))) throw new Error("Foreign active pointer");
   if (registrations.some(r => r.activeMatchId && !scope.matchIds.includes(r.activeMatchId))) throw new Error("Unrelated active pointer");
-  const state = { registrations, interests, flows, events, matches, shares };
+  const state = { registrations, interests, flows, events, matches, shares, orphanFlows };
   return { state, fingerprint: canonical(state) };
 }
 

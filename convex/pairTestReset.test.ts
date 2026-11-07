@@ -127,3 +127,56 @@ test("reduced approved scope after prior pair reset with full historical audit",
  expect(await preserved(f.t)).toEqual(before);
  for(const r of pre.state.registrations) expect(await f.t.run(ctx=>ctx.db.get(r._id))).toEqual(r);
 });
+
+// Independent regression coverage for retained historical orphan workflows.
+async function addHistoricalOrphans(f: Awaited<ReturnType<typeof fixture>>) {
+  return f.t.run(async ctx => {
+    const ids: Id<"interestFlows">[] = [];
+    for (let i = 0; i < 7; i++) {
+      const interestId = await ctx.db.insert("interests", { fromRegistrationId: f.scope.registrationIds[0], toRegistrationId: f.scope.registrationIds[1], eventId: f.event, source: "platform_submission", status: "closed", visibility: "admin_actionable", createdAt: 1, updatedAt: 1 });
+      const interestFlowId = await ctx.db.insert("interestFlows", { interestId, fromRegistrationId: f.scope.registrationIds[0], toRegistrationId: f.scope.registrationIds[1], flowStatus: i % 2 ? "declined" : "closed", recipientDecision: "declined", requesterFinalApproval: "pending", recipientFinalApproval: "pending", photoDecision: "pending", closedReason: "historical sentinel", createdAt: 1, updatedAt: 1 });
+      await ctx.db.insert("interestFlowEvents", { interestId, interestFlowId, actor: "admin", eventType: "historical_sentinel", message: "retain verbatim", createdAt: 1 });
+      await ctx.db.delete(interestId);
+      ids.push(interestFlowId);
+    }
+    await ctx.db.insert("pairTestResetAudits", { operationKey: "historical-sentinel", request: "historical request", snapshot: "historical snapshot", createdAt: 1 });
+    return ids;
+  });
+}
+async function allResetRows(t: ReturnType<typeof convexTest>) {
+  return t.run(async ctx => ({
+    registrations: await ctx.db.query("registrations").collect(), interests: await ctx.db.query("interests").collect(), flows: await ctx.db.query("interestFlows").collect(), events: await ctx.db.query("interestFlowEvents").collect(), shares: await ctx.db.query("profileShares").collect(), matches: await ctx.db.query("matches").collect(), audits: await ctx.db.query("pairTestResetAudits").collect(),
+  }));
+}
+test("seven terminal orphans and their historical audits remain byte-for-byte equivalent", async () => {
+  const f = await fixture(); const ids = await addHistoricalOrphans(f);
+  const pre = await f.t.query(internal.pairTestReset.preflight, { scope: f.scope });
+  const before = await allResetRows(f.t);
+  expect(pre.state.orphanFlows).toHaveLength(7);
+  expect(pre.state.flows.map(r => r._id)).toEqual(f.scope.flowIds);
+  expect(JSON.parse(pre.fingerprint).orphanFlows).toEqual(before.flows.filter(r => ids.includes(r._id)));
+  await f.t.mutation(internal.pairTestReset.reset, { ...f.args, expectedFingerprint: pre.fingerprint });
+  const after = await allResetRows(f.t);
+  expect(after.flows.filter(r => ids.includes(r._id))).toEqual(before.flows.filter(r => ids.includes(r._id)));
+  expect(after.events).toEqual(before.events);
+  expect(after.audits.filter(r => r.operationKey === "historical-sentinel")).toEqual(before.audits);
+  expect(after.flows.filter(r => r.closedReason === "admin_pair_test_reset")).toHaveLength(4);
+});
+for (const kind of ["active", "linked", "bio", "photo", "contact", "drift", "added", "deleted"] as const) test("orphan guard fails atomically: " + kind, async () => {
+  const f = await fixture(); const ids = await addHistoricalOrphans(f);
+  const pre = await f.t.query(internal.pairTestReset.preflight, { scope: f.scope });
+  await f.t.run(async ctx => {
+    if (kind === "active") await ctx.db.patch(ids[0], { flowStatus: "contact_shared" });
+    if (kind === "linked") await ctx.db.patch(ids[0], { interestId: f.unrelatedInterest });
+    if (kind === "bio") await ctx.db.patch(ids[0], { bioVisibleAt: 123 });
+    if (kind === "photo") await ctx.db.patch(ids[0], { photosVisibleAt: 123 });
+    if (kind === "contact") await ctx.db.patch(ids[0], { contactSharedAt: 123 });
+    if (kind === "drift") await ctx.db.patch(ids[0], { closedReason: "changed historical metadata" });
+    if (kind === "deleted") await ctx.db.delete(ids[0]);
+    if (kind === "added") { const row = (await ctx.db.get(ids[0]))!; const { _id, _creationTime, ...doc } = row; void _id; void _creationTime; await ctx.db.insert("interestFlows", doc); }
+  });
+  const before = await allResetRows(f.t);
+  if (["active", "linked", "bio", "photo", "contact"].includes(kind)) await expect(f.t.query(internal.pairTestReset.preflight, { scope: f.scope })).rejects.toThrow("Unexpected active or linked historical workflow");
+  await expect(f.t.mutation(internal.pairTestReset.reset, { ...f.args, expectedFingerprint: pre.fingerprint })).rejects.toThrow();
+  expect(await allResetRows(f.t)).toEqual(before);
+});
