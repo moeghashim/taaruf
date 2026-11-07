@@ -21,6 +21,7 @@ import type * as interests from "../interests.js";
 import type * as matches from "../matches.js";
 import type * as migrations_profileCompletion from "../migrations/profileCompletion.js";
 import type * as migrations_publicApplicantNumbers from "../migrations/publicApplicantNumbers.js";
+import type * as pairTestReset from "../pairTestReset.js";
 import type * as profileShares from "../profileShares.js";
 import type * as registrationNumbers from "../registrationNumbers.js";
 import type * as registrations from "../registrations.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   matches: typeof matches;
   "migrations/profileCompletion": typeof migrations_profileCompletion;
   "migrations/publicApplicantNumbers": typeof migrations_publicApplicantNumbers;
+  pairTestReset: typeof pairTestReset;
   profileShares: typeof profileShares;
   registrationNumbers: typeof registrationNumbers;
   registrations: typeof registrations;
