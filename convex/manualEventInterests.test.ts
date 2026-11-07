@@ -25,7 +25,7 @@ async function fixture() {
   });
   const toggle = (eventId: typeof ids.older, enabled: boolean) => t.mutation(api.events.setInterestSubmissionsEnabled, { adminSecret: "synthetic-secret", eventId, enabled });
   const dashboard = () => t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" });
-  const submit = (applicantNumber = 2) => t.mutation(api.applicantInterests.submitInterestNumber, { expectedEventId: ids.older, sessionHash: "session0", applicantNumber, applicantName: "Person" });
+  const submit = (applicantNumber = 2) => t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no", expectedEventId: ids.older, sessionHash: "session0", applicantNumber, applicantName: "Person" });
   return { t, ...ids, toggle, dashboard, submit };
 }
 

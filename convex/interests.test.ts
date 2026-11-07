@@ -395,7 +395,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -439,7 +439,7 @@ describe("interest rules", () => {
     });
     const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash: maleSession });
     expect(dashboard).not.toHaveProperty("eligibleInterestTargets");
-    await expect(t.mutation(api.applicantInterests.submitInterestNumber, {
+    await expect(t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession, applicantNumber: 2, applicantName: "Cross",
     })).resolves.toHaveProperty("interestId");
@@ -455,7 +455,7 @@ describe("interest rules", () => {
       await ctx.db.patch(male, { status: "pending" });
     });
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -501,7 +501,7 @@ describe("interest rules", () => {
       });
     });
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 3,
@@ -521,7 +521,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    await t.mutation(api.applicantInterests.submitInterestNumber, {
+    await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -577,7 +577,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -629,7 +629,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -747,7 +747,7 @@ describe("interest rules", () => {
     const female = await createRegistration(t, "Documenting Female", "female");
     const femaleSession = await createSession(t, female);
 
-    await t.mutation(api.applicantInterests.submitInterestNumber, {
+    await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: femaleSession,
       applicantNumber: 1,
@@ -779,7 +779,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: femaleSession,
       applicantNumber: 1,

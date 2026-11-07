@@ -21,7 +21,7 @@ async function fixture() {
     }
     return { event, people };
   });
-  const submit = (number = 2, name = "Person") => ({ expectedEventId: ids.event, sessionHash: "session0", applicantNumber: number, applicantName: name });
+  const submit = (number = 2, name = "Person") => ({ photoConsent: "no" as const, expectedEventId: ids.event, sessionHash: "session0", applicantNumber: number, applicantName: name });
   return { t, ...ids, submit };
 }
 test("requires session and exact number/name; no applicant directory in either portal response", async () => {
@@ -57,7 +57,7 @@ test("only sender needs selected matching event approval and attendance; Real Ta
     await ctx.db.insert("events", { ...data, interestSubmissionsEnabled: false, eventCode: "new-match", endsAt: Date.now() - 50 });
   });
   expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).canSubmitInterest).toBe(true);
-  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(3))).rejects.toThrow("already submitted");
+  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(3))).resolves.toHaveProperty("interestId");
   expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).outbound).toHaveLength(2);
 });
 test("photo URLs require owner consent, even after contact sharing", async () => {
@@ -75,7 +75,7 @@ test("photo URLs require owner consent, even after contact sharing", async () =>
   });
   expect((await dashboard()).inbound[0].counterparty?.imageUrls).toEqual([]);
   await t.run(async ctx => { await ctx.db.patch(people[0], { photoSharingPermission: "yes" }); });
-  expect((await dashboard()).inbound[0].counterparty?.imageUrls).toHaveLength(1);
+  expect((await dashboard()).inbound[0].counterparty?.imageUrls).toEqual([]);
 });
 test("max three submissions per event survives withdrawal", async () => {
   const { t, submit } = await fixture();
@@ -118,7 +118,7 @@ for (const gender of ["male", "female"] as const) {
       for (let i = 0; i < people.length; i++) await ctx.db.patch(people[i], { gender: i === 0 ? gender : gender === "male" ? "female" : "male" });
     });
     const duplicates = await Promise.allSettled([t.mutation(api.applicantInterests.submitInterestNumber, submit()), t.mutation(api.applicantInterests.submitInterestNumber, submit())]);
-    expect(duplicates.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect(duplicates.filter(r => r.status === "fulfilled")).toHaveLength(2);
     const race = await Promise.allSettled([3, 4, 5].map(n => t.mutation(api.applicantInterests.submitInterestNumber, submit(n))));
     expect(race.filter(r => r.status === "fulfilled")).toHaveLength(2);
     const dashboard = () => t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" });

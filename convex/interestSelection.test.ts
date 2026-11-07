@@ -25,7 +25,7 @@ async function fixture() {
   });
   const toggle = (eventId = ids.event, enabled = true) => t.mutation(api.events.setInterestSubmissionsEnabled, { eventId, enabled, adminSecret: "selection-secret" });
   const dashboard = () => t.query(api.applicantInterests.getDashboard, { sessionHash: "selection-session" });
-  const submit = (expectedEventId = ids.event) => t.mutation(api.applicantInterests.submitInterestNumber, { expectedEventId, sessionHash: "selection-session", applicantNumber: 2, applicantName: "Recipient" });
+  const submit = (expectedEventId = ids.event) => t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no", expectedEventId, sessionHash: "selection-session", applicantNumber: 2, applicantName: "Recipient" });
   return { t, ...ids, toggle, dashboard, submit };
 }
 
@@ -137,7 +137,7 @@ test("wrong expected event and missing expected event fail without writes", asyn
   await expect(f.submit(f.other)).rejects.toThrow("selected event changed");
   // Runtime validator must reject old clients, not silently infer a newly selected event.
   // @ts-expect-error deliberately omit the required event binding
-  await expect(f.t.mutation(api.applicantInterests.submitInterestNumber, {
+  await expect(f.t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
     sessionHash: "selection-session", applicantNumber: 2, applicantName: "Recipient",
   })).rejects.toThrow();
   expect(await f.t.run(ctx => ctx.db.query("interests").collect())).toEqual([]);

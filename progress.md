@@ -624,3 +624,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-06
 - Integrate scoped PR55 on live 784bb73 with reactive eligibility and stale/cancellation safety; provenance recorded in docs/pr55-scoped-release.md. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-06
+- Issue58: added recipient-specific submission photo choice, owner revocation, atomic retry behavior, UI and 261-test validation on isolated ac5db90 lineage. Actual synthetic backend/browser passed portal behavior; independent review found inherited authorization blockers, so draft only and no live deployment.
