@@ -21,9 +21,10 @@ function exact(actual: string[], expected: string[]) {
   if (new Set(expected).size !== expected.length || canonical([...actual].sort()) !== canonical([...expected].sort())) throw new Error("Scoped references changed or foreign references supplied");
 }
 async function snapshot(ctx: QueryCtx, scope: Scope) {
-  for (const [key, count] of Object.entries({ registrationIds: 2, interestIds: 4, flowIds: 4, eventIds: 2, matchIds: 1, shareIds: 4 })) {
+  for (const [key, count] of Object.entries({ registrationIds: 2, interestIds: 4, flowIds: 4, shareIds: 4 })) {
     if (scope[key as keyof Scope].length !== count) throw new Error("Approved topology required");
   }
+  if (scope.matchIds.length > 1 || scope.eventIds.length > 1000) throw new Error("Approved topology required");
   const pair = new Set(scope.registrationIds);
   if (pair.size !== 2) throw new Error("Distinct pair required");
   const isPair = (a: string, b: string) => a !== b && pair.has(a as Scope["registrationIds"][number]) && pair.has(b as Scope["registrationIds"][number]);

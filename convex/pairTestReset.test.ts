@@ -108,3 +108,22 @@ for (const kind of ["profile", "flow", "share", "event", "extra", "foreignShare"
   expect(await f.t.run(async ctx => ({ interests: await ctx.db.query("interests").collect(), flows: await ctx.db.query("interestFlows").collect(), shares: await ctx.db.query("profileShares").collect(), registrations: await ctx.db.query("registrations").collect(), matches: await ctx.db.query("matches").collect() }))).toEqual(before);
   expect(await f.t.run(ctx => ctx.db.query("pairTestResetAudits").collect())).toEqual([]);
 });
+
+test("reduced approved scope after prior pair reset with full historical audit", async () => {
+ const f = await fixture();
+ await f.t.run(async ctx => {
+   await ctx.db.delete(f.scope.matchIds[0]);
+   for (const id of f.scope.registrationIds) await ctx.db.patch(id, {activeMatchId: undefined});
+   for (const id of f.scope.interestIds) await ctx.db.patch(id, {matchId: undefined, status: "closed"});
+   for (const id of f.scope.shareIds) await ctx.db.patch(id, {matchId: undefined});
+   for (let i=0;i<17;i++) f.scope.eventIds.push(await ctx.db.insert("interestFlowEvents",{interestId:f.scope.interestIds[i%4],interestFlowId:f.scope.flowIds[i%4],actor:"admin",eventType:"pair_reset",createdAt:2}));
+ });
+ f.scope.matchIds=[];
+ const pre=await f.t.query(internal.pairTestReset.preflight,{scope:f.scope});
+ const before=await preserved(f.t);
+ const args={...f.args,scope:f.scope,expectedFingerprint:pre.fingerprint};
+ expect((await f.t.mutation(internal.pairTestReset.reset,args)).alreadyReset).toBe(false);
+ expect((await f.t.mutation(internal.pairTestReset.reset,args)).alreadyReset).toBe(true);
+ expect(await preserved(f.t)).toEqual(before);
+ for(const r of pre.state.registrations) expect(await f.t.run(ctx=>ctx.db.get(r._id))).toEqual(r);
+});
