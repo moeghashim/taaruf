@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TestResetDialog } from "./test-reset-dialog";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
@@ -510,8 +511,10 @@ function InterestActions({
   interest,
   data,
   onMessage,
+  onReset,
 }: {
   interest: InterestRecord;
+  onReset: (interest: InterestRecord) => void;
   data: MatchingData;
   onMessage: (message: string) => void;
 }) {
@@ -595,17 +598,7 @@ function InterestActions({
         </button>
       )}
       {!interest.matchId && interest.source === "platform_submission" && (
-        <button className="btn btn-sm btn-ghost" type="button" disabled={busy !== null} onClick={() => {
-          const pair = `#${interest.fromRegistration?.publicApplicantNumber ?? "?"} → #${interest.toRegistration?.publicApplicantNumber ?? "?"}`;
-          if (!window.confirm(`Reset TEST submission ${pair} at ${interest.event?.title ?? "this event"}? Confirm this exact record is test data. Restores one submission slot, closes this workflow and removes its photo access. Audit is retained. Real interests must not be reset.`)) return;
-          const reason = window.prompt("Why is this submission test data? (10–500 characters)");
-          if (reason === null) return;
-          void run("reset", async () => {
-            const response = await fetch("/api/admin/interest-test-reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: interest._id, confirmTest: true, reason }) });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || "Test reset failed. Please retry.");
-          }, "Test submission reset. One event slot restored; audit retained.");
-        }}>{busy === "reset" ? "Resetting…" : "Reset test submission"}</button>
+        <button className="btn btn-sm btn-ghost" type="button" disabled={busy !== null} onClick={() => onReset(interest)}>Reset test submission</button>
       )}
       {feedback && <p role="alert" style={{ flexBasis: "100%", margin: 0 }}>{feedback}</p>}
     </div>
@@ -617,7 +610,9 @@ function InterestRow({
   data,
   numbers,
   onMessage,
+  onReset,
 }: {
+  onReset: (interest: InterestRecord) => void;
   interest: InterestRecord;
   data: MatchingData;
   numbers: Map<string, number>;
@@ -746,7 +741,7 @@ function InterestRow({
         />
       </td>
       <td>
-        <InterestActions interest={interest} data={data} onMessage={onMessage} />
+        <InterestActions interest={interest} data={data} onMessage={onMessage} onReset={onReset} />
       </td>
     </tr>
   );
@@ -754,6 +749,7 @@ function InterestRow({
 
 export function InterestsPageClient() {
   const data = useMatchingData();
+  const [resetSelection, setResetSelection] = useState<{ id: string; pair: string; event: string } | null>(null);
   const [status, setStatus] = useState<InterestStatus | "all">("all");
   const [showArchive, setShowArchive] = useState(false);
   const [visibility, setVisibility] = useState<"all" | "internal_only" | "admin_actionable">("all");
@@ -802,6 +798,7 @@ export function InterestsPageClient() {
         subtitle="Review interest signals, manage the queue, and convert selected pairs into matches."
       />
       <Notice text={message} />
+      {resetSelection && <TestResetDialog key={resetSelection.id} selection={resetSelection} onClose={() => setResetSelection(null)} onSuccess={setMessage} />}
       {data.isLoading ? (
         <LoadingPanel />
       ) : (
@@ -893,6 +890,7 @@ export function InterestsPageClient() {
                     data={data}
                     numbers={data.registrationNumbers}
                     onMessage={setMessage}
+                    onReset={interest => setResetSelection({ id: interest._id, pair: `#${interest.fromRegistration?.publicApplicantNumber ?? "?"} → #${interest.toRegistration?.publicApplicantNumber ?? "?"}`, event: interest.event?.title ?? "Unknown event" })}
                   />
                 ))}
               </tbody>
