@@ -162,13 +162,13 @@ test("seven terminal orphans and their historical audits remain byte-for-byte eq
   expect(after.audits.filter(r => r.operationKey === "historical-sentinel")).toEqual(before.audits);
   expect(after.flows.filter(r => r.closedReason === "admin_pair_test_reset")).toHaveLength(4);
 });
-for (const kind of ["active", "linked", "bio", "photo", "contact", "drift", "added", "deleted"] as const) test("orphan guard fails atomically: " + kind, async () => {
+for (const kind of ["active", "linked", "bioDrift", "photo", "contact", "drift", "added", "deleted"] as const) test("orphan guard fails atomically: " + kind, async () => {
   const f = await fixture(); const ids = await addHistoricalOrphans(f);
   const pre = await f.t.query(internal.pairTestReset.preflight, { scope: f.scope });
   await f.t.run(async ctx => {
     if (kind === "active") await ctx.db.patch(ids[0], { flowStatus: "contact_shared" });
     if (kind === "linked") await ctx.db.patch(ids[0], { interestId: f.unrelatedInterest });
-    if (kind === "bio") await ctx.db.patch(ids[0], { bioVisibleAt: 123 });
+    if (kind === "bioDrift") await ctx.db.patch(ids[0], { bioVisibleAt: 123 });
     if (kind === "photo") await ctx.db.patch(ids[0], { photosVisibleAt: 123 });
     if (kind === "contact") await ctx.db.patch(ids[0], { contactSharedAt: 123 });
     if (kind === "drift") await ctx.db.patch(ids[0], { closedReason: "changed historical metadata" });
@@ -176,7 +176,48 @@ for (const kind of ["active", "linked", "bio", "photo", "contact", "drift", "add
     if (kind === "added") { const row = (await ctx.db.get(ids[0]))!; const { _id, _creationTime, ...doc } = row; void _id; void _creationTime; await ctx.db.insert("interestFlows", doc); }
   });
   const before = await allResetRows(f.t);
-  if (["active", "linked", "bio", "photo", "contact"].includes(kind)) await expect(f.t.query(internal.pairTestReset.preflight, { scope: f.scope })).rejects.toThrow("Unexpected active or linked historical workflow");
+  if (["active", "linked", "photo", "contact"].includes(kind)) await expect(f.t.query(internal.pairTestReset.preflight, { scope: f.scope })).rejects.toThrow("Unexpected active or linked historical workflow");
   await expect(f.t.mutation(internal.pairTestReset.reset, { ...f.args, expectedFingerprint: pre.fingerprint })).rejects.toThrow();
   expect(await allResetRows(f.t)).toEqual(before);
+});
+
+
+test("deleted-parent legacy bios cannot surface or enable applicant actions and survive exact reset unchanged", async () => {
+  const f = await fixture(); const ids = await addHistoricalOrphans(f);
+  await f.t.run(async ctx => {
+    for (const id of ids.slice(0, 3)) await ctx.db.patch(id, { bioVisibleAt: 123, closedReason: "admin_reset_pair" });
+  });
+  const before = await allResetRows(f.t);
+  const orphans = before.flows.filter(row => ids.includes(row._id));
+  expect(orphans.filter(row => row.bioVisibleAt === 123)).toHaveLength(3);
+  const assertInert = async () => {
+    for (const registrationId of f.scope.registrationIds) {
+      const sessionHash = "session-" + registrationId;
+      const dashboard = await f.t.query(api.applicantInterests.getDashboard, { sessionHash });
+      const eligibility = await f.t.query(api.applicantInterests.getInterestEligibility, { sessionHash });
+      const surfaced = [...dashboard.inbound, ...dashboard.outbound, ...dashboard.privateDocumented, ...dashboard.interestSubmissions, ...eligibility.interestSubmissions];
+      for (const orphan of orphans) {
+        expect(surfaced.some(row => row.interestId === orphan.interestId)).toBe(false);
+        expect(await f.t.run(ctx => ctx.db.get(orphan.interestId))).toBeNull();
+        const args = { sessionHash, interestId: orphan.interestId };
+        for (const decision of ["accept", "decline", "keep_open"] as const) await expect(f.t.mutation(api.applicantInterests.respondToInbound, { ...args, decision })).rejects.toThrow("Interest not found");
+        for (const approved of [true, false]) await expect(f.t.mutation(api.applicantInterests.giveFinalApproval, { ...args, approved })).rejects.toThrow("Interest not found");
+        await expect(f.t.mutation(api.applicantInterests.withdrawOutbound, args)).rejects.toThrow("Interest not found");
+        await expect(f.t.mutation(api.applicantInterests.closeConnection, args)).rejects.toThrow("Interest not found");
+      }
+    }
+  };
+  await assertInert();
+  expect(await allResetRows(f.t)).toEqual(before);
+  const pre = await f.t.query(internal.pairTestReset.preflight, { scope: f.scope });
+  expect(JSON.parse(pre.fingerprint).orphanFlows).toEqual(orphans);
+  await f.t.mutation(internal.pairTestReset.reset, { ...f.args, expectedFingerprint: pre.fingerprint });
+  await assertInert();
+  const after = await allResetRows(f.t);
+  expect(after.flows.filter(row => ids.includes(row._id))).toEqual(orphans);
+  expect(after.events).toEqual(before.events);
+  expect(after.audits.filter(row => row.operationKey === "historical-sentinel")).toEqual(before.audits);
+  expect(after.interests.filter(row => row.testReset)).toHaveLength(4);
+  expect(after.flows.filter(row => row.closedReason === "admin_pair_test_reset")).toHaveLength(4);
+  expect(after.shares.filter(row => row.status === "closed" && !row.includeImages && row.revokedAt)).toHaveLength(4);
 });

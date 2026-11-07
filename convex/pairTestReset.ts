@@ -40,7 +40,10 @@ async function snapshot(ctx: QueryCtx, scope: Scope) {
   exact(interests.map(r => r._id), scope.interestIds);
   const pairFlows = (await bounded("interestFlows")).filter(r => scope.interestIds.includes(r.interestId) || isPair(r.fromRegistrationId, r.toRegistrationId));
   const orphanFlows = pairFlows.filter(r => !scope.interestIds.includes(r.interestId));
-  for (const f of orphanFlows) if (await ctx.db.get(f.interestId) || !["closed", "declined"].includes(f.flowStatus) || f.contactSharedAt || f.photosVisibleAt || f.bioVisibleAt) throw new Error("Unexpected active or linked historical workflow");
+  // A legacy bio timestamp is inert without its parent: applicant dashboards serialize
+  // interests, and profile/connection actions require that interest before loading a flow.
+  // Retain and fingerprint the complete orphan unchanged, including bioVisibleAt.
+  for (const f of orphanFlows) if (await ctx.db.get(f.interestId) || !["closed", "declined"].includes(f.flowStatus) || f.contactSharedAt || f.photosVisibleAt) throw new Error("Unexpected active or linked historical workflow");
   const flows = pairFlows.filter(r => scope.interestIds.includes(r.interestId));
   exact(flows.map(r => r._id), scope.flowIds);
   for (const flow of flows) {
