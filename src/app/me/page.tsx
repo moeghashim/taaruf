@@ -209,8 +209,8 @@ function StatusBadge({ value }: { value: string }) {
 
 function canConfirmEventRegistration(registration: NonNullable<ApplicantEventData["upcoming"][number]["registration"]>) {
   const confirmationWindowExpired = Boolean(
-    registration.confirmationRequestedAt &&
-      registration.confirmationExpiresAt &&
+    registration.confirmationRequestedAt !== undefined &&
+      registration.confirmationExpiresAt !== undefined &&
       registration.confirmationExpiresAt < Date.now()
   );
 
@@ -218,7 +218,10 @@ function canConfirmEventRegistration(registration: NonNullable<ApplicantEventDat
       registration.confirmationStatus === "not_confirmed" &&
       !confirmationWindowExpired &&
       (registration.registrationStatus === "pending" ||
-        registration.registrationStatus === "approved")
+        registration.registrationStatus === "approved" ||
+        (registration.registrationStatus === "waitlisted" &&
+          registration.confirmationRequestedAt !== undefined &&
+          registration.confirmationExpiresAt !== undefined))
   );
 }
 

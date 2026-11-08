@@ -919,18 +919,19 @@ export const confirmParticipation = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
-    if (reservesCapacity(row.registrationStatus) && confirmationStatusForRow(row) === "confirmed") {
+    if ((reservesCapacity(row.registrationStatus) || row.registrationStatus === "waitlisted") && confirmationStatusForRow(row) === "confirmed") {
       return row._id;
     }
-    if (row.confirmationRequestedAt && row.confirmationExpiresAt && row.confirmationExpiresAt < Date.now()) {
+    if (row.confirmationRequestedAt !== undefined && row.confirmationExpiresAt !== undefined && row.confirmationExpiresAt < Date.now()) {
       throw new Error("Confirmation window has expired");
     }
-    if (row.registrationStatus === "withdrawn" && (!row.confirmationRequestedAt || !row.confirmationExpiresAt)) {
+    if ((row.registrationStatus === "withdrawn" || row.registrationStatus === "waitlisted") && (row.confirmationRequestedAt === undefined || row.confirmationExpiresAt === undefined)) {
       throw new Error("This event registration cannot be confirmed");
     }
     if (
       row.registrationStatus !== "pending" &&
       row.registrationStatus !== "approved" &&
+      row.registrationStatus !== "waitlisted" &&
       row.registrationStatus !== "withdrawn"
     ) {
       throw new Error("This event registration cannot be confirmed");

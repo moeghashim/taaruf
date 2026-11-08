@@ -7,7 +7,21 @@ import assert from 'node:assert/strict';
 const output = '.new-match-browser';
 await fs.mkdir(output, {recursive:true});
 const bundle = await build({stdin:{contents:
-  'import React from "react"; import {createRoot} from "react-dom/client"; import {Topbar} from "./src/components/admin/layout/topbar"; import {WorkbenchPageClient} from "./src/components/admin/matching/matching-page-client"; createRoot(document.getElementById("root")).render(location.pathname === "/workbench" ? <WorkbenchPageClient/> : <Topbar crumb="Workbench" onMenu={()=>{}}/>);',
+  `import React from "react";
+   import {createRoot} from "react-dom/client";
+   import {Topbar} from "./src/components/admin/layout/topbar";
+   import {WorkbenchPageClient} from "./src/components/admin/matching/matching-page-client";
+   import {useAdminQuery} from "./src/components/admin/hooks/use-admin-transport";
+   function PollingProbe() {
+    const value = useAdminQuery("settings.get", {key:"synthetic"});
+    return value === undefined ? <p role="status">Loading</p> : <output aria-label="poll-result">{value}</output>;
+   }
+   class FailureBoundary extends React.Component {
+    state = {error:null};
+    static getDerivedStateFromError(error) { return {error}; }
+    render() { return this.state.error ? <p role="alert">{this.state.error.message}</p> : this.props.children; }
+   }
+   createRoot(document.getElementById("root")).render(location.pathname === "/polling" ? <FailureBoundary><PollingProbe/></FailureBoundary> : location.pathname === "/workbench" ? <WorkbenchPageClient/> : <Topbar crumb="Workbench" onMenu={()=>{}}/>);`,
   resolveDir:process.cwd(),loader:'tsx'}, bundle:true,write:false,format:'iife',jsx:'automatic',plugins:[{name:'synthetic-adapters',setup(b){
     b.onResolve({filter:new RegExp("^next/(navigation|link)$")}, args=>({path:args.path,namespace:'fixture'}));
     b.onLoad({filter:/.*/,namespace:'fixture'}, args=>({loader:'js',contents: args.path === 'next/link' ? 'export default function Link({children,href}) { return children; }' : 'export const useRouter=()=>({push:url=>{window.destination=url}}); const params = new URLSearchParams(window.location.search); export const useSearchParams=()=>params;' }));
@@ -49,6 +63,48 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('dialog').count(),0);
   assert.deepEqual(errors,[]); await page.close(); console.log('PASS real Topbar click, selection, error/retry, success, Escape: '+viewport.width);
+ }
+ for (const failure of ['network',408,429,503]) {
+  const page=await browser.newPage(); page.setDefaultTimeout(10000);
+  const errors=[]; page.on('pageerror',error=>errors.push(error.message));
+  let mode='failure', requests=0;
+  let failureFinished;
+  await page.route('**/api/admin/bridge',async route=>{
+   const {kind,name,args}=route.request().postDataJSON();
+   assert.deepEqual({kind,name,args},{kind:'query',name:'settings.get',args:{key:'synthetic'}});
+   requests++;
+   if(mode==='failure') {
+    if(failure==='network')await route.abort('failed');
+    else await route.fulfill({status:failure,contentType:'text/html',body:'private backend details'});
+    failureFinished?.();
+   } else await route.fulfill({json:{result:mode}});
+  });
+  const initialFailure=new Promise(resolve=>{failureFinished=resolve;});
+  await page.goto('http://127.0.0.1:'+server.address().port+'/polling');
+  await initialFailure;
+  assert.equal(await page.getByRole('status').innerText(),'Loading');
+  mode='loaded';
+  await page.getByText('loaded',{exact:true}).waitFor();
+  mode='failure';
+  await new Promise(resolve=>{failureFinished=resolve;});
+  assert.equal(await page.getByLabel('poll-result').innerText(),'loaded');
+  mode='recovered';
+  await page.getByText('recovered',{exact:true}).waitFor();
+  assert.ok(requests>=4); assert.deepEqual(errors,[]);
+  await page.close(); console.log('PASS initial and loaded polling recovery '+failure);
+ }
+ for (const status of [400,401,403]) {
+  const page=await browser.newPage(); page.setDefaultTimeout(10000);
+  let failed=false;
+  await page.route('**/api/admin/bridge',route=>failed ? route.fulfill({status,json:{error:'private-secret backend failure'}}) : route.fulfill({json:{result:'loaded'}}));
+  await page.goto('http://127.0.0.1:'+server.address().port+'/polling');
+  await page.getByText('loaded',{exact:true}).waitFor(); failed=true;
+  await page.getByRole('alert').waitFor();
+  const message=await page.getByRole('alert').innerText();
+  assert.equal(message,status===401?'Your admin session has expired. Sign in again.':status===403?'Admin access denied.':'Admin request failed. Refresh and try again.');
+  assert.equal(await page.getByLabel('poll-result').count(),0);
+  assert.doesNotMatch(message,/private-secret/);
+  await page.close(); console.log('PASS non-retryable polling failure '+status);
  }
  for (const gender of ['male','female']) for (const consent of ['yes','no','revoked']) {
   const page=await browser.newPage();
