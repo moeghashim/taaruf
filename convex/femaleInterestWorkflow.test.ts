@@ -156,3 +156,14 @@ for (const sessionHash of ["brother", "sister"]) test(sessionHash + " discovers 
   const other = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "other", paginationOpts: { cursor: null, numItems: 50 } });
   expect(other.page).toEqual([]);
 });
+
+test("PR61 cutoff also denies female portal reads and actions for old sessions", async () => {
+ const {t,interestId}=await fixture();
+ await t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret,interestId,reviewTokenHash:hash});
+ await t.mutation(api.settings.set,{adminSecret,key:"capabilitySecurityCutoffMs",value:String(Date.now())});
+ await expect(t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash:"brother"})).rejects.toThrow("Unauthorized");
+ await expect(t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"brother",interestId})).rejects.toThrow("Unauthorized");
+ await expect(t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"accept"})).rejects.toThrow("Unauthorized");
+ await expect(t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId,confirmed:true})).rejects.toThrow("Unauthorized");
+ expect((await t.run(ctx=>ctx.db.get(interestId)))?.femaleWorkflow?.state).toBe("awaiting_brother_review");
+});
