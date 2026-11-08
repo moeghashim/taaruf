@@ -631,3 +631,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-08
 - Resumed issue58 on current PR60/PR63 lineage; added authenticated server transport, backend authorization, durable photo ownership and atomic consent-aware URL reads. Preserved reset implementations and data; isolated347-test gate and final review/runtime validation, no live deployment pending operational decisions.
+
+## 2026-11-08
+- Prepared centralized monotonic capability cutoff and authenticated recovery in convex auth/profile/share/settings paths; integrated explicit saved Yes/No editors, tests and release documentation. No production activation. <!-- project: github.com/moeghashim/clawscrewskill -->

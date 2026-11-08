@@ -195,6 +195,7 @@ export default defineSchema({
     searchStatusNote: v.optional(v.string()),
     createdAt: v.number(),
     profileAccessToken: v.optional(v.string()),
+    profileAccessTokenIssuedAt: v.optional(v.number()),
     profileCompletionStatus: v.optional(
       v.union(v.literal("not_started"), v.literal("in_progress"), v.literal("completed"))
     ),

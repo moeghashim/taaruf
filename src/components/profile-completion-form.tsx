@@ -50,7 +50,6 @@ const prayerOptions = [
 const photoSharingOptions = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
-  { value: "ask_me_first", label: "Ask me first" },
 ] as const;
 
 function uploadedImagesFromProfile(registration: {
@@ -167,6 +166,12 @@ export function ProfileCompletionForm({ token }: { token: string }) {
     setIsSaving(true);
     setMessage(null);
     setError(null);
+
+    if (profile.photoSharingPermission !== "yes" && profile.photoSharingPermission !== "no") {
+      setError("Please choose Yes or No for photo sharing. Your photos remain private until you choose Yes for a permitted recipient.");
+      setIsSaving(false);
+      return;
+    }
 
     if (uploadedImages.length < 1 || uploadedImages.length > 3) {
       setError("Please upload between 1 and 3 photos.");
@@ -304,7 +309,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
             <label htmlFor="photoSharingPermission">Photo sharing permission *</label>
             <select
               id="photoSharingPermission"
-              value={profile.photoSharingPermission}
+              value={profile.photoSharingPermission === "yes" || profile.photoSharingPermission === "no" ? profile.photoSharingPermission : ""}
               onChange={(event) =>
                 setProfile({
                   ...profile,

@@ -1,3 +1,4 @@
+import { capabilityAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -32,7 +33,7 @@ async function resolvedInterest(ctx: QueryCtx, share: ShareScope): Promise<Doc<"
   return null;
 }
 async function available(ctx: QueryCtx, share: Doc<"profileShares">) {
-  return share.revokedAt === undefined && share.status !== "closed" && await resolvedInterest(ctx, share) !== false;
+  return await capabilityAllowed(ctx, share.createdAt) && share.revokedAt === undefined && share.status !== "closed" && await resolvedInterest(ctx, share) !== false;
 }
 async function imagesAllowed(ctx: QueryCtx, share: ShareScope & { includeImages: boolean }, owner: Doc<"registrations"> | null) {
   if (!share.includeImages || !owner) return false;
@@ -85,6 +86,7 @@ export const create = mutation({
     assertProfileCompleted(ownerRegistration, "Profile owner");
     if (args.includeImages && !(await imagesAllowed(ctx, args, ownerRegistration))) throw new Error("Photo sharing requires explicit owner consent");
 
+    if (await ctx.db.query("profileShares").withIndex("by_shareToken", q => q.eq("shareToken", args.shareToken)).first()) throw new Error("Use a fresh share token");
     const now = Date.now();
     return await ctx.db.insert("profileShares", {
       ownerRegistrationId: args.ownerRegistrationId,
