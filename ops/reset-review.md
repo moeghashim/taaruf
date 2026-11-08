@@ -9,7 +9,7 @@ The transaction preserves the interest, original source, workflow and historical
 
 Fails closed for missing workflow, any reciprocal history, pair match history (including closed), contact disclosure or pair-reset audit, and profile-share history. No cascading deletion, match cleanup, queue promotion, contact recall, notification or email. Already-issued/downloaded photo URLs cannot be recalled; no new grant or portal exposure is issued through the reset workflow.
 
-Admin HTTP bridge verifies admin cookie, same-origin request, explicit confirmation and server-held service secret. Convex independently verifies service authorization. Reset records reject stale applicant/admin mutations and sharing; ordinary pair deletion cannot erase platform submissions/audit. Existing unrelated public admin endpoint authentication debt is outside this feature.
+Admin HTTP bridge verifies admin cookie, same-origin request, explicit confirmation and server-held service secret. Convex independently verifies service authorization. Reset records reject stale applicant/admin mutations and sharing; ordinary pair deletion cannot erase platform submissions/audit. See [the current authorization remediation](../docs/issue58-photo-consent.md#limits-and-release-gate) for the broader service boundary.
 
 ## Validation
 249 tests pass (30 files), including nine new backend and eight bridge tests. TypeScript and scoped ESLint pass; design detector reports no findings. Independent review found and corrected pair-delete audit bypass, stale share creation, and 20/100-row truncation issues. Real isolated backend/browser proof tracked separately.

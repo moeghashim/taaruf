@@ -14,7 +14,7 @@ Management needs protected approval links that take them directly to the relevan
 - Require final approval before the photo-request stage.
 - Let either applicant request photos after final approval.
 - Let the other applicant approve or decline a photo request.
-- Reveal photos to both applicants only after photo approval.
+- Resolve photo visibility using [current recipient consent](issue58-photo-consent.md#behavior).
 - Share contact info with both applicants only after the final required approval state is reached.
 - Send email notifications for new required applicant actions and management approvals.
 - Provide management links that open the protected admin workbench for the exact interest or match.
@@ -131,8 +131,7 @@ Photo Request:
 
 - Either candidate can request pictures.
 - The other candidate can approve or decline the request.
-- If approved, both candidates' approved profile photos become visible to both sides.
-- If declined, photos stay hidden, but the pair can still proceed to contact sharing after both final approvals.
+- Photo visibility follows [current recipient consent](issue58-photo-consent.md#behavior); a flow decision cannot override a recipient-specific No/revocation. Photo decline does not block contact sharing after both final approvals.
 
 Contact Sharing:
 
@@ -279,7 +278,7 @@ Keep existing `interests.status` values for queueing and admin compatibility. Ma
 - Applicants can only mutate actions available to their role in the current flow state.
 - Bios are hidden until `bioVisibleAt` is set.
 - Candidate names are hidden until the bio-review state opens.
-- Photos are hidden until `photosVisibleAt` is set.
+- Photo visibility follows [current recipient consent](issue58-photo-consent.md#behavior).
 - Contact info is hidden until `contactSharedAt` is set.
 - Female-submitted interests that are currently `internal_only` must remain protected according to existing privacy rules unless management explicitly exposes them.
 - Female-documented interests are visible only to the female applicant and admins before a match is in place.
@@ -307,7 +306,7 @@ Keep existing `interests.status` values for queueing and admin compatibility. Ma
 - Applicants can independently check interest and match status without asking management.
 - Management has direct links to approve or review every sensitive transition.
 - No contact info is visible before the required approvals are complete.
-- No photos are visible before explicit picture approval.
+- Photo visibility obeys [current recipient consent](issue58-photo-consent.md#behavior).
 - Existing admin interest and match workflows continue to function.
 - Email failures are visible and retryable from admin.
 
@@ -326,7 +325,7 @@ Keep existing `interests.status` values for queueing and admin compatibility. Ma
 - Male outbound initiation does not open bio visibility until the female recipient accepts.
 - Both candidates can give final approval after bios are visible.
 - Either candidate can request a picture after final approval.
-- Picture request approval reveals photos to both candidates.
+- Picture visibility obeys [current recipient consent](issue58-photo-consent.md#behavior).
 - Contact info is shared to both only when the configured final sharing condition is met.
 - Management emails include `/admin/workbench?interest=<id>&step=<step>` or `/admin/workbench?match=<id>&step=<step>`.
 - Existing `/admin/interests`, `/admin/pipeline`, `/admin/workbench`, `/profile/[token]`, and `/share/[token]` behavior remains operational.
