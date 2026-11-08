@@ -1,3 +1,4 @@
+import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
 import { getAdminSecret } from "@/lib/admin-server";
 import { NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
@@ -21,7 +22,7 @@ export async function GET() {
   } catch (error) {
     return NextResponse.json(
       { error: "Unable to complete request" },
-      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
+      { status: isApplicantUnauthorized(error) ? 401 : 500 }
     );
   }
 }

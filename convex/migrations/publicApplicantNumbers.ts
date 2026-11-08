@@ -1,3 +1,4 @@
+import { requireAdmin } from "../adminAuthorization";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { action, internalMutation, query } from "../_generated/server";
@@ -92,10 +93,11 @@ export const backfillBatch = internalMutation({
 });
 
 export const backfillCreationOrderPublicApplicantNumbers = action({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     dryRun: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<BackfillResult> => {
+    requireAdmin(args.adminSecret);
     return await ctx.runMutation(internal.migrations.publicApplicantNumbers.backfillBatch, {
       dryRun: args.dryRun ?? true,
     });
@@ -103,8 +105,9 @@ export const backfillCreationOrderPublicApplicantNumbers = action({
 });
 
 export const verifyPublicApplicantNumbers = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const registrations = (await ctx.db.query("registrations").collect()).sort(
       (a, b) => a._creationTime - b._creationTime
     );

@@ -9,8 +9,8 @@ await fs.mkdir(output, {recursive:true});
 const bundle = await build({stdin:{contents:
   'import React from "react"; import {createRoot} from "react-dom/client"; import {Topbar} from "./src/components/admin/layout/topbar"; createRoot(document.getElementById("root")).render(<Topbar crumb="Workbench" onMenu={()=>{}}/>);',
   resolveDir:process.cwd(),loader:'tsx'}, bundle:true,write:false,format:'iife',jsx:'automatic',plugins:[{name:'synthetic-adapters',setup(b){
-    b.onResolve({filter:new RegExp("^(convex/react|next/navigation)$")}, args=>({path:args.path,namespace:'fixture'}));
-    b.onLoad({filter:/.*/,namespace:'fixture'}, args=>({loader:'js',contents: args.path==='next/navigation' ? 'export const useRouter=()=>({push:url=>{window.destination=url}});' : 'export const useQuery=()=>[{_id:"synthetic-male",name:"Synthetic Male",gender:"male",status:"approved",profileCompletionStatus:"completed",searchStatus:"active",publicApplicantNumber:901},{_id:"synthetic-female",name:"Synthetic Female",gender:"female",status:"approved",profileCompletionStatus:"completed",searchStatus:"active",publicApplicantNumber:902}];'}));
+    b.onResolve({filter:new RegExp("^next/navigation$")}, args=>({path:args.path,namespace:'fixture'}));
+    b.onLoad({filter:/.*/,namespace:'fixture'}, ()=>({loader:'js',contents: 'export const useRouter=()=>({push:url=>{window.destination=url}});' }));
   }}]});
 const js=bundle.outputFiles[0].text;
 const cssFiles=(await fs.readdir('.next/static/chunks')).filter(f=>f.endsWith('.css'));
@@ -21,6 +21,13 @@ const browser=await chromium.launch({headless:true, channel:"chrome"});
 try {
  for (const viewport of [{width:1440,height:1000},{width:390,height:844}]) {
   const page=await browser.newPage({viewport}); const errors=[]; page.on('pageerror',e=>{errors.push(e.message);console.error(e.message)}); page.setDefaultTimeout(10000);
+  await page.route('**/api/admin/bridge', async route => {
+   const {kind,name,args}=route.request().postDataJSON();
+   assert.equal(kind,'query'); assert.equal(route.request().method(),'POST'); assert.deepEqual(args,{});
+   const profiles=[{_id:'synthetic-male',name:'Synthetic Male',gender:'male',status:'approved',profileCompletionStatus:'completed',searchStatus:'active',publicApplicantNumber:901},{_id:'synthetic-female',name:'Synthetic Female',gender:'female',status:'approved',profileCompletionStatus:'completed',searchStatus:'active',publicApplicantNumber:902}];
+   assert.equal(name,'registrations.getAll');
+   await route.fulfill({json:{result:profiles}});
+  });
   await page.route('**/api/admin/create-match',async route=>{assert.deepEqual(route.request().postDataJSON(),{maleRegistrationId:'synthetic-male',femaleRegistrationId:'synthetic-female',adminNotes:''});await route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:'An open match already exists for this pair. Open it in the workbench.'})});});
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.getByRole('button',{name:'New match',exact:true}).click();

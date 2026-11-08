@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     const backfill = await convexClient.action(
       api.migrations.profileCompletion.backfillProfileCompletionStatuses,
       {
+        adminSecret: getAdminSecret(),
         dryRun: Boolean(dryRun),
         limit: typeof limit === "number" ? limit : undefined,
       }
@@ -58,13 +59,11 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const token = registration.profileAccessToken || crypto.randomBytes(24).toString("hex");
-        if (!registration.profileAccessToken) {
-          await convexClient.mutation(api.registrations.setProfileAccessToken, { adminSecret: getAdminSecret(),
-            id: registration._id,
-            token,
-          });
-        }
+        const token = await convexClient.mutation(api.registrations.ensureProfileAccessToken, {
+          adminSecret: getAdminSecret(),
+          id: registration._id,
+          token: crypto.randomBytes(24).toString("hex"),
+        });
 
         const emailResult = await sendProfileCompletionEmail({
           name: registration.name,

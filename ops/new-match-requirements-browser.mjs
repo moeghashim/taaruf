@@ -3,11 +3,15 @@ import {ConvexHttpClient} from 'convex/browser';
 import assert from 'node:assert/strict';
 const backend=new ConvexHttpClient('http://127.0.0.1:3340');
 const before=await backend.query('newMatchFixture:snapshot',{});
-for(const match of before.matches)await backend.mutation('matches:updateStatus',{id:match._id,status:'closed'});
+
 const browser=await chromium.launch({channel:'chrome',headless:true});
 try{for(const [index,width] of [1440,390].entries()){
  const context=await browser.newContext({viewport:{width,height:1000}});
  const auth=await context.request.post('http://127.0.0.1:3342/api/admin/auth',{data:{password:'synthetic-local-new-match'}});assert.equal(auth.status(),200);
+ if(index===0)for(const match of before.matches){
+  const closed=await context.request.post('http://127.0.0.1:3342/api/admin/bridge',{headers:{Origin:'http://127.0.0.1:3342'},data:{kind:'mutation',name:'matches.updateStatus',args:{id:match._id,status:'closed'}}});
+  assert.equal(closed.status(),200);
+ }
  const p=await context.newPage();p.setDefaultTimeout(30000);
  await p.goto('http://127.0.0.1:3342/admin/workbench');
  await p.getByRole('button',{name:'New match',exact:true}).click();

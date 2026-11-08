@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
@@ -45,6 +45,9 @@ async function getRegistration(t: ReturnType<typeof convexTest>, id: Id<"registr
   });
 }
 
+beforeEach(() => vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "synthetic-admin-secret"));
+afterEach(() => vi.unstubAllEnvs());
+
 describe("profile completion migrations", () => {
   test("backfills canonical profile content from legacy fields without overwriting current data", async () => {
     const t = convexTest(schema, modules);
@@ -61,7 +64,7 @@ describe("profile completion migrations", () => {
       spouseRequirement3: "Current three",
     });
 
-    const dryRun = await t.action(api.migrations.profileCompletion.backfillLegacyProfileContent, {
+    const dryRun = await t.action(api.migrations.profileCompletion.backfillLegacyProfileContent, { adminSecret: "synthetic-admin-secret",
       dryRun: true,
       batchSize: 10,
     });
@@ -73,7 +76,7 @@ describe("profile completion migrations", () => {
       shareableBio: "Legacy bio",
     });
 
-    const result = await t.action(api.migrations.profileCompletion.backfillLegacyProfileContent, {
+    const result = await t.action(api.migrations.profileCompletion.backfillLegacyProfileContent, { adminSecret: "synthetic-admin-secret",
       dryRun: false,
       batchSize: 10,
     });
