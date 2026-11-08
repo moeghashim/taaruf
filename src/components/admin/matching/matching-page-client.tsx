@@ -961,10 +961,14 @@ function MatchCard({
         <span className="mono" style={{ color: "var(--mute)" }}>{formatDateTime(match.updatedAt ?? match.createdAt ?? match._creationTime)}</span>
       </div>
 
+      {!match.interest?.femaleWorkflow && match.status !== "contact_shared" && <div>
+        <p>{match.contactGate === "pending_admin_approval" ? "Both final approvals recorded — pending final admin approval." : "Contacts remain private until both applicants approve and an admin releases them."}</p>
+        <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => void run("release", () => shareContacts(match._id), "Final admin approval recorded. Contacts released; notifications queued.")}>Final admin approval — release contacts</button>
+      </div>}
       {match.interest?.femaleWorkflow ? <FemaleWorkflowActions interestId={match.interest._id} state={match.interest.femaleWorkflow.state} /> : <AdminSelect
         label="Match status"
         value={match.status}
-        values={MATCH_STATUSES}
+        values={MATCH_STATUSES.filter(status => status !== "contact_shared" || match.status === "contact_shared")}
         onChange={(nextStatus) =>
           void run(
             "status",

@@ -1,7 +1,7 @@
 process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { modules } from "./test.setup";
 
@@ -83,4 +83,82 @@ test("approval reversal is admin-only and preserves permanent identity", async (
   await expect(t.mutation(api.registrations.revokeApproval, { id: male, adminSecret: "wrong" })).rejects.toThrow("Unauthorized");
   await t.mutation(api.registrations.revokeApproval, { id: male, adminSecret: "test-only-secret" });
   expect(await t.run(ctx => ctx.db.get(male))).toMatchObject({ status: "pending", publicApplicantNumber: 217 });
+});
+
+for (const reciprocal of [false, true]) for (const reverse of [false, true]) test(
+  "gate reciprocal=" + reciprocal + " reverse=" + reverse, async () => {
+    const { t, interest, flow, match, male, female } = await fixture();
+    const other = await t.run(async ctx => {
+      await ctx.db.patch(flow, { requesterFinalApproval: "pending", recipientFinalApproval: "pending", bioVisibleAt: Date.now() });
+      if (!reciprocal) return interest;
+      const original = (await ctx.db.get(interest))!;
+      const id = await ctx.db.insert("interests", { eventId: original.eventId, fromRegistrationId: female, toRegistrationId: male, matchId: match, source: "admin_entered", visibility: "internal_only", status: "converted_to_match", createdAt: Date.now(), updatedAt: Date.now() });
+      await ctx.db.insert("interestFlows", { interestId: id, fromRegistrationId: female, toRegistrationId: male, flowStatus: "bio_review", recipientDecision: "accepted", requesterFinalApproval: "pending", recipientFinalApproval: "pending", photoDecision: "pending", bioVisibleAt: Date.now(), createdAt: Date.now(), updatedAt: Date.now() });
+      return id;
+    });
+    const actions = [ { sessionHash: "male-session", interestId: interest, approved: true }, { sessionHash: "female-session", interestId: other, approved: true } ];
+    if (reverse) actions.reverse();
+    await t.mutation(api.applicantInterests.giveFinalApproval, actions[0]);
+    await expect(t.mutation(api.matches.updateStatus, { id: match, status: "contact_shared", adminSecret: "test-only-secret" })).rejects.toThrow("Both applicants");
+    await t.mutation(api.applicantInterests.giveFinalApproval, actions[1]);
+    await Promise.all(actions.map(args => t.mutation(api.applicantInterests.giveFinalApproval, args)));
+    expect(await t.run(ctx => ctx.db.get(match))).toMatchObject({ contactGate: "pending_admin_approval", status: "reviewing" });
+    expect(await t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
+    expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toHaveLength(2);
+    for (const sessionHash of ["male-session", "female-session"]) {
+      const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash });
+      expect(JSON.stringify(dashboard)).not.toContain(sessionHash === "male-session" ? "f@example.com" : "m@example.com");
+    }
+    const release = { id: match, status: "contact_shared" as const, adminSecret: "test-only-secret" };
+    await t.mutation(api.matches.updateStatus, release);
+    await t.mutation(api.matches.updateStatus, release);
+    expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toHaveLength(4);
+    // Pending-review notifications remain independently deliverable after release.
+    expect(await t.mutation(internal.femaleWorkflowDelivery.claim, {})).toHaveLength(4);
+    for (const sessionHash of ["male-session", "female-session"]) {
+      const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash });
+      expect(JSON.stringify(dashboard)).toContain(sessionHash === "male-session" ? "f@example.com" : "m@example.com");
+    }
+  });
+
+test("simultaneous bilateral approvals create one match and independent pending rows", async () => {
+  const { t, interest, flow, match } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.delete(match);
+    await ctx.db.patch(interest, { matchId: undefined, status: "active" });
+    await ctx.db.patch(flow, { bioVisibleAt: Date.now(), requesterFinalApproval: "pending", recipientFinalApproval: "pending" });
+  });
+  await Promise.all(["male-session", "female-session"].map(sessionHash => t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash, interestId: interest, approved: true })));
+  expect(await t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toHaveLength(2);
+});
+
+test("historically disclosed contacts are retained without new outbox or gate backfill", async () => {
+  const { t, interest, flow, match } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.patch(match, { status: "contact_shared" });
+    await ctx.db.patch(flow, { flowStatus: "contact_shared", contactSharedAt: 123, bioVisibleAt: 100 });
+  });
+  await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "male-session", interestId: interest, approved: true });
+  expect(JSON.stringify(await t.query(api.applicantInterests.getDashboard, { sessionHash: "male-session" }))).toContain("f@example.com");
+  expect((await t.run(ctx => ctx.db.get(flow)))?.contactSharedAt).toBe(123);
+  expect((await t.run(ctx => ctx.db.get(match)))?.contactGate).toBeUndefined();
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toHaveLength(0);
+});
+
+test("pending gate blocks timestamp-only serializer bypass", async () => {
+  const { t, match, flow } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.patch(match, { contactGate: "pending_admin_approval" });
+    await ctx.db.patch(flow, { contactSharedAt: 123 });
+  });
+  expect(JSON.stringify(await t.query(api.applicantInterests.getDashboard, { sessionHash: "male-session" }))).not.toContain("f@example.com");
+});
+test("legacy bilateral approval retry enters pending gate without disclosure", async () => {
+  const { t, match, flow, interest } = await fixture();
+  await t.run(ctx => ctx.db.patch(flow, { bioVisibleAt: 123 }));
+  await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "male-session", interestId: interest, approved: true });
+  expect((await t.run(ctx => ctx.db.get(match)))?.contactGate).toBe("pending_admin_approval");
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toHaveLength(2);
+  expect((await t.run(ctx => ctx.db.get(flow)))?.contactSharedAt).toBeUndefined();
 });

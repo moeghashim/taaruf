@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
 import { getConvexClient } from "@/lib/convex";
-import { sendContactSharedEmail, sendFinalApprovalRequestedEmail, sendInboundInterestReceivedEmail } from "@/lib/email";
+import { sendFinalApprovalRequestedEmail, sendInboundInterestReceivedEmail } from "@/lib/email";
 
 function getAppUrl() {
   return process.env.NEXT_PUBLIC_APP_URL
@@ -227,55 +227,6 @@ export async function POST(request: NextRequest) {
           success: true,
           message: "Approval recorded. The other applicant has been notified.",
           notification: { sent: true, providerId: emailResult.id },
-        });
-      }
-
-      if (result.contactSharedNotification?.recipients.length) {
-        const appUrl = getAppUrl();
-        if (!appUrl) {
-          const error = "App URL not configured";
-          await convex.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: getAdminSecret(),
-            id: result.contactSharedNotification.matchId,
-            sent: false,
-            error,
-          });
-          return NextResponse.json({
-            success: true,
-            message: "Contact information is shared, but the notification email could not be sent.",
-            notification: { sent: false, error },
-          });
-        }
-
-        const emailResults = await Promise.all(
-          result.contactSharedNotification.recipients.map(async (recipient) => ({
-            recipient,
-            result: await sendContactSharedEmail({
-              name: recipient.name,
-              email: recipient.email,
-              applicantPortalUrl: `${appUrl}/me`,
-            }),
-          }))
-        );
-        const failures = emailResults.filter((item) => !item.result.success);
-        const success = failures.length === 0;
-        await convex.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: getAdminSecret(),
-          id: result.contactSharedNotification.matchId,
-          sent: success,
-          error: success
-            ? undefined
-            : failures.map((item) => `${item.recipient.email}: ${item.result.error}`).join(" | "),
-        });
-
-        return NextResponse.json({
-          success: true,
-          message: success
-            ? "Contact information is shared. Both applicants have been notified."
-            : "Contact information is shared, but one or more notification emails failed.",
-          notification: {
-            sent: success,
-            requested: emailResults.length,
-            failed: failures.length,
-          },
         });
       }
 

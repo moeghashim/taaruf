@@ -368,7 +368,7 @@ function ProfileSideCard({
       )}
 
       {viewerFinalApproval === "approved" && interest.flowStatus !== "contact_shared" && (
-        <p className="notice success">Your final approval is recorded. Waiting for the other applicant.</p>
+        <p className="notice success">{counterpartyFinalApproval === "approved" ? "Both final approvals are recorded. Pending final admin approval; contacts remain private." : "Your final approval is recorded. Waiting for the other applicant."}</p>
       )}
 
       {viewerFinalApproval === "pending" && counterpartyFinalApproval === "approved" && (

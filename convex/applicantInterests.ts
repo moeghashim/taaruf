@@ -1,3 +1,4 @@
+import { linkedFlows, queuePendingReview, contactsVisible } from "./contactGate";
 import { requireAdmin } from "./adminAuthorization";
 import { matchesInterestFirstName } from "./interestIdentity";
 import { mutation, query } from "./_generated/server";
@@ -10,7 +11,6 @@ import {
 import {
   createApplicantInterestWithRules,
   createMatchFromInterest,
-  demoteOpenInterestsInvolvingRegistration,
   promoteOldestQueuedForRegistration,
 } from "./interestRules";
 import { buildRegistrationNumberMaps } from "./registrationNumbers";
@@ -140,7 +140,7 @@ async function safeCounterparty(
  {
   if (!counterparty) return null;
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
-  const contactShared = Boolean(flow?.contactSharedAt);
+  const contactShared = await contactsVisible(ctx, interest, flow);
   const fullProfileVisible =
     showProfile &&
     (contactShared ||
@@ -218,7 +218,7 @@ async function serializeInterest(
     updatedAt: interest.updatedAt,
     keepOpenExpiresAt: flow?.keepOpenExpiresAt ?? null,
     bioVisibleAt: flow?.bioVisibleAt ?? null,
-    contactSharedAt: flow?.contactSharedAt ?? null,
+    contactSharedAt: await contactsVisible(ctx, interest, flow) ? flow?.contactSharedAt ?? null : null,
     requesterFinalApproval: flow?.requesterFinalApproval ?? "pending",
     recipientFinalApproval: flow?.recipientFinalApproval ?? "pending",
     photoDecision: flow?.photoDecision ?? "pending",
@@ -594,6 +594,23 @@ export const giveFinalApproval = mutation({
     }
 
     const flow = await ensureFlow(ctx, interest);
+    // Already-disclosed historical rows are immutable consent history.
+    if (flow.contactSharedAt) {
+      if (!args.approved) throw new Error("Final approval has already been recorded for this interest");
+      return { flowId: flow._id, matchId: interest.matchId ?? null, finalApprovalNotification: null, contactSharedNotification: null, alreadyRecorded: true };
+    }
+    const siblings = await linkedFlows(ctx, interest);
+    // Mirror only the explicit actor decision, by identity, on reciprocal cards.
+    for (const sibling of siblings) {
+      if (sibling._id === flow._id) continue;
+      const requester = sibling.fromRegistrationId === registration._id;
+      const decision = requester ? sibling.requesterFinalApproval : sibling.recipientFinalApproval;
+      if (decision !== "pending" && decision !== (args.approved ? "approved" : "declined")) throw new Error("Final approval has already been recorded for this interest");
+      await ctx.db.patch(sibling._id, requester
+        ? { requesterFinalApproval: args.approved ? "approved" : "declined", requesterFinalApprovalAt: Date.now(), ...(args.approved ? {} : { flowStatus: "declined" as const }) }
+        : { recipientFinalApproval: args.approved ? "approved" : "declined", recipientFinalApprovalAt: Date.now(), ...(args.approved ? {} : { flowStatus: "declined" as const }) });
+    }
+
     if (["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(flow.flowStatus)) {
       throw new Error("Interest is no longer active");
     }
@@ -607,6 +624,7 @@ export const giveFinalApproval = mutation({
     const requestedFinalApproval = args.approved ? "approved" as const : "declined" as const;
     if (existingViewerFinalApproval !== "pending") {
       if (existingViewerFinalApproval === requestedFinalApproval) {
+        if (args.approved && flow.requesterFinalApproval === "approved" && flow.recipientFinalApproval === "approved" && interest.matchId) await queuePendingReview(ctx, interest.matchId);
         return {
           flowId: flow._id,
           matchId: interest.matchId ?? null,
@@ -671,53 +689,20 @@ export const giveFinalApproval = mutation({
         if (person.activeMatchId && person.activeMatchId !== matchId) throw new Error("Applicant already has an active match");
       }
     }
-    if (bothApproved && matchId) {
-      const match = await ctx.db.get(matchId);
-      if (match) {
-        await ctx.db.patch(match._id, {
-          status: "contact_shared",
-          updatedAt: now,
-        });
-        await ctx.db.patch(match.maleRegistrationId, {
-          activeMatchId: match._id,
-        });
-        await ctx.db.patch(match.femaleRegistrationId, {
-          activeMatchId: match._id,
-        });
-        await demoteOpenInterestsInvolvingRegistration(ctx, match.maleRegistrationId, match._id);
-        await demoteOpenInterestsInvolvingRegistration(ctx, match.femaleRegistrationId, match._id);
-      }
-    }
-
-    const contactSharedMatch = bothApproved && matchId ? await ctx.db.get(matchId) : null;
-    const contactSharedRecipientRows = contactSharedMatch && !contactSharedMatch.contactSharedNotificationSentAt
-      ? await Promise.all([
-          ctx.db.get(contactSharedMatch.maleRegistrationId),
-          ctx.db.get(contactSharedMatch.femaleRegistrationId),
-        ])
-      : [];
-    const contactSharedRecipients = contactSharedRecipientRows.flatMap((recipient) =>
-      recipient
-        ? [{
-            registrationId: recipient._id,
-            name: recipient.name,
-            email: recipient.email,
-          }]
-        : []
-    );
+    if (bothApproved && matchId) await queuePendingReview(ctx, matchId);
 
     await ctx.db.patch(flow._id, {
-      flowStatus: bothApproved ? "contact_shared" : "awaiting_final_approvals",
+      flowStatus: "awaiting_final_approvals",
       requesterFinalApproval,
       recipientFinalApproval,
       requesterFinalApprovalAt: interest.fromRegistrationId === registration._id ? now : flow.requesterFinalApprovalAt,
       recipientFinalApprovalAt: interest.toRegistrationId === registration._id ? now : flow.recipientFinalApprovalAt,
-      contactSharedAt: bothApproved ? now : flow.contactSharedAt,
+      contactSharedAt: flow.contactSharedAt,
       finalApprovalNotificationSentAt: shouldNotifyOtherApplicant ? now : flow.finalApprovalNotificationSentAt,
       finalApprovalNotificationError: shouldNotifyOtherApplicant ? undefined : flow.finalApprovalNotificationError,
       updatedAt: now,
     });
-    await appendEvent(ctx, flow, bothApproved ? "contact_shared" : "final_approval_given", registration._id);
+    await appendEvent(ctx, flow, bothApproved ? "pending_admin_approval" : "final_approval_given", registration._id);
 
     return {
       flowId: flow._id,
@@ -729,12 +714,7 @@ export const giveFinalApproval = mutation({
             email: notificationRecipient.email,
           }
         : null,
-      contactSharedNotification: contactSharedMatch
-        ? {
-            matchId: contactSharedMatch._id,
-            recipients: contactSharedRecipients,
-          }
-        : null,
+      contactSharedNotification: null,
       alreadyRecorded: false,
     };
   },

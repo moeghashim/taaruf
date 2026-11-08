@@ -17,6 +17,7 @@ const eslintConfig = [
       "ops/interest-runtime/**",
       "ops/photo-runtime/**",
       "ops/security-runtime/**",
+      "ops/all-origin-runtime/**",
       "ops/female-runtime/**",
       "ops/security-release/**",
       ".next/**",

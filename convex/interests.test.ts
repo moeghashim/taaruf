@@ -688,20 +688,10 @@ describe("interest rules", () => {
       interestId: result.interestId,
       approved: true,
     });
-    expect(secondApproval.contactSharedNotification).toMatchObject({
-      recipients: [
-        {
-          registrationId: male,
-          name: "Final Approval Male",
-          email: "final.approval.male@example.com",
-        },
-        {
-          registrationId: female,
-          name: "Final Approval Female",
-          email: "final.approval.female@example.com",
-        },
-      ],
-    });
+    expect(secondApproval.contactSharedNotification).toBeNull();
+    const pending = await t.query(api.applicantInterests.getDashboard, { sessionHash: maleSession });
+    expect(pending.outbound[0]?.counterparty?.email).toBeNull();
+    await t.mutation(api.matches.updateStatus, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, id: secondApproval.matchId!, status: "contact_shared" });
 
     const finalMaleDashboard = await t.query(api.applicantInterests.getDashboard, {
       sessionHash: maleSession,

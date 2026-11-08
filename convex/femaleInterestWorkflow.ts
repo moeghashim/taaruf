@@ -1,3 +1,4 @@
+import { enqueueContactDelivery, deliveryParticipants } from "./contactGate";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
@@ -33,9 +34,7 @@ function checkReview(workflow: NonNullable<Doc<"interests">["femaleWorkflow"]>, 
   if (!workflow.reviewTokenHash || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now() || (hash !== undefined && hash !== workflow.reviewTokenHash)) throw new Error("Review link expired or invalid");
 }
 async function enqueue(ctx: MutationCtx, interest: Doc<"interests">, recipientId: Id<"registrations">, kind: Doc<"femaleWorkflowDeliveries">["kind"]) {
-  const key = interest._id + ":" + kind + ":" + recipientId;
-  if (await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_key", q => q.eq("key", key)).unique()) return;
-  await ctx.db.insert("femaleWorkflowDeliveries", { interestId: interest._id, recipientId, kind, key, status: "pending", attempts: 0, nextAttemptAt: Date.now(), createdAt: Date.now() });
+  await enqueueContactDelivery(ctx, interest._id, recipientId, kind);
 }
 export const createReview = mutation({ args: { ...adminArgs, reviewTokenHash: v.string() }, handler: async (ctx, args) => {
   requireAdmin(args.adminSecret);
@@ -113,7 +112,7 @@ export const confirm = mutation({ args: { ...applicantArgs, confirmed: v.boolean
   const matches = await ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", brother._id)).take(1001);
   if (matches.length > 1000 || matches.some(m => m.femaleRegistrationId === sister._id && !["closed", "declined"].includes(m.status))) throw new Error("Pair already has an open match");
   const now = Date.now();
-  const matchId = await ctx.db.insert("matches", { maleRegistrationId: brother._id, femaleRegistrationId: sister._id, interestId: interest._id, interestType: "mutual_interest", status: "reviewing", initiatedBy: "interest_signal", createdAt: now, updatedAt: now });
+  const matchId = await ctx.db.insert("matches", { maleRegistrationId: brother._id, femaleRegistrationId: sister._id, interestId: interest._id, interestType: "mutual_interest", status: "reviewing", contactGate: "pending_admin_approval", initiatedBy: "interest_signal", createdAt: now, updatedAt: now });
   await ctx.db.patch(interest._id, { matchId, status: "converted_to_match", adminStatus: "matched", femaleWorkflow: { ...workflow, state: "pending_admin_approval", sisterConfirmedAt: now }, updatedAt: now });
   if (flow) await ctx.db.patch(flow._id, { flowStatus: "awaiting_final_approvals", recipientDecision: "accepted", requesterFinalApproval: "approved", recipientFinalApproval: "approved", requesterFinalApprovalAt: now, recipientFinalApprovalAt: workflow.brotherAcceptedAt, bioVisibleAt: now, updatedAt: now });
   for (const recipient of [sister, brother]) await enqueue(ctx, interest, recipient._id, "pending_review");
@@ -127,7 +126,7 @@ export const releaseContacts = mutation({ args: adminArgs, handler: async (ctx, 
   for (const person of [sister, brother]) if (!person.email || !person.phone || (person.activeMatchId && person.activeMatchId !== match._id)) throw new Error("Applicant unavailable or active match conflict");
   const now = Date.now();
   await ctx.db.patch(interest._id, { femaleWorkflow: { ...workflow, state: "contacts_released", adminReleasedAt: now }, updatedAt: now });
-  await ctx.db.patch(match._id, { status: "contact_shared", updatedAt: now });
+  await ctx.db.patch(match._id, { status: "contact_shared", contactGate: "contacts_released", adminReleasedAt: now, updatedAt: now });
   if (flow) { await ctx.db.patch(flow._id, { flowStatus: "contact_shared", contactSharedAt: now, updatedAt: now }); await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: interest._id, actor: "system", eventType: "female_admin_contacts_released", createdAt: now }); }
   for (const person of [sister, brother]) { await ctx.db.patch(person._id, { activeMatchId: match._id }); await demoteOpenInterestsInvolvingRegistration(ctx, person._id, match._id); await enqueue(ctx, interest, person._id, "contacts_ready"); }
   return { state: "contacts_released" as const, matchId: match._id };
@@ -159,7 +158,8 @@ export const listDeliveriesPage = query({ args: { adminSecret: v.optional(v.stri
 export const retryDelivery = mutation({ args: { adminSecret: v.optional(v.string()), deliveryId: v.id("femaleWorkflowDeliveries") }, handler: async (ctx, args) => {
   requireAdmin(args.adminSecret); const row = await ctx.db.get(args.deliveryId);
   if (!row || row.status !== "failed") throw new Error("Only failed delivery can retry");
-  await active(ctx, row.interestId);
+  const interest = await ctx.db.get(row.interestId);
+  if (interest?.femaleWorkflow) await active(ctx, row.interestId); else await deliveryParticipants(ctx, row.interestId);
   if (row.firstAttemptAt !== undefined && Date.now() - row.firstAttemptAt >= 23 * 3600000) throw new Error("Idempotency window expired; reconcile provider delivery manually");
   await ctx.db.patch(row._id, { status: "pending", nextAttemptAt: Date.now(), error: undefined }); return null;
 }});

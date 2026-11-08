@@ -1,9 +1,14 @@
+import { deliveryParticipants } from "./contactGate";
 import { v } from "convex/values";
 import { internalMutation, internalAction, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { active } from "./femaleInterestWorkflow";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
+async function participants(ctx: MutationCtx, id: Id<"interests">) {
+  const interest = await ctx.db.get(id);
+  return interest?.femaleWorkflow ? await active(ctx, id) : await deliveryParticipants(ctx, id);
+}
 async function cooldown(ctx: MutationCtx) {
   // Indexed maximum is shared across every worker, including new pending rows.
   const latest = await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_providerCooldownUntil").order("desc").first();
@@ -19,8 +24,8 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
   for (const row of [...pending, ...abandoned].slice(0, 10)) {
     if (row.firstAttemptAt !== undefined && now - row.firstAttemptAt >= 23 * 3600000) { await ctx.db.patch(row._id, { status: "failed", error: "Idempotency window expired; manual reconciliation required" }); continue; }
     try {
-      const { workflow, sister, brother } = await active(ctx, row.interestId);
-      if (![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
+      const { workflow, sister, brother } = await participants(ctx, row.interestId);
+      if (![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
       const recipient = row.recipientId === sister._id ? sister : brother;
       const attempts = row.attempts + 1;
       await ctx.db.patch(row._id, { status: "sending", attempts, leaseUntil: now + 120000, nextAttemptAt: now + 120000 });
@@ -41,8 +46,8 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   if (until > now) { await ctx.db.patch(row._id, { status: "pending", leaseUntil: undefined, nextAttemptAt: until }); return false; }
   let email: string;
   try {
-    const { workflow, sister, brother } = await active(ctx, row.interestId);
-    if (![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
+    const { workflow, sister, brother } = await participants(ctx, row.interestId);
+    if (![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
     email = row.recipientId === sister._id ? sister.email : brother.email;
   } catch { await ctx.db.patch(row._id, { status: "cancelled", error: "Workflow no longer available" }); return false; }
   const config = deliveryConfig(row.providerPayload?.to[0] ?? email);

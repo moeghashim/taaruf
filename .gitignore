@@ -66,3 +66,5 @@ next-env.d.ts
 /ops/female-runtime/
 /ops/female-*.log
 /ops/female-coordinator-status.md
+
+/ops/all-origin-runtime/

@@ -386,6 +386,8 @@ export default defineSchema({
   }).index("by_operationKey", ["operationKey"]),
 
   matches: defineTable({
+    contactGate: v.optional(v.union(v.literal("pending_admin_approval"), v.literal("contacts_released"))),
+    adminReleasedAt: v.optional(v.number()),
     testResetAt: v.optional(v.number()),
     maleRegistrationId: v.id("registrations"),
     femaleRegistrationId: v.id("registrations"),

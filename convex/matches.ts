@@ -1,3 +1,4 @@
+import { linkedFlows, queuePendingReview, enqueueContactDelivery } from "./contactGate";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
@@ -394,10 +395,17 @@ export const updateStatus = mutation({
         if (!person || person.status !== "approved" || !person.email || !person.phone) throw new Error("Both applicants must be approved and have contact details");
         if (person.activeMatchId && person.activeMatchId !== match._id) throw new Error("Applicant already has an active match");
       }
-      if (!flow.contactSharedAt) {
+      const flows = await linkedFlows(ctx, interest);
+      if (flows.some(f => f.requesterFinalApproval !== "approved" || f.recipientFinalApproval !== "approved")) throw new Error("Both applicants must give final approval before contacts can be shared");
+      if (match.status !== "contact_shared") {
+        await queuePendingReview(ctx, match._id);
         const now = Date.now();
-        await ctx.db.patch(flow._id, { flowStatus: "contact_shared", contactSharedAt: now, updatedAt: now });
-        await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: interest._id, actor: "system", eventType: "contacts_disclosed_in_portal", message: "Contacts made available to both authenticated applicants by admin.", createdAt: now });
+        await ctx.db.patch(match._id, { contactGate: "contacts_released", adminReleasedAt: now });
+        for (const linked of flows) {
+          await ctx.db.patch(linked._id, { flowStatus: "contact_shared", contactSharedAt: now, updatedAt: now });
+          await ctx.db.insert("interestFlowEvents", { interestFlowId: linked._id, interestId: linked.interestId, actor: "system", eventType: "contacts_disclosed_in_portal", message: "Final admin approval: contacts released.", createdAt: now });
+        }
+        for (const person of pair) await enqueueContactDelivery(ctx, interest._id, person!._id, "contacts_ready");
       }
     }
     const previousStatus = match.status;

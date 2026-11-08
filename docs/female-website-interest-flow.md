@@ -1,4 +1,4 @@
-# Female-origin website interest flow
+# Website interest flow and all-origin final contact gate
 
 Review-only implementation for issue #64, stacked on the PR #61 security/photo candidate. Not deployed.
 
@@ -7,6 +7,12 @@ Review-only implementation for issue #64, stacked on the PR #61 security/photo c
 3. The brother signs in and explicitly accepts or declines. Merely opening a link changes nothing. Acceptance queues a sister confirmation email.
 4. The sister explicitly confirms on the website. This atomically creates exactly one mutual match, pending final admin approval, and queues an independent pending-review email for each applicant.
 5. Final admin approval makes contacts available in both authenticated portals and queues each applicant a contacts-ready email containing only the portal link. Contact data is never included in these emails.
+
+## All-origin final approval (expanded issue #64)
+
+This supersedes earlier preserve-male-policy claims for **final contact release**. Male inbound discovery and reciprocal discovery remain unchanged; neither is final consent. Male-origin and linked reciprocal flows now record explicit participant approvals, reuse/create one reviewing match, and queue two pending-review deliveries. Only authenticated final admin approval releases contacts and queues two contacts-ready deliveries. Reciprocal approvals are mirrored by participant identity, not requester position. Legacy pending flows use this gate on their next action; historically disclosed contacts are retained without migration/backfill.
+
+The existing female flow remains unchanged. Both paths share the existing durable outbox, cooldown, leases, immutable payload and provider idempotency machinery (legacy table/environment names retained). Pending-review deliveries remain independently deliverable after admin release. Admin status updates to contact_shared invoke the same privileged release transaction as the share-contacts route, never a bare status patch.
 
 ## Delivery and operational gates
 
