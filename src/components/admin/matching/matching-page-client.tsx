@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TestResetDialog } from "./test-reset-dialog";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
@@ -510,25 +511,33 @@ function InterestActions({
   interest,
   data,
   onMessage,
+  onReset,
 }: {
   interest: InterestRecord;
+  onReset: (interest: InterestRecord) => void;
   data: MatchingData;
   onMessage: (message: string) => void;
 }) {
   const notifyDecline = useNotifyDecline();
   const [busy, setBusy] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const run = async (label: string, action: () => Promise<unknown>, success: string) => {
     setBusy(label);
     try {
       await action();
       onMessage(success);
+      setFeedback(success);
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      onMessage(message);
+      setFeedback(message);
     } finally {
       setBusy(null);
     }
   };
+
+  if (interest.testReset) return <span role="status">Test reset — audit retained</span>;
 
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -574,7 +583,7 @@ function InterestActions({
           {busy === "notify-decline" ? "Sending..." : interest.declineNotificationError ? "Retry notice" : "Send notice"}
         </button>
       )}
-      {!interest.matchId && (
+      {!interest.matchId && interest.source !== "platform_submission" && (
         <button
           className="btn btn-sm btn-ghost"
           type="button"
@@ -588,6 +597,10 @@ function InterestActions({
           Delete
         </button>
       )}
+      {!interest.matchId && interest.source === "platform_submission" && (
+        <button className="btn btn-sm btn-ghost" type="button" disabled={busy !== null} onClick={() => onReset(interest)}>Reset test submission</button>
+      )}
+      {feedback && <p role="alert" style={{ flexBasis: "100%", margin: 0 }}>{feedback}</p>}
     </div>
   );
 }
@@ -597,7 +610,9 @@ function InterestRow({
   data,
   numbers,
   onMessage,
+  onReset,
 }: {
+  onReset: (interest: InterestRecord) => void;
   interest: InterestRecord;
   data: MatchingData;
   numbers: Map<string, number>;
@@ -726,7 +741,7 @@ function InterestRow({
         />
       </td>
       <td>
-        <InterestActions interest={interest} data={data} onMessage={onMessage} />
+        <InterestActions interest={interest} data={data} onMessage={onMessage} onReset={onReset} />
       </td>
     </tr>
   );
@@ -734,6 +749,7 @@ function InterestRow({
 
 export function InterestsPageClient() {
   const data = useMatchingData();
+  const [resetSelection, setResetSelection] = useState<{ id: string; pair: string; event: string } | null>(null);
   const [status, setStatus] = useState<InterestStatus | "all">("all");
   const [showArchive, setShowArchive] = useState(false);
   const [visibility, setVisibility] = useState<"all" | "internal_only" | "admin_actionable">("all");
@@ -782,6 +798,7 @@ export function InterestsPageClient() {
         subtitle="Review interest signals, manage the queue, and convert selected pairs into matches."
       />
       <Notice text={message} />
+      {resetSelection && <TestResetDialog key={resetSelection.id} selection={resetSelection} onClose={() => setResetSelection(null)} onSuccess={setMessage} />}
       {data.isLoading ? (
         <LoadingPanel />
       ) : (
@@ -873,6 +890,7 @@ export function InterestsPageClient() {
                     data={data}
                     numbers={data.registrationNumbers}
                     onMessage={setMessage}
+                    onReset={interest => setResetSelection({ id: interest._id, pair: `#${interest.fromRegistration?.publicApplicantNumber ?? "?"} → #${interest.toRegistration?.publicApplicantNumber ?? "?"}`, event: interest.event?.title ?? "Unknown event" })}
                   />
                 ))}
               </tbody>

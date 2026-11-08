@@ -627,3 +627,4 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-06
 - Issue58: added recipient-specific submission photo choice, owner revocation, atomic retry behavior, UI and 261-test validation on isolated ac5db90 lineage. Actual synthetic backend/browser passed portal behavior; independent review found inherited authorization blockers, so draft only and no live deployment.
+- Added explicit authenticated per-submission test reset, retained audit and quota indexes, stale-action/share guards, safe deletion feedback and backend/bridge regressions; preview-only, no live data reset. <!-- project: github.com/moeghashim/clawscrewskill -->

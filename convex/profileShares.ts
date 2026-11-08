@@ -1,11 +1,29 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+
+async function available(ctx: QueryCtx, share: Doc<"profileShares">) {
+  if (share.revokedAt !== undefined || share.status === "closed") return false;
+  if (share.interestId) {
+    const interest = await ctx.db.get(share.interestId);
+    if (!interest || interest.testReset) return false;
+  }
+  if (share.matchId) {
+    const match = await ctx.db.get(share.matchId);
+    if (!match || match.testResetAt !== undefined || match.status === "closed") return false;
+  }
+  return true;
+}
+
 import { assertProfileCompleted, getRegistrationOrThrow } from "./interestRules";
 
 export const getAll = query({
   args: {},
   handler: async (ctx) => {
-    const shares = await ctx.db.query("profileShares").take(1000);
+    const candidates = await ctx.db.query("profileShares").take(1000);
+    const shares = [];
+    for (const share of candidates) if (await available(ctx, share)) shares.push(share);
 
     return await Promise.all(
       shares.map(async (share) => {
@@ -32,6 +50,14 @@ export const create = mutation({
     matchId: v.optional(v.id("matches")),
   },
   handler: async (ctx, args) => {
+    if (args.interestId) {
+      const interest = await ctx.db.get(args.interestId);
+      if (!interest || interest.testReset) throw new Error("Interest is unavailable for sharing");
+    }
+    if (args.matchId) {
+      const match = await ctx.db.get(args.matchId);
+      if (!match || match.testResetAt !== undefined || match.status === "closed") throw new Error("Match is unavailable for sharing");
+    }
     const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
     assertProfileCompleted(ownerRegistration, "Profile owner");
     if (args.includeImages && ownerRegistration.photoSharingPermission !== "yes") {
@@ -64,7 +90,7 @@ export const getByShareToken = query({
       .withIndex("by_shareToken", (q) => q.eq("shareToken", args.shareToken))
       .first();
 
-    if (!share) return null;
+    if (!share || !(await available(ctx, share))) return null;
 
     const owner = await ctx.db.get(share.ownerRegistrationId);
     const recipient = await ctx.db.get(share.recipientRegistrationId);
@@ -88,7 +114,7 @@ export const markViewed = mutation({
       .withIndex("by_shareToken", (q) => q.eq("shareToken", args.shareToken))
       .first();
 
-    if (!share) {
+    if (!share || !(await available(ctx, share))) {
       throw new Error("Shared profile not found");
     }
 

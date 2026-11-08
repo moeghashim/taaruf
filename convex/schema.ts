@@ -226,6 +226,7 @@ export default defineSchema({
   interests: defineTable({
     senderPhotoConsent: v.optional(v.union(v.literal("yes"), v.literal("no"))),
     senderPhotoConsentRevokedAt: v.optional(v.number()),
+    testReset: v.optional(v.object({ at: v.number(), reason: v.string(), actor: v.literal("admin") })),
     fromRegistrationId: v.id("registrations"),
     toRegistrationId: v.id("registrations"),
     eventId: v.id("events"),
@@ -246,6 +247,9 @@ export default defineSchema({
     .index("by_fromRegistrationId", ["fromRegistrationId"])
     .index("by_toRegistrationId", ["toRegistrationId"])
     .index("by_fromRegistrationId_and_eventId_and_source", ["fromRegistrationId", "eventId", "source"])
+    .index("by_fromRegistrationId_and_testReset", ["fromRegistrationId", "testReset"])
+    .index("by_toRegistrationId_and_testReset", ["toRegistrationId", "testReset"])
+    .index("by_submission_quota", ["fromRegistrationId", "eventId", "source", "testReset"])
     .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
     .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])
     .index("by_fromRegistrationId_and_toRegistrationId_and_eventId", ["fromRegistrationId", "toRegistrationId", "eventId"])
@@ -356,7 +360,13 @@ export default defineSchema({
     .index("by_registrationId", ["registrationId"])
     .index("by_eventId_and_kind", ["eventId", "kind"]),
 
+  // Restricted operational audit: intentionally no public query or mutation.
+  pairTestResetAudits: defineTable({
+    operationKey: v.string(), request: v.string(), snapshot: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
+
   matches: defineTable({
+    testResetAt: v.optional(v.number()),
     maleRegistrationId: v.id("registrations"),
     femaleRegistrationId: v.id("registrations"),
     interestType,
@@ -379,6 +389,7 @@ export default defineSchema({
     .index("by_status", ["status"]),
 
   profileShares: defineTable({
+    revokedAt: v.optional(v.number()),
     ownerRegistrationId: v.id("registrations"),
     recipientRegistrationId: v.id("registrations"),
     includeImages: v.boolean(),
