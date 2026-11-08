@@ -1,4 +1,4 @@
-import { profileCapabilityAllowed } from "./capabilitySecurity";
+import { capabilityAllowed, profileCapabilityAllowed } from "./capabilitySecurity";
 import { assertImageOwnership, claimSignupImages } from "./imageAuthorization";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
@@ -569,6 +569,19 @@ export const updateSearchStatus = mutation({
   },
 });
 
+async function issueProfileAccessToken(ctx: MutationCtx, id: Id<"registrations">, token: string, recoveryOnly = false) {
+  const previous = await ctx.db.get(id);
+  const issuedAt = Date.now();
+  if (!previous || previous.profileAccessToken === token || await ctx.db.query("registrations").withIndex("by_profileAccessToken", q => q.eq("profileAccessToken", token)).first()) throw new Error("Use a fresh profile token");
+  if (!await capabilityAllowed(ctx, issuedAt)) throw new Error("Profile token issuance unavailable");
+  await ctx.db.patch(id, {
+    profileAccessToken: token,
+    profileAccessTokenIssuedAt: issuedAt,
+    ...(recoveryOnly ? {} : { profileCompletionStatus: "in_progress" as const, profileUpdateRequestedAt: issuedAt }),
+  });
+  return id;
+}
+
 export const setProfileAccessToken = mutation({
   args: { adminSecret: v.optional(v.string()),
     id: v.id("registrations"),
@@ -577,14 +590,19 @@ export const setProfileAccessToken = mutation({
   },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
-    const previous = await ctx.db.get(args.id);
-    if (!previous || previous.profileAccessToken === args.token || await ctx.db.query("registrations").withIndex("by_profileAccessToken", q => q.eq("profileAccessToken", args.token)).first()) throw new Error("Use a fresh profile token");
-    await ctx.db.patch(args.id, {
-      profileAccessToken: args.token,
-      profileAccessTokenIssuedAt: Date.now(),
-      ...(args.recoveryOnly ? {} : { profileCompletionStatus: "in_progress" as const, profileUpdateRequestedAt: Date.now() }),
-    });
-    return args.id;
+    return issueProfileAccessToken(ctx, args.id, args.token, args.recoveryOnly);
+  },
+});
+
+export const ensureProfileAccessToken = mutation({
+  args: { adminSecret: v.optional(v.string()), id: v.id("registrations"), token: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const registration = await ctx.db.get(args.id);
+    if (!registration) throw new Error("Registration not found");
+    if (registration.profileAccessToken && await profileCapabilityAllowed(ctx, registration)) return registration.profileAccessToken;
+    await issueProfileAccessToken(ctx, args.id, args.token, true);
+    return args.token;
   },
 });
 
@@ -884,7 +902,7 @@ export const claimWelcomeReceipt = mutation({
     const now = Date.now();
     if (existing?.sentAt) return { claimed: false };
     if (existing && existing.leaseUntil > now) return { claimed: false, error: "Welcome delivery in progress; retry later" };
-    if (existing && now - existing.firstAttemptAt >= 23 * 3600000) return { claimed: false, error: "Welcome delivery uncertain; manual reconciliation required" };
+    if ((existing && now - existing.firstAttemptAt >= 23 * 3600000) || !await capabilityAllowed(ctx, existing?.firstAttemptAt ?? now)) return { claimed: false, error: "Welcome delivery uncertain; manual reconciliation required" };
     if (existing) await ctx.db.patch(existing._id, { token: args.token, leaseUntil: now + 120000 });
     else {
       await ctx.db.insert("receiptDeliveries", { key, token: args.token, leaseUntil: now + 120000, firstAttemptAt: now, name: registration.name, email: registration.email, profileUrl: args.profileUrl });

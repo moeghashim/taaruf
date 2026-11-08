@@ -1089,7 +1089,7 @@ function ShareProfileAction({
   onMessage,
   role,
 }: {
-  interest?: InterestRecord | null;
+  interest?: Doc<"interests"> | null;
   matchId?: string;
   role: "Requester" | "Target";
   owner: Registration | null;
@@ -1098,7 +1098,7 @@ function ShareProfileAction({
 }) {
   const createShare = useCreateProfileShare();
   const scoped = interest?.fromRegistrationId === owner?._id ? interest?.senderPhotoConsent : undefined;
-  const canSharePhotos = scoped !== undefined ? scoped === "yes" && !interest?.senderPhotoConsentRevokedAt : owner?.photoSharingPermission === "yes";
+  const canSharePhotos = scoped !== undefined ? scoped === "yes" && interest?.senderPhotoConsentRevokedAt === undefined : owner?.photoSharingPermission === "yes";
   const [includeImages, setIncludeImages] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -1290,8 +1290,8 @@ export function WorkbenchPageClient() {
                   {busy === "contact" ? "Updating..." : "Share contacts in portals"}
                 </button>
               )}
-              {!selectedInterest?.femaleWorkflow && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />}
-              {!selectedInterest?.femaleWorkflow && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />}
+              {!selectedInterest?.femaleWorkflow && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />}
+              {!selectedInterest?.femaleWorkflow && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />}
             </div>
           </div>
         </div>

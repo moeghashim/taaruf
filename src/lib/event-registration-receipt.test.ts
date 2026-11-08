@@ -2,7 +2,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ConvexHttpClient } from "convex/browser";
 import type { Id } from "../../convex/_generated/dataModel";
-import { sendEventReceipt, sendCheckoutEventReceipt } from "./event-registration-receipt";
+import { sendEventReceipt, sendCheckoutEventReceipt, sendCheckoutReceipt } from "./event-registration-receipt";
 import { sendEventRegistrationReceivedEmail } from "./email";
 const { send } = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock("resend", () => ({ Resend: class { emails = { send }; } }));
@@ -50,4 +50,12 @@ it("unlinked historical checkout fails closed", async () => {
   const result = await sendCheckoutEventReceipt({ query } as unknown as ConvexHttpClient, "cs_old");
   expect("error" in result && result.error).toContain("no safe receipt association");
   expect(send).not.toHaveBeenCalled();
+});
+
+it("does not send a welcome when its persisted claim requires cutoff reconciliation", async () => {
+ const mutation = vi.fn().mockResolvedValue({ claimed: false, error: "Welcome delivery uncertain; manual reconciliation required" });
+ const query = vi.fn().mockResolvedValue({ registrationId: "synthetic-profile" });
+ expect(await sendCheckoutReceipt({ query, mutation } as unknown as ConvexHttpClient, "cs_stale", "https://example.invalid")).toEqual({ sent: false, error: "Welcome delivery uncertain; manual reconciliation required" });
+ expect(send).not.toHaveBeenCalled();
+ expect(mutation).toHaveBeenCalledTimes(1);
 });

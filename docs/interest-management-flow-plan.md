@@ -141,7 +141,7 @@
    - Timeline/status panel.
    - Action buttons relevant to the current applicant and current state.
    - Bio comparison section that appears only when `bioVisibleAt` is set.
-   - Photo section that appears only when `photosVisibleAt` is set.
+   - Photo section that follows [current recipient consent](issue58-photo-consent.md#behavior).
    - Contact section that appears only when `contactSharedAt` is set.
 3. Add outbound initiation:
    - Do not show a broad browseable list of all eligible completed profiles.

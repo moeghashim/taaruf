@@ -1,3 +1,4 @@
+import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
 import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
@@ -75,11 +76,11 @@ function applicantInterestErrorResponse(error: unknown) {
     );
   }
 
-  if (message.includes("Unauthorized")) {
+  if (isApplicantUnauthorized(error)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  console.error("Applicant interest action failed", error);
+  console.error("Applicant interest action failed");
   return NextResponse.json(
     { error: "Something went wrong while updating your interest. Please try again, or contact the team if it keeps happening." },
     { status: 500 }

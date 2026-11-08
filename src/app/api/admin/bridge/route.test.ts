@@ -47,3 +47,30 @@ test('backend validator failures never disclose credentials', async () => {
 test('operation kind cannot be used to switch allowlists', async () => {
  expect((await POST(request({ ...valid, kind: 'mutation' }))).status).toBe(400); expect(mutation).not.toHaveBeenCalled();
 });
+
+for (const operation of [valid, { kind: 'mutation', name: 'settings.set', args: { key: 'admin_name', value: 'Synthetic' } }]) {
+ test(`${operation.kind} temporary upstream failure is retryable and subsequent requests recover`, async () => {
+  const upstream = operation.kind === 'query' ? query : mutation;
+  upstream.mockResolvedValueOnce('loaded').mockRejectedValueOnce(new TypeError('fetch failed', { cause: new Error('synthetic-service-secret private backend address') })).mockResolvedValueOnce('recovered');
+  expect(await (await POST(request(operation))).json()).toEqual({ result: 'loaded' });
+  const failure = await POST(request(operation));
+  expect(failure.status).toBe(503);
+  expect(failure.headers.get('cache-control')).toBe('private, no-store');
+  expect(await failure.json()).toEqual({ error: 'Admin service temporarily unavailable. Please try again.' });
+  expect(await (await POST(request(operation))).json()).toEqual({ result: 'recovered' });
+  expect(upstream).toHaveBeenCalledTimes(3);
+ });
+}
+test.each(['AbortError', 'TimeoutError'])('upstream %s remains retryable and redacted', async name => {
+ const failure = new Error('synthetic-service-secret private backend failure'); failure.name = name;
+ query.mockRejectedValue(failure);
+ const response = await POST(request());
+ expect(response.status).toBe(503);
+ expect(await response.text()).not.toMatch(/synthetic-service-secret|private backend/);
+});
+test.each([new TypeError('Invalid argument synthetic-service-secret'), new Error('Unauthorized'), new Error('ArgumentValidationError fetch failed synthetic-service-secret')])('non-transport backend failures stay non-retryable and redacted %#', async error => {
+ query.mockRejectedValue(error);
+ const response = await POST(request());
+ expect(response.status).toBe(400);
+ expect(await response.json()).toEqual({ error: 'Unable to complete admin request. Refresh and try again.' });
+});

@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
         const receipt = await sendCheckoutReceipt(convexClient, session.id, appUrl);
         if (receipt.sent) emailsSent++;
         if (receipt.error) details.push("Receipt not delivered: " + receipt.error);
-      } catch (err) {
-        console.error(`Error processing session ${session.id}:`, err);
+      } catch {
+        console.error("Payment repair failed");
       }
     }
 

@@ -12,11 +12,13 @@
 - Upstream global schema already excluded waitlisted, while legacy updateStatus silently normalized waitlisted writes to Pending. Profile/dashboard “Event waitlist” views aggregated legacy event waitlists across events.
 
 ## Implemented
-- Shared eventCapacity helper: Pending AND Approved reserve gender-specific capacity. This is an explicit assumption to avoid overbooking while admins review.
+- Shared eventCapacity helper: Pending AND Approved reserve gender-specific capacity unless their requested confirmation has expired. Waitlisted entries never reserve a place. Capacity counting and promotion use the same expiry predicate.
 - Both checkout and signed-in signup, plus authenticated admin add, use the same transaction-level capacity logic. Overflow is eventRegistrations.registrationStatus=waitlisted with queue-entry time.
 - Withdrawal/rejection/cancelled confirmation/expired confirmation and capacity increase promote oldest same-event/same-gender entries to Pending ONLY. Ordering: waitlistedAt (legacy fallback createdAt), _creationTime, then ID. Rejoining resets queue time. Repeated removal/expiry is safe; repeat portal/admin signup returns the existing row. Checkout retains its pre-existing duplicate-profile rejection semantics.
 - Pending->Approved requires existing cookie-authenticated Next bridge plus server-only ATTENDANCE_ADMIN_SECRET verified in Convex. Direct RPC without correct secret fails closed. Confirmation does not grant approval. No profile status mutation in event operations.
 - Capacity overrides cannot overbook; reductions below reservations fail. Manual Pending clicks cannot jump the queue.
+- Admin-requested confirmation has a 24-hour deadline. A waitlisted applicant can confirm from `/me` before expiry without changing queue position, event registration status, or capacity; confirmation does not grant approval. Confirmed responses are idempotent.
+- Unconfirmed Pending, Approved, and Waitlisted rows past their deadline become Withdrawn with cancelled confirmation. Hourly expiration iterates all eligible statuses through their indexes; shared promotion expires eligible rows for that event/gender before selecting valid FIFO entries. Expired reservations do not block capacity while awaiting that transition. See `convex/waitlistConfirmation.test.ts` and `convex/waitlistExpiration.test.ts`.
 - Automatic cross-event carryover and destructive Apr26 queue migration are retired. Explicit admin copying creates independent Pending/Waitlisted rows, never copies approval. Historical backfill cannot create fake attendance/approval. Existing historical data unchanged; interest eligibility logic unchanged.
 - Removed global profile/dashboard waitlist filtering/badges. Event filters/counts show actual event queue; existing separate-table entries remain visibly labelled retirement-decision-pending. Admin add accepts a profile record ID; this deliberately avoids a broad applicant lookup.
 
@@ -41,5 +43,5 @@ The new eventRegistrations Waitlisted status is a NEW capacity-queue representat
 
 ## Remaining boundaries
 - Only existing-list retirement/orphan disposition remains with Danielle; no profile changes authorized. Parent audit evidence is distinguished from source inspection; no live retrieval by this worker.
-- Existing general admin read/email/profile RPC authorization outside this flow is not comprehensively hardened. Physical profile deletion is an existing separate operation and does not remove event registration rows; event removal here means Withdrawn/Rejected/cancelled confirmation, preserving history.
-- Review/preview approval still required before any release. ATTENDANCE_ADMIN_SECRET must match Next/Convex server environments (existing check-in bridge convention); never expose it to the browser.
+- Administrative authorization is described in [the current remediation scope](issue58-photo-consent.md#limits-and-release-gate). Physical profile deletion is an existing separate operation and does not remove event registration rows; event removal here means Withdrawn/Rejected/cancelled confirmation, preserving history.
+- Review/preview approval still required before any release. See [.env.example](../.env.example) for server credential configuration.

@@ -1,3 +1,4 @@
+import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
 import { NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
@@ -19,7 +20,7 @@ export async function GET() {
       interestSubmissions: dashboard.interestSubmissions,
     }, { headers });
   } catch (error) {
-    const unauthorized = error instanceof Error && error.message.includes("Unauthorized");
+    const unauthorized = isApplicantUnauthorized(error);
     return NextResponse.json({ error: unauthorized ? "Unauthorized" : "Unable to refresh interest availability." }, { status: unauthorized ? 401 : 503, headers });
   }
 }

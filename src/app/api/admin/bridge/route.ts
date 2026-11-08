@@ -19,7 +19,11 @@ export async function POST(request: NextRequest) {
    result = await client.mutation(adminMutations[body.name as keyof typeof adminMutations], args);
   } else return privateJson({ error: 'Operation not allowed' }, 400);
   return privateJson({ result: result ?? null });
- } catch {
+ } catch (error) {
+  if (error instanceof Error && (
+   (error instanceof TypeError && /^(fetch failed|failed to fetch|networkerror when attempting to fetch resource\.?)$/i.test(error.message)) ||
+   error.name === 'TimeoutError' || error.name === 'AbortError'
+  )) return privateJson({ error: 'Admin service temporarily unavailable. Please try again.' }, 503);
   // Validator errors may contain credential-bearing arguments.
   return privateJson({ error: 'Unable to complete admin request. Refresh and try again.' }, 400);
  }

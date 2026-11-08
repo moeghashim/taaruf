@@ -41,3 +41,42 @@ test("overflow signup message says waitlisted, not pending approval", async ({pa
   await expect(page.getByText("You are on this event’s waitlist.",{exact:false})).toBeVisible();
   await expect(page.getByText("Your attendance is pending approval.",{exact:false})).toHaveCount(0);
 });
+
+for (const gender of ["male", "female"]) test(`requested waitlist confirmation stays queued on desktop and mobile for ${gender}`, async ({ page }) => {
+  let confirmed = false;
+  let requested = true;
+  let expired = false;
+  let posts = 0;
+  await page.route("**/*", async route => {
+    const url = new URL(route.request().url());
+    if (url.hostname !== "127.0.0.1") return route.abort();
+    if (!url.pathname.startsWith("/api/")) return route.continue();
+    if (url.pathname === "/api/applicant/me") return route.fulfill({ json: { applicant: { name: "Synthetic", gender, applicantNumber: 1, profileCompletionStatus: "completed" }, inbound: [], outbound: [], privateDocumented: [], canSubmitInterest: false, interestSubmissions: [] } });
+    if (url.pathname === "/api/applicant/events") {
+      if (route.request().method() === "POST") {
+        expect(route.request().postDataJSON()).toEqual({ action: "confirm", eventRegistrationId: "synthetic-row" });
+        confirmed = true; posts++;
+        return route.fulfill({ json: { success: true } });
+      }
+      return route.fulfill({ json: { upcoming: [{ _id: "synthetic-event", title: "Synthetic waitlist", location: "Synthetic", startsAt: Date.now() + 86400000, registration: { _id: "synthetic-row", registrationStatus: "waitlisted", confirmationStatus: confirmed ? "confirmed" : "not_confirmed", ...(requested ? { confirmationRequestedAt: Date.now() - 1000, confirmationExpiresAt: Date.now() + (expired ? -100 : 86400000) } : {}) } }], history: [], eligibleInterestEvents: [] } });
+    }
+    return route.fulfill({ status: 400, json: { error: "Synthetic fixture only" } });
+  });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    confirmed = false; requested = true; expired = false;
+    await page.goto("/me");
+    const row = page.locator(".interest-row").filter({ hasText: "Synthetic waitlist" });
+    await row.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(row).toContainText("Confirmed");
+    await expect(row).toContainText("Waitlisted");
+    await expect(row.getByRole("button")).toHaveCount(0);
+    for (const state of [{ requested: false, expired: false }, { requested: true, expired: true }]) {
+      confirmed = false; requested = state.requested; expired = state.expired;
+      await page.reload();
+      await expect(row).toContainText("Waitlisted");
+      await expect(row.getByRole("button", { name: "Confirm", exact: true })).toHaveCount(0);
+    }
+  }
+  expect(posts).toBe(2);
+});

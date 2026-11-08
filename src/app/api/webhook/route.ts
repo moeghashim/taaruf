@@ -33,10 +33,10 @@ export async function POST(request: NextRequest) {
     try {
       const stripe = getStripe();
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-    } catch (err) {
+    } catch {
       // If signature fails, it may be the other webhook payload type (snapshot vs thin).
       // Return 200 to prevent Stripe from retrying endlessly.
-      console.error("Webhook signature verification failed:", err instanceof Error ? err.message : err);
+      console.error("Webhook signature verification failed");
       return NextResponse.json({ received: true, skipped: "signature_mismatch" });
     }
 
@@ -62,8 +62,8 @@ export async function POST(request: NextRequest) {
           paymentStatus: "paid",
           amountPaid: typeof session.amount_total === "number" ? session.amount_total : undefined,
         });
-      } catch (err) {
-        console.error("Failed to update payment status:", err instanceof Error ? err.message : err);
+      } catch {
+        console.error("Failed to update payment status");
         return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
       }
 
@@ -75,14 +75,14 @@ export async function POST(request: NextRequest) {
           stripeSessionId: session.id,
           paymentStatus: "failed",
         });
-      } catch (err) {
-        console.error("Failed to update expired session:", err instanceof Error ? err.message : err);
+      } catch {
+        console.error("Failed to update expired session");
       }
     }
 
     return NextResponse.json({ received: true });
-  } catch (error) {
-    console.error("Webhook error:", error instanceof Error ? error.message : error);
+  } catch {
+    console.error("Webhook handler failed");
     return NextResponse.json(
       { error: "Webhook handler failed" },
       { status: 500 }

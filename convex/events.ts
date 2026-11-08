@@ -1,6 +1,6 @@
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
-import { requireEventAdmin, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
+import { requireEventAdmin, confirmationExpired, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -919,18 +919,19 @@ export const confirmParticipation = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
-    if (reservesCapacity(row.registrationStatus) && confirmationStatusForRow(row) === "confirmed") {
+    if ((reservesCapacity(row.registrationStatus) || row.registrationStatus === "waitlisted") && confirmationStatusForRow(row) === "confirmed") {
       return row._id;
     }
-    if (row.confirmationRequestedAt && row.confirmationExpiresAt && row.confirmationExpiresAt < Date.now()) {
+    if (row.confirmationRequestedAt !== undefined && row.confirmationExpiresAt !== undefined && row.confirmationExpiresAt < Date.now()) {
       throw new Error("Confirmation window has expired");
     }
-    if (row.registrationStatus === "withdrawn" && (!row.confirmationRequestedAt || !row.confirmationExpiresAt)) {
+    if ((row.registrationStatus === "withdrawn" || row.registrationStatus === "waitlisted") && (row.confirmationRequestedAt === undefined || row.confirmationExpiresAt === undefined)) {
       throw new Error("This event registration cannot be confirmed");
     }
     if (
       row.registrationStatus !== "pending" &&
       row.registrationStatus !== "approved" &&
+      row.registrationStatus !== "waitlisted" &&
       row.registrationStatus !== "withdrawn"
     ) {
       throw new Error("This event registration cannot be confirmed");
@@ -951,26 +952,22 @@ export const expireUnconfirmed = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const pending = await ctx.db.query("eventRegistrations").take(500);
-    let cancelled = 0;
-    for (const row of pending) {
-      if (
-        confirmationStatusForRow(row) === "not_confirmed" &&
-        row.confirmationExpiresAt &&
-        row.confirmationExpiresAt < now &&
-        !row.confirmedAt && reservesCapacity(row.registrationStatus)
-      ) {
-        await ctx.db.patch(row._id, {
-          registrationStatus: "withdrawn",
-          confirmationStatus: "cancelled",
-          cancelledAt: now,
-          updatedAt: now,
-        });
-        await promoteWaitlist(ctx, row.eventId, row.gender);
-        cancelled += 1;
+    const expired = [];
+    for (const status of ["pending", "approved", "waitlisted"] as const) {
+      for await (const row of ctx.db.query("eventRegistrations").withIndex("by_registrationStatus", q => q.eq("registrationStatus", status))) {
+        if (confirmationExpired(row, now)) {
+          await ctx.db.patch(row._id, {
+            registrationStatus: "withdrawn",
+            confirmationStatus: "cancelled",
+            cancelledAt: now,
+            updatedAt: now,
+          });
+          expired.push(row);
+        }
       }
     }
-    return { cancelled };
+    for (const row of expired) await promoteWaitlist(ctx, row.eventId, row.gender);
+    return { cancelled: expired.length };
   },
 });
 

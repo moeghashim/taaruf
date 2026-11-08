@@ -11,7 +11,7 @@ for (const gender of ["male", "female"]) test("three slots and check-in states f
       interestSubmissions: Array.from({ length: count }, (_, i) => ({ interestId: String(i), status: "new" })),
     };
     if (path === "/api/applicant/events") body = { upcoming: [], history: [], eligibleInterestEvents: [] };
-    if (path === "/api/applicant/interests") { expect(route.request().postDataJSON().expectedEventId).toBe("synthetic"); posts++; count++; body = { success: true }; }
+    if (path === "/api/applicant/interests") { expect(route.request().postDataJSON()).toMatchObject({ expectedEventId: "synthetic", photoConsent: "no" }); posts++; count++; body = { success: true }; }
     if (path === "/api/applicant/profile") return route.fulfill({ status: 400, json: { error: "Synthetic profile not loaded" } });
     return route.fulfill({ json: body });
   });
@@ -31,15 +31,17 @@ for (const gender of ["male", "female"]) test("three slots and check-in states f
   await expect(card).toContainText("Enter the applicant's number and first name. Maximum 3 interests per event.");
   await expect(card).not.toContainText("Interest submissions are closed");
   await expect(card.locator("form")).toHaveCount(3);
-  await expect(card.locator("input")).toHaveCount(6);
-  await expect(card.locator("button")).toHaveCount(3);
+  await expect(card.locator("input")).toHaveCount(12);
+  await expect(card.locator("button")).toHaveCount(6);
   const form = card.locator("form").first();
   await form.getByLabel("Applicant #", { exact: false }).fill("2");
   await form.getByLabel("First name").fill("Synthetic");
-  await form.getByRole("button").click();
+  await expect(form.getByRole("button", { name: "Submit interest", exact: true })).toBeDisabled();
+  await form.getByLabel("No, keep my photos private for this interest").check();
+  await form.getByRole("button", { name: "Submit interest", exact: true }).click();
   await expect(card.getByRole("button", { name: "Submitted", exact: true })).toHaveCount(1);
   expect(posts).toBe(1);
-  await expect(card.locator("input")).toHaveCount(6);
+  await expect(card.locator("input")).toHaveCount(10);
   count = 3;
   await page.reload();
   await expect(card.locator("button:disabled")).toHaveCount(3);
@@ -57,4 +59,10 @@ for (const gender of ["male", "female"]) test("three slots and check-in states f
   await page.reload();
   await expect(card.locator("input")).toHaveCount(0);
   await expect(card).toContainText("Interest submissions are closed");
+});
+
+test("cutoff-denied dashboard redirects to fresh sign-in", async ({ page }) => {
+  await page.route("**/api/**", route => route.fulfill({ status: 401, json: { error: "Unauthorized" } }));
+  await page.goto("/me");
+  await expect(page).toHaveURL(/\/login$/);
 });
