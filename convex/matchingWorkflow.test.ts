@@ -162,3 +162,75 @@ test("legacy bilateral approval retry enters pending gate without disclosure", a
   expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toHaveLength(2);
   expect((await t.run(ctx => ctx.db.get(flow)))?.contactSharedAt).toBeUndefined();
 });
+
+
+for (const corruption of ["flow_order", "flow_other", "match_pair", "interest_self", "linked_self", "match_self", "match_pointer", "missing_pointer"] as const) {
+  test("inconsistent " + corruption + " fails closed before mirroring, queueing, or release", async () => {
+    const { t, interest, flow, match, male, female } = await fixture();
+    const reciprocal = await t.run(async ctx => {
+      await ctx.db.patch(flow, { bioVisibleAt: 123 });
+      const original = (await ctx.db.get(interest))!;
+      const reciprocal = await ctx.db.insert("interests", { eventId: original.eventId, fromRegistrationId: female, toRegistrationId: male, matchId: match, source: "admin_entered", visibility: "internal_only", status: "converted_to_match", createdAt: 1, updatedAt: 1 });
+      const sibling = await ctx.db.insert("interestFlows", { interestId: reciprocal, fromRegistrationId: female, toRegistrationId: male, flowStatus: "bio_review", recipientDecision: "accepted", requesterFinalApproval: "approved", recipientFinalApproval: "approved", photoDecision: "pending", bioVisibleAt: 1, createdAt: 1, updatedAt: 1 });
+      const outsider = await ctx.db.insert("registrations", { name: "Other", age: 30, gender: "female", maritalStatus: "single", education: "College", job: "Engineer", phone: "5550199", email: "other@example.com", status: "approved", createdAt: 1 });
+      if (corruption === "flow_order") await ctx.db.patch(sibling, { fromRegistrationId: male, toRegistrationId: female });
+      if (corruption === "flow_other") await ctx.db.patch(flow, { toRegistrationId: outsider });
+      if (corruption === "match_pair") await ctx.db.patch(match, { femaleRegistrationId: outsider });
+      if (corruption === "interest_self") {
+        await ctx.db.patch(interest, { toRegistrationId: male });
+        await ctx.db.patch(flow, { toRegistrationId: male });
+      }
+      if (corruption === "linked_self") {
+        await ctx.db.patch(reciprocal, { toRegistrationId: female });
+        await ctx.db.patch(sibling, { toRegistrationId: female });
+      }
+      if (corruption === "match_self") await ctx.db.patch(match, { femaleRegistrationId: male });
+      if (corruption === "missing_pointer") await ctx.db.patch(interest, { matchId: undefined });
+      if (corruption === "match_pointer") {
+        const other = await ctx.db.insert("matches", { maleRegistrationId: male, femaleRegistrationId: female, interestId: reciprocal, interestType: "man_interested", status: "reviewing", createdAt: 1, updatedAt: 1 });
+        await ctx.db.patch(interest, { matchId: other });
+      }
+      return reciprocal;
+    });
+    const snapshot = () => t.run(async ctx => ({
+      flows: await ctx.db.query("interestFlows").collect(),
+      matches: await ctx.db.query("matches").collect(),
+      events: await ctx.db.query("interestFlowEvents").collect(),
+      deliveries: await ctx.db.query("femaleWorkflowDeliveries").collect(),
+    }));
+    const before = await snapshot();
+    await expect(t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "male-session", interestId: corruption === "missing_pointer" ? reciprocal : interest, approved: true })).rejects.toThrow(/Linked/);
+    await expect(t.mutation(api.matches.updateStatus, { id: match, status: "contact_shared", adminSecret: "test-only-secret" })).rejects.toThrow(/Linked/);
+    expect(await snapshot()).toEqual(before);
+    expect(before.deliveries).toHaveLength(0);
+    expect(before.flows.every(f => f.contactSharedAt === undefined)).toBe(true);
+    for (const sessionHash of ["male-session", "female-session"]) {
+      const dashboard = JSON.stringify(await t.query(api.applicantInterests.getDashboard, { sessionHash }));
+      expect(dashboard).not.toContain(sessionHash === "male-session" ? "f@example.com" : "m@example.com");
+    }
+  });
+}
+
+for (const legacy of [false, true]) test("first disclosure survives status changes legacy=" + legacy, async () => {
+  const { t, match, flow } = await fixture();
+  const release = { id: match, status: "contact_shared" as const, adminSecret: "test-only-secret" };
+  if (legacy) await t.run(async ctx => {
+    await ctx.db.patch(match, { status: "contact_shared" });
+    await ctx.db.patch(flow, { flowStatus: "contact_shared", contactSharedAt: 123 });
+  });
+  else await t.mutation(api.matches.updateStatus, release);
+  const firstFlow = await t.run(ctx => ctx.db.get(flow));
+  const firstMatch = await t.run(ctx => ctx.db.get(match));
+  const firstEvents = await t.run(ctx => ctx.db.query("interestFlowEvents").collect());
+  const firstDeliveries = await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect());
+  for (const status of ["reviewing", "new"] as const) {
+    await t.mutation(api.matches.updateStatus, { ...release, status });
+    await t.mutation(api.matches.updateStatus, release);
+    expect(await t.run(ctx => ctx.db.get(flow))).toEqual(firstFlow);
+    const current = await t.run(ctx => ctx.db.get(match));
+    expect(current?.adminReleasedAt).toBe(firstMatch?.adminReleasedAt);
+    expect(current?.contactGate).toBe(firstMatch?.contactGate);
+    expect(await t.run(ctx => ctx.db.query("interestFlowEvents").collect())).toEqual(firstEvents);
+    expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toEqual(firstDeliveries);
+  }
+});

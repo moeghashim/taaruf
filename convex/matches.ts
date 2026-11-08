@@ -1,4 +1,4 @@
-import { linkedFlows, queuePendingReview, enqueueContactDelivery } from "./contactGate";
+import { assertMatchInterest, linkedFlows, queuePendingReview, enqueueContactDelivery } from "./contactGate";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
@@ -395,14 +395,18 @@ export const updateStatus = mutation({
         if (!person || person.status !== "approved" || !person.email || !person.phone) throw new Error("Both applicants must be approved and have contact details");
         if (person.activeMatchId && person.activeMatchId !== match._id) throw new Error("Applicant already has an active match");
       }
+      assertMatchInterest(match, interest);
       const flows = await linkedFlows(ctx, interest);
       if (flows.some(f => f.requesterFinalApproval !== "approved" || f.recipientFinalApproval !== "approved")) throw new Error("Both applicants must give final approval before contacts can be shared");
-      if (match.status !== "contact_shared") {
+      // A mutable status must never reset the first disclosure. Preserve legacy history too.
+      const alreadyReleased = match.contactGate === "contacts_released" ||
+        (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
+      if (!alreadyReleased) {
         await queuePendingReview(ctx, match._id);
         const now = Date.now();
-        await ctx.db.patch(match._id, { contactGate: "contacts_released", adminReleasedAt: now });
+        await ctx.db.patch(match._id, { contactGate: "contacts_released", adminReleasedAt: match.adminReleasedAt ?? now });
         for (const linked of flows) {
-          await ctx.db.patch(linked._id, { flowStatus: "contact_shared", contactSharedAt: now, updatedAt: now });
+          await ctx.db.patch(linked._id, { flowStatus: "contact_shared", contactSharedAt: linked.contactSharedAt ?? now, updatedAt: now });
           await ctx.db.insert("interestFlowEvents", { interestFlowId: linked._id, interestId: linked.interestId, actor: "system", eventType: "contacts_disclosed_in_portal", message: "Final admin approval: contacts released.", createdAt: now });
         }
         for (const person of pair) await enqueueContactDelivery(ctx, interest._id, person!._id, "contacts_ready");

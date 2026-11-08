@@ -7,14 +7,35 @@ export async function enqueueContactDelivery(ctx: MutationCtx, interestId: Id<"i
   if (await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_key", q => q.eq("key", key)).unique()) return;
   await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId, kind, key, status: "pending", attempts: 0, nextAttemptAt: Date.now(), createdAt: Date.now() });
 }
+/** Validate both directions of the link before trusting any consent metadata. */
+export function assertMatchInterest(match: Doc<"matches">, interest: Doc<"interests">) {
+  const { fromRegistrationId: from, toRegistrationId: to } = interest;
+  if (from === to || match.maleRegistrationId === match.femaleRegistrationId ||
+      interest.matchId !== match._id ||
+      !((from === match.maleRegistrationId && to === match.femaleRegistrationId) ||
+        (from === match.femaleRegistrationId && to === match.maleRegistrationId))) {
+    throw new Error("Linked pair mismatch");
+  }
+}
 export async function linkedFlows(ctx: ReadCtx, interest: Doc<"interests">) {
+  if (interest.fromRegistrationId === interest.toRegistrationId) throw new Error("Linked pair mismatch");
+  if (interest.matchId) {
+    const match = await ctx.db.get(interest.matchId);
+    if (!match) throw new Error("Linked match missing");
+    assertMatchInterest(match, interest);
+    const primary = match.interestId ? await ctx.db.get(match.interestId) : null;
+    if (!primary) throw new Error("Linked interest missing");
+    assertMatchInterest(match, primary);
+  }
   const interests = interest.matchId ? await ctx.db.query("interests").withIndex("by_matchId", q => q.eq("matchId", interest.matchId)).collect() : [interest];
   const flows = [];
   for (const row of interests) {
     if (row.testReset || ["closed", "declined", "withdrawn"].includes(row.status)) throw new Error("Interest is no longer active");
+    if (row.fromRegistrationId === row.toRegistrationId) throw new Error("Linked pair mismatch");
     if (!([interest.fromRegistrationId, interest.toRegistrationId].includes(row.fromRegistrationId) && [interest.fromRegistrationId, interest.toRegistrationId].includes(row.toRegistrationId))) throw new Error("Linked pair mismatch");
     const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
     if (!flow) throw new Error("Linked flow missing; explicit consent required");
+    if (flow.fromRegistrationId !== row.fromRegistrationId || flow.toRegistrationId !== row.toRegistrationId) throw new Error("Linked flow identity mismatch");
     if (flow) {
       if (["closed", "declined"].includes(flow.flowStatus)) throw new Error("Interest is no longer active");
       flows.push(flow);
@@ -25,6 +46,10 @@ export async function linkedFlows(ctx: ReadCtx, interest: Doc<"interests">) {
 export async function queuePendingReview(ctx: MutationCtx, matchId: Id<"matches">) {
   const match = await ctx.db.get(matchId);
   if (!match?.interestId || match.testResetAt || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+  const interest = await ctx.db.get(match.interestId);
+  if (!interest) throw new Error("Linked interest missing");
+  assertMatchInterest(match, interest);
+  await linkedFlows(ctx, interest);
   if (match.status === "contact_shared" || match.contactGate === "contacts_released") return;
   await ctx.db.patch(matchId, { status: "reviewing", contactGate: "pending_admin_approval", updatedAt: Date.now() });
   for (const id of [match.maleRegistrationId, match.femaleRegistrationId]) await enqueueContactDelivery(ctx, match.interestId, id, "pending_review");
