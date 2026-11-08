@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { getFunctionName } from "convex/server";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { api } from "../../../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 const mocks = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn(), action: vi.fn(), email: vi.fn() }));
 vi.mock("convex/browser", () => ({ ConvexHttpClient: class { query = mocks.query; mutation = mocks.mutation; action = mocks.action; } }));
 vi.mock("@/lib/email", () => ({ sendProfileCompletionEmail: mocks.email }));
