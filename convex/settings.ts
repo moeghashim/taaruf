@@ -1,3 +1,4 @@
+import { CAPABILITY_CUTOFF_KEY } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -29,6 +30,14 @@ export const set = mutation({
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .first();
 
+    if (args.key === CAPABILITY_CUTOFF_KEY) {
+      const cutoff = Number(args.value);
+      const previous = existing ? Number(existing.value) : 0;
+      if (!/^[0-9]+$/.test(args.value) || !Number.isSafeInteger(cutoff) || cutoff <= 0 || cutoff > Date.now() ||
+          (existing && (!Number.isSafeInteger(previous) || cutoff < previous))) {
+        throw new Error("Cutoff must be valid, nonfuture and monotonic; never disable revocation");
+      }
+    }
     if (existing) {
       await ctx.db.patch(existing._id, {
         value: args.value,

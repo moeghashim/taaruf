@@ -1,3 +1,4 @@
+import { profileCapabilityAllowed } from "./capabilitySecurity";
 import { assertImageOwnership, claimSignupImages } from "./imageAuthorization";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
@@ -457,6 +458,7 @@ export const create = mutation({
       searchStatus: "active",
       createdAt: now,
       profileAccessToken: args.profileAccessToken,
+      profileAccessTokenIssuedAt: args.profileAccessToken ? Date.now() : undefined,
       profileCompletionStatus: profileCompleted ? "completed" : "not_started",
       profileCompletedAt: profileCompleted ? now : undefined,
       profileLastUpdatedAt: profileCompleted ? now : undefined,
@@ -571,13 +573,16 @@ export const setProfileAccessToken = mutation({
   args: { adminSecret: v.optional(v.string()),
     id: v.id("registrations"),
     token: v.string(),
+    recoveryOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
+    const previous = await ctx.db.get(args.id);
+    if (!previous || previous.profileAccessToken === args.token || await ctx.db.query("registrations").withIndex("by_profileAccessToken", q => q.eq("profileAccessToken", args.token)).first()) throw new Error("Use a fresh profile token");
     await ctx.db.patch(args.id, {
       profileAccessToken: args.token,
-      profileCompletionStatus: "in_progress",
-      profileUpdateRequestedAt: Date.now(),
+      profileAccessTokenIssuedAt: Date.now(),
+      ...(args.recoveryOnly ? {} : { profileCompletionStatus: "in_progress" as const, profileUpdateRequestedAt: Date.now() }),
     });
     return args.id;
   },
@@ -640,7 +645,7 @@ export const getByProfileAccessToken = query({
       .query("registrations")
       .withIndex("by_profileAccessToken", (q) => q.eq("profileAccessToken", args.token))
       .first();
-    if (!registration) return null;
+    if (!registration || !(await profileCapabilityAllowed(ctx, registration))) return null;
     const { name, gender, email, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
       spouseRequirement1, spouseRequirement2, spouseRequirement3, shareableBio, photoSharingPermission,
       interestSubmission, interestSubmissionNumbers, applicantNotesToAdmin, profileCompletionStatus } = registration;
@@ -673,7 +678,7 @@ export const updateProfile = mutation({
       .withIndex("by_profileAccessToken", (q) => q.eq("profileAccessToken", args.token))
       .first();
 
-    if (!registration) {
+    if (!registration || !(await profileCapabilityAllowed(ctx, registration))) {
       throw new Error("Profile not found");
     }
 

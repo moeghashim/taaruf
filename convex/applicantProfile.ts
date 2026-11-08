@@ -1,3 +1,4 @@
+import { sessionAllowed } from "./capabilitySecurity";
 import { assertImageOwnership } from "./imageAuthorization";
 import { hijabResponse } from "./hijab";
 import { mutation, query } from "./_generated/server";
@@ -30,7 +31,7 @@ async function getRegistrationForSession(ctx: ReadCtx, sessionHash: string) {
     .withIndex("by_sessionHash", (q) => q.eq("sessionHash", sessionHash))
     .unique();
 
-  if (!session || session.revokedAt || session.expiresAt <= Date.now()) {
+  if (!session || !(await sessionAllowed(ctx, session))) {
     throw new Error("Unauthorized");
   }
 

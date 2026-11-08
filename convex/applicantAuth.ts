@@ -1,3 +1,4 @@
+import { sessionAllowed, capabilityAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -58,7 +59,7 @@ export const claimLoginToken = mutation({
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
       .unique();
 
-    if (!loginToken || loginToken.consumedAt || loginToken.expiresAt <= Date.now()) {
+    if (!loginToken || loginToken.consumedAt !== undefined || loginToken.expiresAt <= Date.now() || !(await capabilityAllowed(ctx, loginToken.createdAt))) {
       return null;
     }
 
@@ -100,7 +101,7 @@ export const getSession = query({
       .withIndex("by_sessionHash", (q) => q.eq("sessionHash", args.sessionHash))
       .unique();
 
-    if (!session || session.revokedAt || session.expiresAt <= Date.now()) {
+    if (!session || !(await sessionAllowed(ctx, session))) {
       return null;
     }
 
@@ -127,7 +128,7 @@ export const touchSession = mutation({
       .withIndex("by_sessionHash", (q) => q.eq("sessionHash", args.sessionHash))
       .unique();
 
-    if (!session || session.revokedAt || session.expiresAt <= Date.now()) {
+    if (!session || !(await sessionAllowed(ctx, session))) {
       return false;
     }
 

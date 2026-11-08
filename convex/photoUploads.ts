@@ -1,3 +1,4 @@
+import { sessionAllowed, profileCapabilityAllowed } from "./capabilitySecurity";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAdmin } from "./adminAuthorization";
@@ -7,12 +8,12 @@ async function resolveOwner(ctx: QueryCtx | MutationCtx, args: { sessionHash?: s
   if ([args.sessionHash, args.profileToken, args.signupCapabilityHash].filter(Boolean).length !== 1) throw new Error("Unauthorized");
   if (args.sessionHash) {
     const session = await ctx.db.query("applicantSessions").withIndex("by_sessionHash", q => q.eq("sessionHash", args.sessionHash!)).unique();
-    if (!session || session.revokedAt || session.expiresAt <= Date.now() || !await ctx.db.get(session.registrationId)) throw new Error("Unauthorized");
+    if (!session || !(await sessionAllowed(ctx, session)) || !await ctx.db.get(session.registrationId)) throw new Error("Unauthorized");
     return { registrationId: session.registrationId };
   }
   if (args.profileToken) {
     const registration = await ctx.db.query("registrations").withIndex("by_profileAccessToken", q => q.eq("profileAccessToken", args.profileToken!)).unique();
-    if (!registration) throw new Error("Unauthorized");
+    if (!registration || !(await profileCapabilityAllowed(ctx, registration))) throw new Error("Unauthorized");
     return { registrationId: registration._id };
   }
   if (!/^[a-f0-9]{64}$/.test(args.signupCapabilityHash!)) throw new Error("Unauthorized");

@@ -1,3 +1,4 @@
+import { sessionAllowed } from "./capabilitySecurity";
 import { enqueueContactDelivery, deliveryParticipants } from "./contactGate";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
@@ -13,7 +14,7 @@ const reviewArgs = { ...applicantArgs, reviewTokenHash: v.optional(v.string()) }
 const adminArgs = { ...interestArgs, adminSecret: v.optional(v.string()) };
 export async function actor(ctx: ReadCtx, sessionHash: string) {
   const session = await ctx.db.query("applicantSessions").withIndex("by_sessionHash", q => q.eq("sessionHash", sessionHash)).unique();
-  if (!session || session.revokedAt !== undefined || session.expiresAt <= Date.now()) throw new Error("Unauthorized");
+  if (!session || !(await sessionAllowed(ctx, session))) throw new Error("Unauthorized");
   const person = await ctx.db.get(session.registrationId);
   if (!person || person.status !== "approved") throw new Error("Unauthorized");
   return person;
