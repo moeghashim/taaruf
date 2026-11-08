@@ -22,8 +22,9 @@ for (const [name, handler] of [["me", me], ["profile", profile], ["save profile"
   }
 }
 test("ordinary dashboard returns data and touches the authenticated session", async () => {
-  mocks.query.mockResolvedValue({ applicant: { name: "Synthetic" } }); mocks.mutation.mockResolvedValue(true);
+  const dashboard = { applicant: { name: "Synthetic" }, inbound: [], outbound: [], privateDocumented: [] };
+  mocks.query.mockResolvedValueOnce(dashboard).mockResolvedValueOnce([]); mocks.mutation.mockResolvedValue(true);
   const response = await me();
-  expect(response.status).toBe(200); expect(await response.json()).toEqual({ applicant: { name: "Synthetic" } });
+  expect(response.status).toBe(200); expect(await response.json()).toEqual(dashboard);
   expect(mocks.mutation).toHaveBeenCalledWith(expect.anything(), { adminSecret: "synthetic", sessionHash: "old-session" });
 });
