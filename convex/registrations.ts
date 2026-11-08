@@ -902,7 +902,7 @@ export const claimWelcomeReceipt = mutation({
     const now = Date.now();
     if (existing?.sentAt) return { claimed: false };
     if (existing && existing.leaseUntil > now) return { claimed: false, error: "Welcome delivery in progress; retry later" };
-    if (existing && now - existing.firstAttemptAt >= 23 * 3600000) return { claimed: false, error: "Welcome delivery uncertain; manual reconciliation required" };
+    if ((existing && now - existing.firstAttemptAt >= 23 * 3600000) || !await capabilityAllowed(ctx, existing?.firstAttemptAt ?? now)) return { claimed: false, error: "Welcome delivery uncertain; manual reconciliation required" };
     if (existing) await ctx.db.patch(existing._id, { token: args.token, leaseUntil: now + 120000 });
     else {
       await ctx.db.insert("receiptDeliveries", { key, token: args.token, leaseUntil: now + 120000, firstAttemptAt: now, name: registration.name, email: registration.email, profileUrl: args.profileUrl });

@@ -7,10 +7,10 @@ import assert from 'node:assert/strict';
 const output = '.new-match-browser';
 await fs.mkdir(output, {recursive:true});
 const bundle = await build({stdin:{contents:
-  'import React from "react"; import {createRoot} from "react-dom/client"; import {Topbar} from "./src/components/admin/layout/topbar"; createRoot(document.getElementById("root")).render(<Topbar crumb="Workbench" onMenu={()=>{}}/>);',
+  'import React from "react"; import {createRoot} from "react-dom/client"; import {Topbar} from "./src/components/admin/layout/topbar"; import {WorkbenchPageClient} from "./src/components/admin/matching/matching-page-client"; createRoot(document.getElementById("root")).render(location.pathname === "/workbench" ? <WorkbenchPageClient/> : <Topbar crumb="Workbench" onMenu={()=>{}}/>);',
   resolveDir:process.cwd(),loader:'tsx'}, bundle:true,write:false,format:'iife',jsx:'automatic',plugins:[{name:'synthetic-adapters',setup(b){
-    b.onResolve({filter:new RegExp("^next/navigation$")}, args=>({path:args.path,namespace:'fixture'}));
-    b.onLoad({filter:/.*/,namespace:'fixture'}, ()=>({loader:'js',contents: 'export const useRouter=()=>({push:url=>{window.destination=url}});' }));
+    b.onResolve({filter:new RegExp("^next/(navigation|link)$")}, args=>({path:args.path,namespace:'fixture'}));
+    b.onLoad({filter:/.*/,namespace:'fixture'}, args=>({loader:'js',contents: args.path === 'next/link' ? 'export default function Link({children,href}) { return children; }' : 'export const useRouter=()=>({push:url=>{window.destination=url}}); const params = new URLSearchParams(window.location.search); export const useSearchParams=()=>params;' }));
   }}]});
 const js=bundle.outputFiles[0].text;
 const cssFiles=(await fs.readdir('.next/static/chunks')).filter(f=>f.endsWith('.css'));
@@ -49,5 +49,35 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('dialog').count(),0);
   assert.deepEqual(errors,[]); await page.close(); console.log('PASS real Topbar click, selection, error/retry, success, Escape: '+viewport.width);
+ }
+ for (const gender of ['male','female']) for (const consent of ['yes','no','revoked']) {
+  const page=await browser.newPage();
+  const errors=[]; page.on('pageerror',error=>errors.push(error.message));
+  const requester={_id:'requester',name:'Synthetic Requester',gender,photoSharingPermission:consent==='yes'?'no':'yes',publicApplicantNumber:901,profileCompletionStatus:'completed',status:'approved',createdAt:1,_creationTime:1};
+  const target={...requester,_id:'target',name:'Synthetic Target',gender:gender==='male'?'female':'male',photoSharingPermission:'yes',publicApplicantNumber:902};
+  const interest={_id:'linked-interest',fromRegistrationId:requester._id,toRegistrationId:target._id,senderPhotoConsent:consent==='no'?'no':'yes',...(consent==='revoked'?{senderPhotoConsentRevokedAt:1}:{}),status:'converted_to_match',source:'platform_submission',createdAt:1,updatedAt:1};
+  const male=gender==='male'?requester:target, female=gender==='female'?requester:target;
+  const match={_id:'synthetic-match',maleRegistrationId:male._id,femaleRegistrationId:female._id,maleRegistration:male,femaleRegistration:female,interestId:interest._id,interest,status:'reviewing',interestType:'one_way',createdAt:1,updatedAt:1};
+  await page.route('**/api/admin/bridge',async route=>{
+   const {kind,name}=route.request().postDataJSON(); assert.equal(kind,'query');
+   const result={'registrations.getAll':[requester,target],'matches.getAll':[match],'interests.getAll':[],'profileShares.getAll':[]};
+   assert.ok(Object.hasOwn(result,name)); await route.fulfill({json:{result:result[name]}});
+  });
+  const shares=[];
+  await page.route('**/api/admin/create-profile-share',async route=>{shares.push(route.request().postDataJSON());await route.fulfill({json:{shareUrl:'https://synthetic.invalid/share/test'}});});
+  await page.goto('http://127.0.0.1:'+server.address().port+'/workbench?match=synthetic-match');
+  await page.getByText('Match review',{exact:true}).waitFor();
+  const requesterPhotos=page.getByRole('checkbox',{name:/Include requester photos/});
+  const targetPhotos=page.getByRole('checkbox',{name:/Include target photos/});
+  assert.equal(await requesterPhotos.isDisabled(),consent!=='yes');
+  assert.equal(await targetPhotos.isEnabled(),true);
+  if(consent==='yes')await requesterPhotos.check();
+  await page.getByRole('button',{name:'Share requester profile → Synthetic Target',exact:true}).click();
+  await page.waitForFunction(()=>document.body.textContent.includes('Share link created:'));
+  assert.deepEqual(shares[0],{ownerRegistrationId:'requester',recipientRegistrationId:'target',includeImages:consent==='yes',interestId:'linked-interest',matchId:'synthetic-match'});
+  await targetPhotos.check();
+  await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/admin/create-profile-share')),page.getByRole('button',{name:'Share target profile → Synthetic Requester',exact:true}).click()]);
+  assert.deepEqual(shares[1],{ownerRegistrationId:'target',recipientRegistrationId:'requester',includeImages:true,interestId:'linked-interest',matchId:'synthetic-match'});
+  assert.deepEqual(errors,[]); await page.close(); console.log('PASS match recipient photo consent '+gender+' '+consent);
  }
 } finally {await browser.close();server.close();}

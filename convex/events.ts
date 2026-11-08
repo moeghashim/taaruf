@@ -1,6 +1,6 @@
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
-import { requireEventAdmin, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
+import { requireEventAdmin, confirmationExpired, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -952,25 +952,20 @@ export const expireUnconfirmed = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
     const pending = await ctx.db.query("eventRegistrations").take(500);
-    let cancelled = 0;
+    const expired = [];
     for (const row of pending) {
-      if (
-        confirmationStatusForRow(row) === "not_confirmed" &&
-        row.confirmationExpiresAt &&
-        row.confirmationExpiresAt < now &&
-        !row.confirmedAt && reservesCapacity(row.registrationStatus)
-      ) {
+      if (confirmationExpired(row, now)) {
         await ctx.db.patch(row._id, {
           registrationStatus: "withdrawn",
           confirmationStatus: "cancelled",
           cancelledAt: now,
           updatedAt: now,
         });
-        await promoteWaitlist(ctx, row.eventId, row.gender);
-        cancelled += 1;
+        expired.push(row);
       }
     }
-    return { cancelled };
+    for (const row of expired) await promoteWaitlist(ctx, row.eventId, row.gender);
+    return { cancelled: expired.length };
   },
 });
 
