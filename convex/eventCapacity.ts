@@ -12,8 +12,9 @@ export function confirmationExpired(row: EventRegistration, now: number): boolea
 }
 export async function countCapacityUsed(ctx: ReadCtx, eventId: Id<"events">, gender: Gender) {
   let used = 0;
+  const now = Date.now();
   for (const status of ["pending", "approved"] as const) {
-    for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status))) { if (row) used++; }
+    for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status))) { if (!confirmationExpired(row, now)) used++; }
   }
   return used;
 }
@@ -27,9 +28,11 @@ export async function promoteWaitlist(ctx: MutationCtx, eventId: Id<"events">, g
   if (!event || event.status === "cancelled" || event.status === "completed") return;
   const now = Date.now();
   const queued = [];
-  for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", "waitlisted"))) {
-    if (confirmationExpired(row, now)) await ctx.db.patch(row._id, { registrationStatus: "withdrawn", confirmationStatus: "cancelled", cancelledAt: now, updatedAt: now });
-    else queued.push(row);
+  for (const status of ["pending", "approved", "waitlisted"] as const) {
+    for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status))) {
+      if (confirmationExpired(row, now)) await ctx.db.patch(row._id, { registrationStatus: "withdrawn", confirmationStatus: "cancelled", cancelledAt: now, updatedAt: now });
+      else if (status === "waitlisted") queued.push(row);
+    }
   }
   const available = eventCapacityForGender(event, gender) - await countCapacityUsed(ctx, eventId, gender);
   if (available <= 0) return;

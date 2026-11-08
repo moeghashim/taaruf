@@ -951,17 +951,18 @@ export const expireUnconfirmed = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const pending = await ctx.db.query("eventRegistrations").take(500);
     const expired = [];
-    for (const row of pending) {
-      if (confirmationExpired(row, now)) {
-        await ctx.db.patch(row._id, {
-          registrationStatus: "withdrawn",
-          confirmationStatus: "cancelled",
-          cancelledAt: now,
-          updatedAt: now,
-        });
-        expired.push(row);
+    for (const status of ["pending", "approved", "waitlisted"] as const) {
+      for await (const row of ctx.db.query("eventRegistrations").withIndex("by_registrationStatus", q => q.eq("registrationStatus", status))) {
+        if (confirmationExpired(row, now)) {
+          await ctx.db.patch(row._id, {
+            registrationStatus: "withdrawn",
+            confirmationStatus: "cancelled",
+            cancelledAt: now,
+            updatedAt: now,
+          });
+          expired.push(row);
+        }
       }
     }
     for (const row of expired) await promoteWaitlist(ctx, row.eventId, row.gender);
