@@ -21,7 +21,7 @@ const baseRegistrationArgs = {
   spouseRequirement2: "Patient",
   spouseRequirement3: "Smart",
   shareableBio: "Bio",
-  photoSharingPermission: "ask_me_first" as const,
+  photoSharingPermission: "no" as const,
 };
 
 async function insertScheduledEvent(ctx: Parameters<Parameters<ReturnType<typeof convexTest>["run"]>[0]>[0]) {
@@ -216,4 +216,15 @@ test("public checkout signup reserves Pending capacity and overflows only the ma
   expect(rows.map(row => row.registrationStatus)).toEqual(["pending","waitlisted","waitlisted"]);
   const profiles = await t.run(ctx => ctx.db.query("registrations").take(10));
   expect(profiles.every(profile => profile.status === "pending")).toBe(true);
+});
+
+test("saved photo choices reject legacy ask without rewriting history", async () => {
+ const t = convexTest(schema, modules);
+ const legacyId = await t.run(ctx => ctx.db.insert("registrations", { ...baseRegistrationArgs, photoSharingPermission: "ask_me_first", email: "legacy@example.invalid", status: "approved", createdAt: Date.now() }));
+ await expect(t.mutation(api.registrations.create, { ...baseRegistrationArgs, adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, email: "new@example.invalid", photoSharingPermission: "ask_me_first" as never })).rejects.toThrow();
+ expect((await getRegistration(t, legacyId))?.photoSharingPermission).toBe("ask_me_first");
+ for (const choice of ["yes", "no"] as const) {
+ const id = await t.mutation(api.registrations.create, { ...baseRegistrationArgs, adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, email: choice + "@example.invalid", photoSharingPermission: choice });
+ expect((await getRegistration(t, id))?.photoSharingPermission).toBe(choice);
+ }
 });

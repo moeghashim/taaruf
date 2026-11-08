@@ -23,8 +23,7 @@ const prayerCommitment = v.union(
 );
 const photoSharingPermission = v.union(
   v.literal("yes"),
-  v.literal("no"),
-  v.literal("ask_me_first")
+  v.literal("no")
 );
 const searchStatus = v.union(v.literal("active"), v.literal("paused"), v.literal("inactive"));
 

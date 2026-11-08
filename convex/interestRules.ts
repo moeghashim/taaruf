@@ -181,6 +181,7 @@ export async function createMatchFromInterest(
   interest: Doc<"interests">,
   adminNotes?: string
 ) {
+  if (interest.femaleWorkflow || (interest.source === "platform_submission" && interest.visibility === "internal_only")) throw new Error("Use female website workflow");
   if (interest.testReset) throw new Error("Reset test interest is read-only");
   if (interest.matchId) {
     throw new Error("Interest already linked to a match");
@@ -314,6 +315,7 @@ export async function createInterestWithRules(
     eventId: args.eventId,
     rank: args.rank,
     source: args.source,
+    ...(args.source === "platform_submission" && visibility === "internal_only" ? { femaleWorkflow: { state: "private_documented" as const } } : {}),
     status: initialStatus,
     visibility,
     adminStatus: "pending",
@@ -338,7 +340,7 @@ export async function createInterestWithRules(
     args.fromRegistrationId,
     args.eventId
   );
-  if (!reciprocalInterest || reciprocalInterest.status === "queued") {
+  if (interest.femaleWorkflow || reciprocalInterest?.femaleWorkflow || (reciprocalInterest?.source === "platform_submission" && reciprocalInterest.visibility === "internal_only") || !reciprocalInterest || reciprocalInterest.status === "queued") {
     return { interestId, matchId: null };
   }
 

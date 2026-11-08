@@ -17,7 +17,10 @@ export async function GET() {
     const dashboard = await convex.query(api.applicantInterests.getDashboard, { sessionHash });
     await convex.mutation(api.applicantAuth.touchSession, { adminSecret: getAdminSecret(),  sessionHash });
 
-    return NextResponse.json(dashboard, { headers: { "Cache-Control": "no-store" } });
+    const reviews = await convex.query(api.femaleInterestWorkflow.getDashboard, { sessionHash });
+    const states = new Map(reviews.map(review => [review.interestId, review.state]));
+    const annotate = <T extends { interestId: string }>(rows: T[]) => rows.map(row => ({ ...row, ...(states.has(row.interestId as typeof reviews[number]["interestId"]) ? { femaleWorkflow: { state: states.get(row.interestId as typeof reviews[number]["interestId"]) } } : {}) }));
+    return NextResponse.json({ ...dashboard, inbound: annotate(dashboard.inbound), outbound: annotate(dashboard.outbound), privateDocumented: annotate(dashboard.privateDocumented) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
       { error: "Unable to complete request" },

@@ -2,6 +2,7 @@
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import Link from "next/link";
+import { FemaleWorkflowActions, FemaleWorkflowOutbox } from "./female-workflow-actions";
 import { TestResetDialog } from "./test-reset-dialog";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -546,6 +547,10 @@ function InterestActions({
   };
 
   if (interest.testReset) return <span role="status">Test reset — audit retained</span>;
+  if (interest.femaleWorkflow || (interest.source === "platform_submission" && interest.visibility === "internal_only" && !interest.matchId)) return <div>
+    <FemaleWorkflowActions interestId={interest._id} state={interest.femaleWorkflow?.state ?? (isOpenInterest(interest.status) ? "private_documented" : "declined")} compact />
+    {!interest.matchId && <button className="btn btn-sm btn-ghost" type="button" onClick={() => onReset(interest)}>Reset test submission</button>}
+  </div>;
 
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -724,7 +729,7 @@ function InterestRow({
       </td>
       <td>
         <div style={{ display: "grid", gap: 10 }}>
-          <AdminSelect
+          {!interest.femaleWorkflow && <><AdminSelect
             label="Workflow"
             value={interest.status}
             values={INTEREST_STATUSES}
@@ -735,7 +740,7 @@ function InterestRow({
             value={interest.adminStatus ?? "pending"}
             values={ADMIN_STATUSES}
             onChange={updateAdminStatus}
-          />
+          /></>}
           {updating && <span style={{ color: "var(--mute)", fontSize: 11 }}>Updating...</span>}
         </div>
       </td>
@@ -803,7 +808,7 @@ export function InterestsPageClient() {
     <>
       <PageHead
         title={<>Interest <em>signals</em></>}
-        subtitle="Review interest signals, manage the queue, and convert selected pairs into matches."
+        subtitle="Review interest signals, create private review links, and manage selected pairs."
       />
       <Notice text={message} />
       {resetSelection && <TestResetDialog key={resetSelection.id} selection={resetSelection} onClose={() => setResetSelection(null)} onSuccess={setMessage} />}
@@ -956,7 +961,7 @@ function MatchCard({
         <span className="mono" style={{ color: "var(--mute)" }}>{formatDateTime(match.updatedAt ?? match.createdAt ?? match._creationTime)}</span>
       </div>
 
-      <AdminSelect
+      {match.interest?.femaleWorkflow ? <FemaleWorkflowActions interestId={match.interest._id} state={match.interest.femaleWorkflow.state} /> : <AdminSelect
         label="Match status"
         value={match.status}
         values={MATCH_STATUSES}
@@ -967,13 +972,14 @@ function MatchCard({
             "Match status updated."
           )
         }
-      />
+      />}
 
-      <NotesEditor
+      {match.interest?.femaleWorkflow && <AdminSelect label="Close or pause match" value={match.status} values={[match.status, "closed", "declined", "paused"]} onChange={(nextStatus) => void run("status", () => data.actions.updateMatchStatus(match._id, nextStatus, match.adminNotes), "Match status updated.")} />}
+      {!match.interest?.femaleWorkflow && <NotesEditor
         initialValue={match.adminNotes}
         placeholder="Match notes..."
         onSave={(notes) => data.actions.updateMatchStatus(match._id, match.status, notes)}
-      />
+      />}
 
       {match.matchNotificationError && (
         <p style={{ color: "var(--rose)", fontSize: 11 }}>Notification issue: {match.matchNotificationError}</p>
@@ -989,6 +995,7 @@ function MatchCard({
           type="button"
           className="btn btn-sm"
           disabled={busy !== null}
+          hidden={Boolean(match.interest?.femaleWorkflow)}
           onClick={() => run("notify", () => notifyMatch(match._id), "Match notification sent.")}
         >
           {busy === "notify" ? "Sending..." : "Notify match"}
@@ -1229,7 +1236,10 @@ export function WorkbenchPageClient() {
               <h3>{mode === "interest" ? "Evaluating interest" : "Evaluating match"} · {selectedInterest?.status ?? selectedMatch?.status ?? "No selection"}</h3>
             </div>
             <div style={{ padding: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              {selectedInterest && isOpenInterest(selectedInterest.status) && !selectedInterest.matchId && (
+              {selectedInterest && !selectedInterest.femaleWorkflow && selectedInterest.source === "platform_submission" && selectedInterest.visibility === "internal_only" && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <FemaleWorkflowActions interestId={selectedInterest._id} state="private_documented" />}
+              {selectedInterest?.femaleWorkflow && <FemaleWorkflowActions interestId={selectedInterest._id} state={selectedInterest.femaleWorkflow.state} />}
+              {selectedMatch?.interest?.femaleWorkflow && <FemaleWorkflowActions interestId={selectedMatch.interest._id} state={selectedMatch.interest.femaleWorkflow.state} />}
+              {selectedInterest && !selectedInterest.femaleWorkflow && !(selectedInterest.source === "platform_submission" && selectedInterest.visibility === "internal_only") && isOpenInterest(selectedInterest.status) && !selectedInterest.matchId && (
                 <button
                   className="btn btn-primary"
                   type="button"
@@ -1241,7 +1251,7 @@ export function WorkbenchPageClient() {
                   {busy === "convert" ? "Converting..." : "Convert interest"}
                 </button>
               )}
-              {selectedInterest && (
+              {selectedInterest && !selectedInterest.femaleWorkflow && (
                 <button
                   className="btn"
                   type="button"
@@ -1260,7 +1270,7 @@ export function WorkbenchPageClient() {
                   {busy === "decline" ? "Declining..." : "Decline interest"}
                 </button>
               )}
-              {selectedMatch && (
+              {selectedMatch && !selectedMatch.interest?.femaleWorkflow && (
                 <button
                   className="btn"
                   type="button"
@@ -1276,8 +1286,8 @@ export function WorkbenchPageClient() {
                   {busy === "contact" ? "Updating..." : "Share contacts in portals"}
                 </button>
               )}
-              <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />
-              <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />
+              {!selectedInterest?.femaleWorkflow && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />}
+              {!selectedInterest?.femaleWorkflow && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />}
             </div>
           </div>
         </div>
@@ -1309,7 +1319,7 @@ export function InboxPageClient() {
         href: `/admin/workbench?interest=${interest._id}`,
       }));
     const declineNotices = data.interests
-      .filter((interest) => (interest.status === "declined" || interest.adminStatus === "declined") && !interest.declineNotificationSentAt)
+      .filter((interest) => !interest.femaleWorkflow && (interest.status === "declined" || interest.adminStatus === "declined") && !interest.declineNotificationSentAt)
       .map((interest) => ({
         id: `decline-${interest._id}`,
         kind: interest.declineNotificationError ? "Notice retry" : "Decline notice",
@@ -1335,7 +1345,7 @@ export function InboxPageClient() {
         href: "/admin/profiles",
       }));
     const matchFailures = data.matches
-      .filter((match) => Boolean(match.matchNotificationError))
+      .filter((match) => !match.interest?.femaleWorkflow && Boolean(match.matchNotificationError))
       .map((match) => ({
         id: `match-${match._id}`,
         kind: "Match notification failed",
@@ -1365,6 +1375,7 @@ export function InboxPageClient() {
 
   return (
     <>
+      <FemaleWorkflowOutbox />
       <PageHead
         title={<><em>Inbox</em></>}
         subtitle="Signals that need admin attention across interests, shares, and match notifications."

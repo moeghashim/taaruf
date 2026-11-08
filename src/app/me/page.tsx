@@ -4,6 +4,7 @@ import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
 import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
@@ -11,6 +12,7 @@ import { Pill, type Tone } from "@/components/admin/primitives/status-pill";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 
 type DashboardInterest = {
+  femaleWorkflow?: { state: string };
   interestId: string;
   direction: "inbound" | "outbound" | "private";
   status: string;
@@ -142,7 +144,6 @@ const prayerOptions = [
 const photoSharingOptions = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
-  { value: "ask_me_first", label: "Ask me first — private until I explicitly share" },
 ] as const;
 
 function uploadedImagesFromProfile(registration: {
@@ -232,6 +233,7 @@ function counterpartyFinalApprovalFor(interest: DashboardInterest) {
 }
 
 function canRespondToInterest(interest: DashboardInterest) {
+  if (interest.femaleWorkflow) return false;
   return (
     interest.direction === "inbound" &&
     interest.visibility !== "internal_only" &&
@@ -240,6 +242,7 @@ function canRespondToInterest(interest: DashboardInterest) {
 }
 
 function canFinalApproveInterest(interest: DashboardInterest) {
+  if (interest.femaleWorkflow) return false;
   return Boolean(
     interest.bioVisibleAt &&
     viewerFinalApprovalFor(interest) === "pending" &&
@@ -250,6 +253,7 @@ function canFinalApproveInterest(interest: DashboardInterest) {
 }
 
 function canWithdrawInterest(interest: DashboardInterest) {
+  if (interest.femaleWorkflow) return false;
   return (
     (interest.direction === "outbound" || interest.direction === "private") &&
     (interest.flowStatus === "awaiting_inbound_response" ||
@@ -872,6 +876,12 @@ export default function ApplicantDashboardPage() {
     setMessage(null);
     setError(null);
 
+    if (profile.photoSharingPermission !== "yes" && profile.photoSharingPermission !== "no") {
+      setError("Please choose Yes or No for photo sharing. Your photos remain private until you choose Yes for a permitted recipient.");
+      setIsSavingProfile(false);
+      return;
+    }
+
     if (uploadedImages.length < 1 || uploadedImages.length > 3) {
       setError("Please upload between 1 and 3 photos.");
       setIsSavingProfile(false);
@@ -1045,6 +1055,8 @@ export default function ApplicantDashboardPage() {
                 </p>
               </div>
             </div>
+
+            <FemaleReviews />
 
             <div className="stats">
               <div className="stat">
@@ -1250,7 +1262,7 @@ export default function ApplicantDashboardPage() {
                         <label htmlFor="photoSharingPermission">Photo sharing permission *</label>
                         <select
                           id="photoSharingPermission"
-                          value={profile.photoSharingPermission}
+                          value={profile.photoSharingPermission === "yes" || profile.photoSharingPermission === "no" ? profile.photoSharingPermission : ""}
                           onChange={(event) => setProfile({ ...profile, photoSharingPermission: event.target.value as PhotoSharingPermission })}
                         >
                           <option value="">Select one</option>
@@ -1363,7 +1375,7 @@ export default function ApplicantDashboardPage() {
               {data.applicant.gender === "female" && (
                 <Section
                   title="Private Documented Interests"
-                  description="Interests you documented for yourself and the admin team. These are not visible to men before a match."
+                  description="Interests you documented for yourself and the admin team. These remain private until the team creates a recipient-specific review."
                   interests={data.privateDocumented}
                   onAction={async body => { await runAction(body); }}
                   busy={busy}

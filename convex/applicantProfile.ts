@@ -15,8 +15,7 @@ const prayerCommitment = v.union(
 );
 const photoSharingPermission = v.union(
   v.literal("yes"),
-  v.literal("no"),
-  v.literal("ask_me_first")
+  v.literal("no")
 );
 
 type ReadCtx = QueryCtx | MutationCtx;

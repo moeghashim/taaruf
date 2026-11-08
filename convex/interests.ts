@@ -201,6 +201,7 @@ export const updateStatus = mutation({
       throw new Error("Interest not found");
     }
 
+    if (interest.femaleWorkflow) throw new Error("Use female website workflow");
     await ctx.db.patch(args.id, {
       status: args.status,
       adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,

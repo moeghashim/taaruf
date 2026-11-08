@@ -55,7 +55,6 @@ const prayerOptions = [
 const photoSharingOptions = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
-  { value: "ask_me_first", label: "Ask me first" },
 ] as const;
 
 const duplicateEmailMessage =

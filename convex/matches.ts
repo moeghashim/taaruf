@@ -380,6 +380,7 @@ export const updateStatus = mutation({
 
     if (match.testResetAt !== undefined) throw new Error("Reset test match is read-only");
 
+    if (match.interestId && (await ctx.db.get(match.interestId))?.femaleWorkflow && !["closed", "declined", "paused"].includes(args.status)) throw new Error("Use female website workflow");
     // Contact disclosure is a privileged, consent-gated transaction, not a status label.
     if (args.status === "contact_shared") {
       requireAdmin(args.adminSecret);

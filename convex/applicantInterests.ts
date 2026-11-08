@@ -350,7 +350,7 @@ export const submitInterestNumber = mutation({
 
     const interest = await ctx.db.get(result.interestId);
     if (!interest) throw new Error("Interest not found after creation");
-    await ctx.db.patch(interest._id, { senderPhotoConsent: args.photoConsent });
+    await ctx.db.patch(interest._id, { senderPhotoConsent: args.photoConsent, ...(registration.gender === "female" ? { femaleWorkflow: { state: "private_documented" as const } } : {}) });
     const flow = await ensureFlow(ctx, interest);
     await appendEvent(ctx, flow, "interest_number_submitted", registration._id);
 
@@ -415,6 +415,7 @@ export const respondToInbound = mutation({
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
     if (!interest || interest.testReset) throw new Error("Interest not found");
+    if (interest.femaleWorkflow || (!interest.matchId && interest.source === "platform_submission" && interest.visibility === "internal_only")) throw new Error("Use female website workflow");
     if (interest.toRegistrationId !== registration._id || interest.visibility === "internal_only") {
       throw new Error("Interest is not available for this applicant");
     }
@@ -587,6 +588,7 @@ export const giveFinalApproval = mutation({
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
     if (!interest || interest.testReset) throw new Error("Interest not found");
+    if (interest.femaleWorkflow || (!interest.matchId && interest.source === "platform_submission" && interest.visibility === "internal_only")) throw new Error("Use female website workflow");
     if (interest.fromRegistrationId !== registration._id && interest.toRegistrationId !== registration._id) {
       throw new Error("Interest is not available for this applicant");
     }

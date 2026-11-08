@@ -10,4 +10,6 @@ crons.interval(
   {}
 );
 
+crons.interval("deliver female workflow outbox", { minutes: 1 }, internal.femaleWorkflowDelivery.drain, {});
+
 export default crons;

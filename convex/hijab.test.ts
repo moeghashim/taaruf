@@ -13,7 +13,7 @@ const profileFields = {
   spouseRequirement2: "Patient",
   spouseRequirement3: "Practicing",
   shareableBio: "Test bio",
-  photoSharingPermission: "ask_me_first" as const,
+  photoSharingPermission: "no" as const,
 };
 const registrationFields = {
   name: "Test Applicant", age: 28, maritalStatus: "single",
