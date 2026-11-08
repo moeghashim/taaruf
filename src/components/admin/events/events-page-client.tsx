@@ -1,8 +1,8 @@
 "use client";
+import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { Ico } from "@/components/admin/primitives/icons";
@@ -76,11 +76,12 @@ function registrationSortLabel(value: (typeof registrationSortOptions)[number]) 
 async function eventAdmin(action: string, args: Record<string, unknown>) {
   const response = await fetch("/api/admin/event-registration", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...args }) });
   const result = await response.json();
+      if (response.ok) refreshAdminData();
   if (!response.ok) throw new Error(result.error || "Unable to update event");
   return result.result;
 }
 export function EventsPageClient() {
-  const events = useQuery(api.events.getAll);
+  const events = useQuery("events.getAll");
   const createEvent = (args: Record<string, unknown>) => eventAdmin("create", args);
   const updateEvent = (args: Record<string, unknown>) => eventAdmin("update", args);
   const deleteEvent = (args: Record<string, unknown>) => eventAdmin("deleteEvent", args);
@@ -90,6 +91,7 @@ export function EventsPageClient() {
     try {
       const response = await fetch("/api/admin/event-check-in", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(args) });
       const result = await response.json();
+      if (response.ok) refreshAdminData();
       if (!response.ok) throw new Error(result.error || "Unable to update attendance");
       setMessage("Attendance updated.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update attendance"); }
@@ -102,7 +104,7 @@ export function EventsPageClient() {
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const detail = useQuery(
-    api.events.getDetail,
+    "events.getDetail",
     selectedEventId ? { eventId: selectedEventId as Id<"events"> } : "skip"
   );
   const [message, setMessage] = useState<string | null>(null);

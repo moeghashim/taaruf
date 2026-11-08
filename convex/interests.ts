@@ -1,3 +1,4 @@
+import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -30,11 +31,12 @@ const interestAdminStatus = v.union(
 );
 
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interests = await ctx.db.query("interests").collect();
 
-    return await Promise.all(
+    return withoutCapabilities(await Promise.all(
       interests.map(async (interest) => {
         const fromRegistration = await ctx.db.get(interest.fromRegistrationId);
         const toRegistration = await ctx.db.get(interest.toRegistrationId);
@@ -44,13 +46,13 @@ export const getAll = query({
 
         return {
           ...interest,
-          fromRegistration,
-          toRegistration,
+          fromRegistration: withoutCapabilities(fromRegistration),
+          toRegistration: withoutCapabilities(toRegistration),
           match,
           event,
         };
       })
-    );
+    ));
   },
 });
 
@@ -65,6 +67,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     if (args.source === "platform_submission") throw new Error("Use Submit Interest with a verified applicant session");
     const result = await createInterestWithRules(ctx, args);
@@ -73,11 +76,12 @@ export const create = mutation({
 });
 
 export const updateAdminStatus = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     adminStatus: interestAdminStatus,
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -94,10 +98,11 @@ export const updateAdminStatus = mutation({
 });
 
 export const claimDeclineNotification = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -141,11 +146,12 @@ export const claimDeclineNotification = mutation({
 });
 
 export const recordDeclineNotificationFailure = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     error: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -162,11 +168,12 @@ export const recordDeclineNotificationFailure = mutation({
 });
 
 export const updateNotes = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     notes: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -182,12 +189,13 @@ export const updateNotes = mutation({
 });
 
 export const updateStatus = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     status: interestStatus,
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -205,11 +213,12 @@ export const updateStatus = mutation({
 });
 
 export const updateRank = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     rank: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -225,10 +234,11 @@ export const updateRank = mutation({
 });
 
 export const remove = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -245,20 +255,22 @@ export const remove = mutation({
 });
 
 export const progressFirst = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     interestId: v.id("interests"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     return await activateInterestAndQueueCompetitors(ctx, args.interestId);
   },
 });
 
 export const convertToMatch = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     interestId: v.id("interests"),
     adminNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.interestId);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -269,10 +281,11 @@ export const convertToMatch = mutation({
 });
 
 export const getByRegistration = query({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     registrationId: v.id("registrations"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const outbound = await ctx.db
       .query("interests")
       .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", args.registrationId))
@@ -286,8 +299,8 @@ export const getByRegistration = query({
       const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
       return {
         ...interest,
-        fromRegistration: await ctx.db.get(interest.fromRegistrationId),
-        toRegistration: await ctx.db.get(interest.toRegistrationId),
+        fromRegistration: withoutCapabilities(await ctx.db.get(interest.fromRegistrationId)),
+        toRegistration: withoutCapabilities(await ctx.db.get(interest.toRegistrationId)),
         match: match?.testResetAt !== undefined ? null : match,
       };
     };

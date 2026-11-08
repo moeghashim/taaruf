@@ -1,3 +1,4 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
@@ -35,6 +36,8 @@ function getAppUrl(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     if (!(await isAdminAuthenticated(request))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -46,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     const convex = getConvexClient();
-    const claim = await convex.mutation(api.events.claimEventRegistrationEmail, {
+    const claim = await convex.mutation(api.events.claimEventRegistrationEmail, { adminSecret: getAdminSecret(),
       eventRegistrationId: body.eventRegistrationId,
       kind: body.kind as EmailKind,
       force: body.force === true,
@@ -63,7 +66,7 @@ export async function POST(request: NextRequest) {
     let applicantPortalUrl: string | undefined;
     if (claim.kind === "confirmation_request" || claim.kind === "reminder") {
       const loginToken = createToken();
-      const loginRegistration = await convex.mutation(api.applicantAuth.createLoginToken, {
+      const loginRegistration = await convex.mutation(api.applicantAuth.createLoginToken, { adminSecret: getAdminSecret(),
         email: claim.email,
         tokenHash: hashToken(loginToken),
         expiresInMs: 48 * 60 * 60 * 1000,
@@ -84,21 +87,21 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
-      await convex.mutation(api.events.recordEventRegistrationEmailFailure, {
+      await convex.mutation(api.events.recordEventRegistrationEmailFailure, { adminSecret: getAdminSecret(),
         emailId: claim.emailId,
         error: result.error || "Failed to send event registration email",
       });
       return NextResponse.json({ success: false, error: result.error }, { status: 502 });
     }
 
-    await convex.mutation(api.events.recordEventRegistrationEmailSuccess, {
+    await convex.mutation(api.events.recordEventRegistrationEmailSuccess, { adminSecret: getAdminSecret(),
       emailId: claim.emailId,
     });
 
     return NextResponse.json({ success: true, providerId: result.id });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete admin request" },
       { status: 500 }
     );
   }

@@ -16,6 +16,7 @@ beforeEach(() => {
   vi.stubEnv("CONVEX_URL", "https://example.invalid");
   vi.stubEnv("STRIPE_WEBHOOK_SECRET", "mock");
   vi.stubEnv("ADMIN_PASSWORD", "mock");
+  vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "synthetic-service");
   vi.stubEnv("ADMIN_TOKEN_SALT", "mock-salt");
   mocks.query.mockResolvedValue({ _id: "profile", name: "Amina", email: "test@example.invalid", paymentStatus: "paid", confirmationEmailSent: true });
   mocks.mutation.mockResolvedValue(null);
@@ -41,7 +42,7 @@ it("non-event webhook replay skips already-sent welcome", async () => {
 });
 it("payment repair uses same event receipt path independently of global welcome", async () => {
   const token = crypto.createHash("sha256").update("mockmock-salt").digest("hex");
-  const result = await repair(new NextRequest("https://example.invalid/api/admin/fix-payments", { method: "POST", headers: { cookie: "admin_token=" + token } }));
+  const result = await repair(new NextRequest("https://example.invalid/api/admin/fix-payments", { method: "POST", headers: { cookie: "admin_token=" + token, origin: "https://example.invalid" } }));
   expect(result.status).toBe(200);
   expect(mocks.eventReceipt).toHaveBeenCalledWith(expect.anything(), "cs_test", "https://example.invalid");
   expect(mocks.welcome).not.toHaveBeenCalled();

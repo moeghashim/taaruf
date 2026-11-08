@@ -1,8 +1,8 @@
 "use client";
+import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
 import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
@@ -80,10 +80,10 @@ export function ProfileDetail({
 }: Props) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
-  const eventHistory = useQuery(api.events.getByRegistration, {
+  const eventHistory = useQuery("events.getByRegistration", {
     registrationId: profile._id as Id<"registrations">,
   });
-  const interestHistory = useQuery(api.interests.getByRegistration, {
+  const interestHistory = useQuery("interests.getByRegistration", {
     registrationId: profile._id as Id<"registrations">,
   });
   const [notes, setNotes] = useState(profile.adminNotes ?? "");
@@ -135,6 +135,7 @@ export function ProfileDetail({
     try {
       const response = await fetch("/api/admin/revoke-approval", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ registrationId: profile._id }) });
       const result = await response.json();
+      if (response.ok) refreshAdminData();
       if (!response.ok) throw new Error(result.error);
     } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to revoke approval"); }
     finally { setBusyAction(null); }

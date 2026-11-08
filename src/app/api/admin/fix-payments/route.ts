@@ -1,3 +1,4 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import { sendCheckoutReceipt } from "@/lib/event-registration-receipt";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
@@ -5,6 +6,8 @@ import { api } from "../../../../../convex/_generated/api";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     // Verify admin auth
     const adminToken = request.cookies.get("admin_token")?.value;
@@ -48,14 +51,14 @@ export async function POST(request: NextRequest) {
       try {
         const registration = await convexClient.query(
           api.registrations.getByStripeSession,
-          { stripeSessionId: session.id }
+          { adminSecret: getAdminSecret(),  stripeSessionId: session.id }
         );
 
         if (!registration) continue;
 
         // Fix payment status if mismatched
         if (registration.paymentStatus !== "paid") {
-          await convexClient.mutation(api.registrations.updatePaymentStatus, {
+          await convexClient.mutation(api.registrations.updatePaymentStatus, { adminSecret: getAdminSecret(),
             stripeSessionId: session.id,
             paymentStatus: "paid",
             amountPaid: typeof session.amount_total === "number" ? session.amount_total : undefined,
@@ -80,8 +83,8 @@ export async function POST(request: NextRequest) {
       sessionsChecked: sessions.data.length,
       details,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  } catch {
+    const message = "Unable to complete admin request";
     console.error("Fix payments error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

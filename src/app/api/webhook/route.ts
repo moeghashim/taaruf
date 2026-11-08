@@ -1,3 +1,4 @@
+import { getAdminSecret } from "@/lib/admin-server";
 import { sendCheckoutReceipt } from "@/lib/event-registration-receipt";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     if (event.type === "checkout.session.completed") {
       try {
-        await convexClient.mutation(api.registrations.updatePaymentStatus, {
+        await convexClient.mutation(api.registrations.updatePaymentStatus, { adminSecret: getAdminSecret(),
           stripeSessionId: session.id,
           paymentStatus: "paid",
           amountPaid: typeof session.amount_total === "number" ? session.amount_total : undefined,
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
       if (receipt.error) return NextResponse.json({ error: receipt.error }, { status: 500 });
     } else if (event.type === "checkout.session.expired") {
       try {
-        await convexClient.mutation(api.registrations.updatePaymentStatus, {
+        await convexClient.mutation(api.registrations.updatePaymentStatus, { adminSecret: getAdminSecret(),
           stripeSessionId: session.id,
           paymentStatus: "failed",
         });

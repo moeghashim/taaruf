@@ -1,11 +1,11 @@
 "use client";
+import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import Link from "next/link";
 import { TestResetDialog } from "./test-reset-dialog";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { useAdminMutation as useMutation, useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
@@ -91,19 +91,19 @@ function pipelineStageForMatch(match: MatchRecord): PipelineStage {
 }
 
 function useMatchingData() {
-  const interestsRaw = useQuery(api.interests.getAll);
-  const matchesRaw = useQuery(api.matches.getAll);
-  const profileSharesRaw = useQuery(api.profileShares.getAll);
+  const interestsRaw = useQuery("interests.getAll");
+  const matchesRaw = useQuery("matches.getAll");
+  const profileSharesRaw = useQuery("profileShares.getAll");
   const registrationsData = useRegistrations();
 
-  const updateInterestStatus = useMutation(api.interests.updateStatus);
-  const updateInterestAdminStatus = useMutation(api.interests.updateAdminStatus);
-  const updateInterestNotes = useMutation(api.interests.updateNotes);
-  const removeInterest = useMutation(api.interests.remove);
-  const progressInterestFirst = useMutation(api.interests.progressFirst);
-  const convertInterestToMatch = useMutation(api.interests.convertToMatch);
-  const updateMatchStatus = useMutation(api.matches.updateStatus);
-  const resetPair = useMutation(api.matches.resetPair);
+  const updateInterestStatus = useMutation("interests.updateStatus");
+  const updateInterestAdminStatus = useMutation("interests.updateAdminStatus");
+  const updateInterestNotes = useMutation("interests.updateNotes");
+  const removeInterest = useMutation("interests.remove");
+  const progressInterestFirst = useMutation("interests.progressFirst");
+  const convertInterestToMatch = useMutation("interests.convertToMatch");
+  const updateMatchStatus = useMutation("matches.updateStatus");
+  const resetPair = useMutation("matches.resetPair");
 
   const interests = useMemo(() => (interestsRaw ?? []) as InterestRecord[], [interestsRaw]);
   const matches = useMemo(() => (matchesRaw ?? []) as MatchRecord[], [matchesRaw]);
@@ -148,6 +148,7 @@ function useMatchingData() {
 async function shareContacts(matchId: string) {
   const response = await fetch("/api/admin/share-contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId }) });
   const result = await response.json();
+      if (response.ok) refreshAdminData();
   if (!response.ok) throw new Error(result.error || "Contact sharing failed");
   return result;
 }
@@ -462,6 +463,7 @@ function useNotifyDecline() {
       body: JSON.stringify({ interestId }),
     });
     const data = await response.json();
+      if (response.ok) refreshAdminData();
     if (!response.ok) {
       throw new Error(data.error || "Failed to send decline notification");
     }
@@ -477,6 +479,7 @@ function useNotifyMatch() {
       body: JSON.stringify({ matchId }),
     });
     const data = await response.json();
+      if (response.ok) refreshAdminData();
     if (!response.ok) {
       throw new Error(data.error || "Failed to send match notification");
     }
@@ -489,17 +492,22 @@ function useCreateProfileShare() {
     ownerRegistrationId,
     recipientRegistrationId,
     includeImages,
+    interestId,
+    matchId,
   }: {
     ownerRegistrationId: string;
     recipientRegistrationId: string;
     includeImages: boolean;
+    interestId?: string;
+    matchId?: string;
   }) => {
     const response = await fetch("/api/admin/create-profile-share", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ownerRegistrationId, recipientRegistrationId, includeImages }),
+      body: JSON.stringify({ ownerRegistrationId, recipientRegistrationId, includeImages, interestId, matchId }),
     });
     const data = await response.json();
+      if (response.ok) refreshAdminData();
     if (!response.ok) {
       throw new Error(data.error || "Failed to create profile share");
     }
@@ -1063,18 +1071,24 @@ export function PipelinePageClient() {
 }
 
 function ShareProfileAction({
+  interest,
+  matchId,
   owner,
   recipient,
   onMessage,
   role,
 }: {
+  interest?: InterestRecord | null;
+  matchId?: string;
   role: "Requester" | "Target";
   owner: Registration | null;
   recipient: Registration | null;
   onMessage: (message: string) => void;
 }) {
   const createShare = useCreateProfileShare();
-  const [includeImages, setIncludeImages] = useState(owner?.photoSharingPermission === "yes");
+  const scoped = interest?.fromRegistrationId === owner?._id ? interest?.senderPhotoConsent : undefined;
+  const canSharePhotos = scoped !== undefined ? scoped === "yes" && !interest?.senderPhotoConsentRevokedAt : owner?.photoSharingPermission === "yes";
+  const [includeImages, setIncludeImages] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const create = async () => {
@@ -1084,7 +1098,9 @@ function ShareProfileAction({
       const shareUrl = await createShare({
         ownerRegistrationId: owner._id,
         recipientRegistrationId: recipient._id,
-        includeImages,
+        includeImages: includeImages && canSharePhotos,
+        interestId: interest?._id,
+        matchId,
       });
       onMessage(`Share link created: ${shareUrl}`);
     } catch (error) {
@@ -1097,8 +1113,8 @@ function ShareProfileAction({
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
       <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12 }}>
-        <input type="checkbox" checked={includeImages} disabled={owner?.photoSharingPermission !== "yes"} onChange={(event) => setIncludeImages(event.target.checked)} />
-        Include {role.toLowerCase()} photos ({owner?.name ?? "Unknown"}){owner?.photoSharingPermission !== "yes" ? " — owner consent required" : ""}
+        <input type="checkbox" checked={includeImages} disabled={!canSharePhotos} onChange={(event) => setIncludeImages(event.target.checked)} />
+        Include {role.toLowerCase()} photos ({owner?.name ?? "Unknown"}){!canSharePhotos ? " — owner consent required" : ""}
       </label>
       <button className="btn btn-sm" type="button" onClick={create} disabled={busy || !owner || !recipient}>
         {busy ? "Creating..." : `Share ${role.toLowerCase()} profile → ${recipient?.name ?? "Unknown"}`}
@@ -1260,8 +1276,8 @@ export function WorkbenchPageClient() {
                   {busy === "contact" ? "Updating..." : "Share contacts in portals"}
                 </button>
               )}
-              <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" owner={left} recipient={right} onMessage={setMessage} />
-              <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" owner={right} recipient={left} onMessage={setMessage} />
+              <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />
+              <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />
             </div>
           </div>
         </div>

@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     try {
       // Next normalizes loopback/proxy URLs; Host retains the browser-facing authority.
       const parsed = new URL(origin);
-      if (!["http:", "https:"].includes(parsed.protocol) || parsed.host !== (request.headers.get("host") || request.nextUrl.host)) throw new Error("Origin mismatch");
+      if (!["http:", "https:"].includes(parsed.protocol) || parsed.protocol !== request.nextUrl.protocol || parsed.host !== (request.headers.get("host") || request.nextUrl.host)) throw new Error("Origin mismatch");
     } catch { return NextResponse.json({ error: "Invalid request origin." }, { status: 403 }); }
   }
   if (!process.env.ATTENDANCE_ADMIN_SECRET) {

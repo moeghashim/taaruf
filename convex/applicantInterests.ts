@@ -1,3 +1,4 @@
+import { requireAdmin } from "./adminAuthorization";
 import { matchesInterestFirstName } from "./interestIdentity";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -329,8 +330,8 @@ export const submitInterestNumber = mutation({
     }
 
     const previous = await ctx.db.query("interests")
-      .withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", q => q.eq("fromRegistrationId", registration._id).eq("toRegistrationId", target._id).eq("eventId", selected._id)).take(100);
-    const retry = previous.find(row => row.source === "platform_submission");
+      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3);
+    const retry = previous.find(row => row.toRegistrationId === target._id);
     if (retry) {
       if (retry.senderPhotoConsent !== args.photoConsent || !isVisibleInApplicantDashboard(retry)) throw new Error("Interest already submitted for this event");
       return { interestId: retry._id, matchId: retry.matchId ?? null, private: retry.visibility === "internal_only", inboundInterestNotification: null };
@@ -382,11 +383,12 @@ export const submitInterestNumber = mutation({
 });
 
 export const recordInboundInterestNotificationFailure = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     interestId: v.id("interests"),
     error: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.interestId);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
@@ -737,11 +739,12 @@ export const giveFinalApproval = mutation({
 });
 
 export const recordFinalApprovalNotificationFailure = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     interestId: v.id("interests"),
     error: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     if ((await ctx.db.get(args.interestId))?.testReset) throw new Error("Reset test interest is read-only");
     const flow = await getFlowByInterestId(ctx, args.interestId);
     if (!flow) {
@@ -763,7 +766,7 @@ export const revokeSenderPhotoConsent = mutation({
   handler: async (ctx, args) => {
     const owner = await getRegistrationForSession(ctx, args.sessionHash);
     const interest = await ctx.db.get(args.interestId);
-    if (!interest || interest.fromRegistrationId !== owner._id) throw new Error("Unauthorized");
+    if (!interest || interest.testReset || interest.fromRegistrationId !== owner._id) throw new Error("Unauthorized");
     if (interest.senderPhotoConsent === undefined) throw new Error("No submission photo choice exists");
     if (!interest.senderPhotoConsentRevokedAt) await ctx.db.patch(interest._id, { senderPhotoConsentRevokedAt: Date.now() });
     return null;

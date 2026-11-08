@@ -1,3 +1,4 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
@@ -20,6 +21,8 @@ function isAdmin(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     if (!isAdmin(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,7 +46,7 @@ export async function POST(request: NextRequest) {
     const results: { registrationId: string; success: boolean; error?: string }[] = [];
 
     for (const registrationId of registrationIds) {
-      const registration = await convexClient.query(api.registrations.getById, { id: registrationId });
+      const registration = await convexClient.query(api.registrations.getById, { adminSecret: getAdminSecret(),  id: registrationId });
 
       if (!registration) {
         results.push({ registrationId, success: false, error: "Registration not found" });
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
       const token = registration.profileAccessToken || crypto.randomBytes(24).toString("hex");
 
       if (!registration.profileAccessToken) {
-        await convexClient.mutation(api.registrations.setProfileAccessToken, {
+        await convexClient.mutation(api.registrations.setProfileAccessToken, { adminSecret: getAdminSecret(),
           id: registration._id,
           token,
         });
@@ -71,7 +74,7 @@ export async function POST(request: NextRequest) {
         profileUrl,
       });
 
-      await convexClient.mutation(api.registrations.markProfileUpdateEmailSent, {
+      await convexClient.mutation(api.registrations.markProfileUpdateEmailSent, { adminSecret: getAdminSecret(),
         id: registration._id,
         sent: emailResult.success,
         error: emailResult.error,
@@ -93,9 +96,9 @@ export async function POST(request: NextRequest) {
         failed: results.filter((result) => !result.success).length,
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete admin request" },
       { status: 500 }
     );
   }

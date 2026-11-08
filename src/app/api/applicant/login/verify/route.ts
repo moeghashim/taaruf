@@ -1,3 +1,4 @@
+import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../../convex/_generated/api";
 import { applicantSessionCookie, createToken, hashToken } from "@/lib/applicant-session";
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
 
   const sessionToken = createToken();
   const convex = getConvexClient();
-  const claimed = await convex.mutation(api.applicantAuth.claimLoginToken, {
+  const claimed = await convex.mutation(api.applicantAuth.claimLoginToken, { adminSecret: getAdminSecret(),
     tokenHash: hashToken(token),
     sessionHash: hashToken(sessionToken),
   });

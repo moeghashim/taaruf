@@ -52,4 +52,13 @@ next-env.d.ts
 
 /test-results/
 /ops/photo-runtime/
+/ops/security-release/
+/ops/security-runtime/
+/ops/*auth-contract.md
+/ops/coordinator-status.md
+/docs/issue58-review-blockers.md
+/ops/*private.md
+/ops/security-integration-notes.md
+/ops/security-runtime-hold.md
+/ops/security-*.log
 /*-consent-local-review/

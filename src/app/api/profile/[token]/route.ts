@@ -23,17 +23,10 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
     }
 
     const imageStorageIds = registration.imageStorageIds || [];
-    const imageUrls = imageStorageIds.length
-      ? await convexClient.query(api.registrations.getImageUrls, { storageIds: imageStorageIds })
-      : [];
-    const images = imageUrls.flatMap((image) =>
-      image.url ? [{ storageId: image.storageId, url: image.url }] : []
-    );
+    // Consent/ownership and URLs are resolved in the same backend snapshot.
+    const images = registration.images;
     const fallbackInterestSubmissionNumbers = (registration.interestSubmission || "")
-      .match(/\d+/g)
-      ?.slice(0, 3)
-      .map((value) => Number(value))
-      .filter((value) => Number.isInteger(value) && value > 0) || [];
+      .match(/\d+/g)?.slice(0, 3).map(Number).filter(value => Number.isInteger(value) && value > 0) || [];
 
     return NextResponse.json(
       {
@@ -60,9 +53,9 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
       },
       { headers: { "Cache-Control": "no-store" } }
     );
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete request" },
       { status: 500 }
     );
   }
@@ -91,9 +84,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     });
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete request" },
       { status: 500 }
     );
   }

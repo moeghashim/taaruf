@@ -138,6 +138,12 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  photoUploads: defineTable({
+    storageId: v.id("_storage"),
+    registrationId: v.optional(v.id("registrations")),
+    signupCapabilityHash: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_storageId", ["storageId"]),
   checkoutLinks: defineTable({
     stripeSessionId: v.string(), registrationId: v.id("registrations"),
     eventRegistrationId: v.optional(v.id("eventRegistrations")),

@@ -1,3 +1,4 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
@@ -15,12 +16,14 @@ function isAdmin(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     if (!isAdmin(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { ownerRegistrationId, recipientRegistrationId, includeImages } = await request.json();
+    const { ownerRegistrationId, recipientRegistrationId, includeImages, interestId, matchId } = await request.json();
     if (!ownerRegistrationId || !recipientRegistrationId) {
       return NextResponse.json({ error: "ownerRegistrationId and recipientRegistrationId are required" }, { status: 400 });
     }
@@ -36,11 +39,13 @@ export async function POST(request: NextRequest) {
 
     const convexClient = new ConvexHttpClient(convexUrl);
     const shareToken = crypto.randomBytes(24).toString("hex");
-    await convexClient.mutation(api.profileShares.create, {
+    await convexClient.mutation(api.profileShares.create, { adminSecret: getAdminSecret(),
       ownerRegistrationId,
       recipientRegistrationId,
       includeImages: Boolean(includeImages),
       shareToken,
+      interestId,
+      matchId,
     });
 
     return NextResponse.json({
@@ -48,9 +53,9 @@ export async function POST(request: NextRequest) {
       shareUrl: `${appUrl}/share/${shareToken}`,
       shareToken,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete admin request" },
       { status: 500 }
     );
   }

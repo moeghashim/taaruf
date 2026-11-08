@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { beforeEach, expect, it, vi } from "vitest";
 import { api } from "./_generated/api";
@@ -71,13 +72,13 @@ it("overlapping event checkouts retain immutable links after latest session chan
   return ["one","two"];
  });
  const args={name:"New",email:"new@example.invalid",age:28,gender:"male" as const,maritalStatus:"single",education:"College",job:"Job",phone:"999"};
- const registrationId=await t.mutation(api.registrations.create,{...args,eventCode:eventCodes[0],stripeSessionId:"cs_first"});
- await t.mutation(api.registrations.create,{...args,eventCode:eventCodes[1],stripeSessionId:"cs_second"});
+ const registrationId=await t.mutation(api.registrations.create,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, ...args,eventCode:eventCodes[0],stripeSessionId:"cs_first"});
+ await t.mutation(api.registrations.create,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, ...args,eventCode:eventCodes[1],stripeSessionId:"cs_second"});
  const first=await t.query(api.registrations.resolveCheckoutReceipt,{stripeSessionId:"cs_first",adminSecret:secret});
  const second=await t.query(api.registrations.resolveCheckoutReceipt,{stripeSessionId:"cs_second",adminSecret:secret});
  expect(first?.registrationId).toBe(registrationId);
  expect(first?.eventRegistrationId).not.toBe(second?.eventRegistrationId);
- expect((await t.query(api.registrations.getByStripeSession,{stripeSessionId:"cs_first"}))?._id).toBe(registrationId);
- await t.mutation(api.registrations.updatePaymentStatus,{stripeSessionId:"cs_first",paymentStatus:"paid"});
- expect((await t.query(api.registrations.getById,{id:registrationId}))?.paymentStatus).toBe("paid");
+ expect((await t.query(api.registrations.getByStripeSession,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, stripeSessionId:"cs_first"}))?._id).toBe(registrationId);
+ await t.mutation(api.registrations.updatePaymentStatus,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, stripeSessionId:"cs_first",paymentStatus:"paid"});
+ expect((await t.query(api.registrations.getById,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, id:registrationId}))?.paymentStatus).toBe("paid");
 });

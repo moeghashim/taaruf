@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";

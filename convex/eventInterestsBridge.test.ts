@@ -6,7 +6,7 @@ vi.mock("../src/lib/convex", () => ({ getConvexClient: () => ({ mutation }) }));
 import { POST } from "../src/app/api/admin/event-interests/route";
 afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks(); });
 function request(cookie = "", enabled: unknown = true) {
-  return new NextRequest("http://localhost/api/admin/event-interests", { method: "POST", headers: { cookie }, body: JSON.stringify({ eventId: "synthetic", enabled }) });
+  return new NextRequest("http://localhost/api/admin/event-interests", { method: "POST", headers: { cookie, origin: "http://localhost" }, body: JSON.stringify({ eventId: "synthetic", enabled }) });
 }
 test("cookie bridge fails closed and keeps the secret server-side", async () => {
   vi.stubEnv("ADMIN_PASSWORD", "synthetic-password");

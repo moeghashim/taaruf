@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { expect, test, vi } from "vitest";
 import { makeFunctionReference } from "convex/server";
@@ -100,7 +101,7 @@ test("retired attendance writer fails closed and preserves historical data", asy
 
 test("profile share links cannot bypass photo consent, including legacy links", async () => {
   const { t, people } = await fixture();
-  await expect(t.mutation(api.profileShares.create, { ownerRegistrationId: people[0], recipientRegistrationId: people[1], includeImages: true, shareToken: "test-share" })).rejects.toThrow("consent");
+  await expect(t.mutation(api.profileShares.create, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  ownerRegistrationId: people[0], recipientRegistrationId: people[1], includeImages: true, shareToken: "test-share" })).rejects.toThrow("consent");
   await t.run(async ctx => {
     const image = await ctx.storage.store(new Blob(["photo"], { type: "image/png" }));
     await ctx.db.patch(people[0], { imageStorageIds: [image] });
@@ -126,7 +127,7 @@ for (const gender of ["male", "female"] as const) {
     const first = (await dashboard()).interestSubmissions[0];
     await t.run(async ctx => { await ctx.db.patch(first.interestId, { status: "declined" }); });
     await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).rejects.toThrow("already submitted");
-    await expect(t.mutation(api.interests.remove, { id: first.interestId })).rejects.toThrow("retained");
+    await expect(t.mutation(api.interests.remove, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  id: first.interestId })).rejects.toThrow("retained");
     const next = await t.run(async ctx => {
       await ctx.db.patch(event, { interestSubmissionsEnabled: false });
       const old = (await ctx.db.get(event))!;

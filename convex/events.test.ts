@@ -1,6 +1,7 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { modules } from "./test.setup";
@@ -304,7 +305,7 @@ describe("events", () => {
       return await insertEventRegistration(ctx, eventId, registrationId, "female", "approved");
     });
 
-    const claim = await t.mutation(api.events.claimEventRegistrationEmail, {
+    const claim = await t.mutation(api.events.claimEventRegistrationEmail, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       eventRegistrationId,
       kind: "confirmation_request",
     });
@@ -321,7 +322,7 @@ describe("events", () => {
     });
     expect(beforeSuccess?.sentAt).toBeUndefined();
 
-    await t.mutation(api.events.recordEventRegistrationEmailSuccess, {
+    await t.mutation(api.events.recordEventRegistrationEmailSuccess, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       emailId: claim.emailId as Id<"eventRegistrationEmails">,
     });
 
@@ -409,7 +410,7 @@ describe("Real Talk Oct 20 2026 event-only queues", () => {
     expect(await t.run(ctx => ctx.db.get(third.eventRegistrationId))).toMatchObject({registrationStatus:"pending"});
     await expect(t.mutation(api.events.update,{adminSecret:"test-admin",eventId,maleCapacity:1})).rejects.toThrow("reserved");
     expect(await t.run(ctx => ctx.db.get(ids[0]))).toMatchObject({status:"approved"});
-    await expect(t.mutation(api.registrations.updateStatus,{id:ids[0],status:"waitlisted"})).rejects.toThrow("retired");
+    await expect(t.mutation(api.registrations.updateStatus,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, id:ids[0],status:"waitlisted"})).rejects.toThrow("retired");
   });
   test("same-time queue ordering, expiry promotion and repeat expiry are deterministic", async () => {
     const {t,eventId,ids} = await fixture();
@@ -420,8 +421,8 @@ describe("Real Talk Oct 20 2026 event-only queues", () => {
       await ctx.db.patch(second.eventRegistrationId,{waitlistedAt:100});
       await ctx.db.patch(third.eventRegistrationId,{waitlistedAt:100});
     });
-    expect(await t.mutation(api.events.expireUnconfirmed,{})).toEqual({cancelled:1});
-    expect(await t.mutation(api.events.expireUnconfirmed,{})).toEqual({cancelled:0});
+    expect(await t.mutation(internal.events.expireUnconfirmed,{})).toEqual({cancelled:1});
+    expect(await t.mutation(internal.events.expireUnconfirmed,{})).toEqual({cancelled:0});
     expect(await t.run(ctx => ctx.db.get(second.eventRegistrationId))).toMatchObject({registrationStatus:"pending"});
     expect(await t.run(ctx => ctx.db.get(third.eventRegistrationId))).toMatchObject({registrationStatus:"waitlisted"});
   });
@@ -442,7 +443,7 @@ test("audited legacy list remains visible, including orphan, without profile cha
     await ctx.db.delete(orphan);
     return {eventId,approved,pending,entries,before};
   });
-  const detail = await t.query(api.events.getDetail,{eventId:data.eventId});
+  const detail = await t.query(api.events.getDetail,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, eventId:data.eventId});
   expect(detail!.waitlistEntries).toHaveLength(3);
   expect(detail!.waitlistEntries[2].registration).toBeNull();
   expect(detail!.waitlistEntries.map(row => row._id)).toEqual(data.entries);

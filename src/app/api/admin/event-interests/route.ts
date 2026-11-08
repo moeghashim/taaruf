@@ -1,3 +1,4 @@
+import { adminRequestError } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
@@ -5,6 +6,8 @@ import type { Id } from "../../../../../convex/_generated/dataModel";
 import { getConvexClient } from "../../../../lib/convex";
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   const password = process.env.ADMIN_PASSWORD;
   if (!password) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const expected = crypto.createHash("sha256").update(password + (process.env.ADMIN_TOKEN_SALT || "taaruf-admin-salt")).digest("hex");

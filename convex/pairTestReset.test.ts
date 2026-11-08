@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { expect, test, vi, afterEach } from "vitest";
 import { api, internal } from "./_generated/api";
@@ -68,26 +69,26 @@ test("stale grants, actions and reads cannot revive reset history; fresh submiss
     expect(await f.t.query(api.profileShares.getByShareToken, { shareToken: "synthetic-token-" + i })).toBeNull();
     await expect(f.t.mutation(api.profileShares.markViewed, { shareToken: "synthetic-token-" + i })).rejects.toThrow();
   }
-  expect(await f.t.query(api.profileShares.getAll, {})).toEqual([]);
+  expect(await f.t.query(api.profileShares.getAll, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, })).toEqual([]);
   const id = f.scope.matchIds[0];
-  expect(await f.t.query(api.matches.getById, { id })).toBeNull();
-  expect(await f.t.query(api.matches.getAll, {})).toEqual([]);
-  expect((await f.t.query(api.interests.getAll, {})).every(i => i.match === null)).toBe(true);
-  const linked = await f.t.query(api.interests.getByRegistration, { registrationId: f.scope.registrationIds[0] });
+  expect(await f.t.query(api.matches.getById, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  id })).toBeNull();
+  expect(await f.t.query(api.matches.getAll, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, })).toEqual([]);
+  expect((await f.t.query(api.interests.getAll, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, })).every(i => i.match === null)).toBe(true);
+  const linked = await f.t.query(api.interests.getByRegistration, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  registrationId: f.scope.registrationIds[0] });
   expect([...linked.inbound, ...linked.outbound].every(i => i.match === null)).toBe(true);
-  await expect(f.t.mutation(api.matches.updateStatus, { id, status: "new" })).rejects.toThrow("read-only");
-  await expect(f.t.mutation(api.matches.markNotificationSent, { id, sent: true })).rejects.toThrow("read-only");
-  await expect(f.t.mutation(api.matches.markContactSharedNotificationSent, { id, sent: true })).rejects.toThrow("read-only");
+  await expect(f.t.mutation(api.matches.updateStatus, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  id, status: "new" })).rejects.toThrow("read-only");
+  await expect(f.t.mutation(api.matches.markNotificationSent, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  id, sent: true })).rejects.toThrow("read-only");
+  await expect(f.t.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  id, sent: true })).rejects.toThrow("read-only");
   const [a,b] = f.scope.registrationIds;
-  await expect(f.t.mutation(api.matches.resetPair, { registrationAId: a, registrationBId: b })).rejects.toThrow("read-only");
-  await expect(f.t.mutation(api.matches.deletePairConnection, { registrationAId: a, registrationBId: b })).rejects.toThrow("retained");
-  await expect(f.t.mutation(api.profileShares.create, { ownerRegistrationId: a, recipientRegistrationId: b, matchId: id, includeImages: false, shareToken: "stale" })).rejects.toThrow("unavailable");
+  await expect(f.t.mutation(api.matches.resetPair, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  registrationAId: a, registrationBId: b })).rejects.toThrow("read-only");
+  await expect(f.t.mutation(api.matches.deletePairConnection, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  registrationAId: a, registrationBId: b })).rejects.toThrow("retained");
+  await expect(f.t.mutation(api.profileShares.create, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  ownerRegistrationId: a, recipientRegistrationId: b, matchId: id, includeImages: false, shareToken: "stale" })).rejects.toThrow("unavailable");
   const sessionHash = "session-" + a;
   const dashboard = await f.t.query(api.applicantInterests.getDashboard, { sessionHash });
   expect(dashboard.outbound.every(i => !f.scope.interestIds.includes(i.interestId))).toBe(true);
-  const fresh = await f.t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash, applicantNumber: 2, applicantName: "Synthetic", expectedEventId: f.event });
+  const fresh = await f.t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no", sessionHash, applicantNumber: 2, applicantName: "Synthetic", expectedEventId: f.event });
   expect(f.scope.interestIds).not.toContain(fresh.interestId);
-  await expect(f.t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash, applicantNumber: 2, applicantName: "Synthetic", expectedEventId: f.event })).rejects.toThrow("already submitted");
+  expect((await f.t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no", sessionHash, applicantNumber: 2, applicantName: "Synthetic", expectedEventId: f.event })).interestId).toBe(fresh.interestId);
 });
 for (const kind of ["profile", "flow", "share", "event", "extra", "foreignShare", "foreignPointer", "unrelatedPointer", "foreignRefs", "missingMatch"] as const) test("fail-closed drift/foreign scope: " + kind, async () => {
   const f = await fixture();

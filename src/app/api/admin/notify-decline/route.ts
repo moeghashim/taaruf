@@ -1,3 +1,4 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
@@ -16,6 +17,8 @@ function isAdmin(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     if (!isAdmin(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const convexClient = new ConvexHttpClient(convexUrl);
-    const claim = await convexClient.mutation(api.interests.claimDeclineNotification, {
+    const claim = await convexClient.mutation(api.interests.claimDeclineNotification, { adminSecret: getAdminSecret(),
       id: interestId,
     });
 
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!emailResult.success) {
-      await convexClient.mutation(api.interests.recordDeclineNotificationFailure, {
+      await convexClient.mutation(api.interests.recordDeclineNotificationFailure, { adminSecret: getAdminSecret(),
         id: interestId,
         error: emailResult.error || "Failed to send interest closed email",
       });
@@ -69,9 +72,9 @@ export async function POST(request: NextRequest) {
       success: true,
       providerId: emailResult.id,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete admin request" },
       { status: 500 }
     );
   }

@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
@@ -107,7 +108,7 @@ async function fixture() {
   const event = await getTestEvent(t);
   const submit = async (i: number) => {
     const target = await t.run(ctx => ctx.db.get(targets[i]));
-    return t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash, applicantNumber: target!.publicApplicantNumber!, applicantName: target!.name, expectedEventId: event });
+    return t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no", sessionHash, applicantNumber: target!.publicApplicantNumber!, applicantName: target!.name, expectedEventId: event });
   };
   const reset = (id: Id<"interests">) => t.mutation(api.interestTestReset.reset, { id, adminSecret: "synthetic-reset-secret", confirmTest: true, reason: "Explicit synthetic test submission" });
   return { t, from, targets, sessionHash, event, submit, reset };
@@ -116,7 +117,7 @@ test("exactly one slot restored, idempotent, audit retained, duplicate resubmiss
   const f = await fixture();
   const first = await f.submit(0); await f.submit(1); await f.submit(2);
   await expect(f.submit(3)).rejects.toThrow("maximum of 3");
-  await expect(f.submit(0)).rejects.toThrow("already submitted");
+  expect((await f.submit(0)).interestId).toBe(first.interestId);
   const others = await f.t.run(ctx => ctx.db.query("interests").collect());
   expect(await f.reset(first.interestId)).toEqual({ alreadyReset: false });
   expect(await f.reset(first.interestId)).toEqual({ alreadyReset: true });
@@ -134,7 +135,8 @@ test("invalid authorization and ordinary delete cannot restore quota", async () 
   await expect(f.t.mutation(api.interestTestReset.reset, { id: row.interestId, adminSecret: "wrong", confirmTest: true, reason: "Synthetic testing record" })).rejects.toThrow("Unauthorized");
   vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "");
   await expect(f.reset(row.interestId)).rejects.toThrow("Unauthorized");
-  await expect(f.t.mutation(api.interests.remove, { id: row.interestId })).rejects.toThrow("retained");
+  vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "synthetic-admin-test");
+  await expect(f.t.mutation(api.interests.remove, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  id: row.interestId })).rejects.toThrow("retained");
 });
 test("reset hides workflow, clears grants and rejects stale actions", async () => {
   const f = await fixture(); const row = await f.submit(0);
@@ -146,8 +148,8 @@ test("reset hides workflow, clears grants and rejects stale actions", async () =
     expect([...dashboard.inbound, ...dashboard.outbound, ...dashboard.privateDocumented]).toHaveLength(0);
   }
   await expect(f.t.mutation(api.applicantInterests.respondToInbound, { sessionHash: recipientSession, interestId: row.interestId, decision: "accept" })).rejects.toThrow();
-  await expect(f.t.mutation(api.interests.updateStatus, { id: row.interestId, status: "new" })).rejects.toThrow();
-  await expect(f.t.mutation(api.interests.convertToMatch, { interestId: row.interestId })).rejects.toThrow();
+  await expect(f.t.mutation(api.interests.updateStatus, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  id: row.interestId, status: "new" })).rejects.toThrow();
+  await expect(f.t.mutation(api.interests.convertToMatch, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  interestId: row.interestId })).rejects.toThrow();
   const flow = await f.t.run(ctx => ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row.interestId)).unique());
   expect(flow).toMatchObject({ flowStatus: "closed", photoDecision: "pending" }); expect(flow!.photosVisibleAt).toBeUndefined();
 });
@@ -166,25 +168,25 @@ for (const kind of ["contact", "match", "reciprocal", "share"] as const) test("b
 
 test("retained test audit survives pair reset/deletion and stale share creation", async () => {
  const f = await fixture(); const row = await f.submit(0); await f.reset(row.interestId);
- await expect(f.t.mutation(api.matches.deletePairConnection, { registrationAId: f.from, registrationBId: f.targets[0] })).rejects.toThrow("retained");
- await expect(f.t.mutation(api.profileShares.create, { ownerRegistrationId: f.from, recipientRegistrationId: f.targets[0], interestId: row.interestId, shareToken: "stale", includeImages: false })).rejects.toThrow("unavailable");
+ await expect(f.t.mutation(api.matches.deletePairConnection, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  registrationAId: f.from, registrationBId: f.targets[0] })).rejects.toThrow("retained");
+ await expect(f.t.mutation(api.profileShares.create, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  ownerRegistrationId: f.from, recipientRegistrationId: f.targets[0], interestId: row.interestId, shareToken: "stale", includeImages: false })).rejects.toThrow("unavailable");
  const before = await f.t.run(ctx => ctx.db.get(row.interestId));
- await f.t.mutation(api.matches.resetPair, { registrationAId: f.from, registrationBId: f.targets[0] });
+ await f.t.mutation(api.matches.resetPair, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  registrationAId: f.from, registrationBId: f.targets[0] });
  expect(await f.t.run(ctx => ctx.db.get(row.interestId))).toEqual(before);
 });
 test("more than 100 retained reset rows cannot hide a fresh submission or defeat cap", async () => {
  const f = await fixture();
  for (let i = 0; i < 101; i++) { const row = await f.submit(0); await f.reset(row.interestId); }
- await f.submit(0);
+ const fresh = await f.submit(0);
  const dashboard = await f.t.query(api.applicantInterests.getDashboard, { sessionHash: f.sessionHash });
  expect(dashboard.outbound).toHaveLength(1);
  expect(dashboard.interestSubmissions).toHaveLength(1);
- await expect(f.submit(0)).rejects.toThrow("already submitted");
+ expect((await f.submit(0)).interestId).toBe(fresh.interestId);
 });
 
 test("older same-direction contact/reset history blocks a fresh submission reset", async () => {
  const f = await fixture(); const old = await f.submit(0);
- await f.t.mutation(api.matches.resetPair, { registrationAId: f.from, registrationBId: f.targets[0] });
+ await f.t.mutation(api.matches.resetPair, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  registrationAId: f.from, registrationBId: f.targets[0] });
  const current = await f.t.run(async ctx => {
    const original = await ctx.db.get(old.interestId); const { _id, _creationTime, ...fields } = original!; void _id; void _creationTime;
    const id = await ctx.db.insert("interests", { ...fields, status: "new" });

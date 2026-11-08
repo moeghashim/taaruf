@@ -1,3 +1,5 @@
+import { getSignupUploadHash } from "@/lib/photo-upload-server";
+import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { api } from "../../../../convex/_generated/api";
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
     const { ConvexHttpClient } = await import("convex/browser");
     const convexClient = new ConvexHttpClient(convexUrl);
 
-    const existing = eventCode ? null : await convexClient.query(api.registrations.getByEmail, {
+    const existing = eventCode ? null : await convexClient.query(api.registrations.getByEmail, { adminSecret: getAdminSecret(),
       email: String(email).trim(),
     });
     if (existing) {
@@ -92,7 +94,8 @@ export async function POST(request: NextRequest) {
     });
 
     // Save registration to Convex
-    await convexClient.mutation(api.registrations.create, {
+    await convexClient.mutation(api.registrations.create, { adminSecret: getAdminSecret(),
+      signupCapabilityHash: await getSignupUploadHash(),
       name,
       age: Number(age),
       gender: gender as "male" | "female",
@@ -133,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     console.error("Checkout session error:", errorMessage);
     return NextResponse.json(
-      { error: "Failed to create checkout session", details: errorMessage },
+      { error: "Failed to create checkout session" },
       { status: 500 }
     );
   }

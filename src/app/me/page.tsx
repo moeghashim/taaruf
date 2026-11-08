@@ -831,17 +831,11 @@ export default function ApplicantDashboardPage() {
 
       for (const file of chosenFiles) {
         const preparedFile = await prepareImageFileForUpload(file);
-        const uploadUrlResponse = await fetch("/api/applicant/upload-url", { method: "POST" });
-        const uploadUrlPayload = await uploadUrlResponse.json();
-        if (!uploadUrlResponse.ok) {
-          throw new Error(uploadUrlPayload.error || "Failed to prepare image upload");
-        }
-
-        const uploadUrl = uploadUrlPayload.uploadUrl;
-        const result = await fetch(uploadUrl, {
+        const result = await fetch("/api/photos/upload", {
           method: "POST",
           headers: {
             "Content-Type": preparedFile.type || "application/octet-stream",
+            "x-upload-context": "session",
           },
           body: preparedFile,
         });

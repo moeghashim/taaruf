@@ -1,3 +1,4 @@
+import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
-          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, {
+          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { adminSecret: getAdminSecret(),
             interestId: result.inboundInterestNotification.interestId,
             error,
           });
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (!emailResult.success) {
-          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, {
+          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { adminSecret: getAdminSecret(),
             interestId: result.inboundInterestNotification.interestId,
             error: emailResult.error || "Failed to send inbound interest email",
           });
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest) {
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
-          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, {
+          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, { adminSecret: getAdminSecret(),
             interestId: body.interestId,
             error,
           });
@@ -211,7 +212,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (!emailResult.success) {
-          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, {
+          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, { adminSecret: getAdminSecret(),
             interestId: body.interestId,
             error: emailResult.error || "Failed to send final approval requested email",
           });
@@ -233,7 +234,7 @@ export async function POST(request: NextRequest) {
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
-          await convex.mutation(api.matches.markContactSharedNotificationSent, {
+          await convex.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: getAdminSecret(),
             id: result.contactSharedNotification.matchId,
             sent: false,
             error,
@@ -257,7 +258,7 @@ export async function POST(request: NextRequest) {
         );
         const failures = emailResults.filter((item) => !item.result.success);
         const success = failures.length === 0;
-        await convex.mutation(api.matches.markContactSharedNotificationSent, {
+        await convex.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: getAdminSecret(),
           id: result.contactSharedNotification.matchId,
           sent: success,
           error: success

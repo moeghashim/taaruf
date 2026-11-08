@@ -1,8 +1,7 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useAdminMutation as useMutation, useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import { useMemo } from "react";
-import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export type RegistrationDoc = NonNullable<ReturnType<typeof useAllRegistrations>>[number];
@@ -11,7 +10,7 @@ export type FilterGender = "all" | "male" | "female";
 export type FilterProfileCompletionStatus = "all" | "completed" | "in_progress" | "not_started";
 
 function useAllRegistrations() {
-  return useQuery(api.registrations.getAll);
+  return useQuery("registrations.getAll");
 }
 
 /**
@@ -24,9 +23,9 @@ export function useRegistrations() {
   const registrationsRaw = useAllRegistrations();
 
 
-  const updateStatusMutation = useMutation(api.registrations.updateStatus);
-  const deleteMutation = useMutation(api.registrations.deleteRegistration);
-  const updateNotesMutation = useMutation(api.registrations.updateAdminNotes);
+  const updateStatusMutation = useMutation("registrations.updateStatus");
+  const deleteMutation = useMutation("registrations.deleteRegistration");
+  const updateNotesMutation = useMutation("registrations.updateAdminNotes");
 
   const registrations = useMemo(() => registrationsRaw ?? [], [registrationsRaw]);
   const isLoading =

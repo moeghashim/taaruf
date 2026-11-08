@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
@@ -39,14 +40,14 @@ async function seeded(history: number) {
 }
 test("new queue and exact status counts survive more than 500 historic registrations", async () => {
   const { t, eventId } = await seeded(600);
-  const detail = await t.query(api.events.getDetail, { eventId });
+  const detail = await t.query(api.events.getDetail, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  eventId });
   expect(detail.registrations).toHaveLength(603);
   for (const status of ["pending", "approved", "waitlisted"]) expect(detail.registrations.filter(r => r.registrationStatus === status)).toHaveLength(1);
-  const [event] = await t.query(api.events.getAll, {});
+  const [event] = await t.query(api.events.getAll, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, });
   expect(event.counts).toMatchObject({ malePending: 1, maleApproved: 1, maleWaitlisted: 1 });
 });
 test("overflow explicitly refuses incomplete roster and false exact counts", async () => {
   const { t, eventId } = await seeded(1001);
-  await expect(t.query(api.events.getDetail, { eventId })).rejects.toThrow("exceeds 1000 rows");
-  await expect(t.query(api.events.getAll, {})).rejects.toThrow("exceeds 1000 rows");
+  await expect(t.query(api.events.getDetail, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  eventId })).rejects.toThrow("exceeds 1000 rows");
+  await expect(t.query(api.events.getAll, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, })).rejects.toThrow("exceeds 1000 rows");
 });

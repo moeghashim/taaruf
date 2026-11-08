@@ -1,3 +1,4 @@
+import { assertImageOwnership } from "./imageAuthorization";
 import { hijabResponse } from "./hijab";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -172,6 +173,7 @@ export const updateProfile = mutation({
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
 
+    await assertImageOwnership(ctx, registration._id, args.imageStorageIds);
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
