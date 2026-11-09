@@ -165,7 +165,7 @@ export const retryDelivery = mutation({ args: { adminSecret: v.optional(v.string
   requireAdmin(args.adminSecret); const row = await ctx.db.get(args.deliveryId);
   if (!row || row.status !== "failed") throw new Error("Only failed delivery can retry");
   const interest = await ctx.db.get(row.interestId);
-  if (interest?.femaleWorkflow) await active(ctx, row.interestId); else await deliveryParticipants(ctx, row.interestId);
+  if (interest?.femaleWorkflow) await active(ctx, row.interestId, true); else await deliveryParticipants(ctx, row.interestId);
   if (row.firstAttemptAt !== undefined && Date.now() - row.firstAttemptAt >= 23 * 3600000) throw new Error("Idempotency window expired; reconcile provider delivery manually");
   await ctx.db.patch(row._id, { status: "pending", nextAttemptAt: Date.now(), error: undefined }); return null;
 }});

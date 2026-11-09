@@ -6,7 +6,7 @@ import { modules } from "./test.setup";
 const adminSecret = "synthetic-female-admin";
 const hash = "a".repeat(64);
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
-async function fixture() {
+async function fixture(general = false) {
   vi.stubEnv("ATTENDANCE_ADMIN_SECRET", adminSecret);
   const t = convexTest(schema, modules);
   const ids = await t.run(async ctx => {
@@ -16,8 +16,8 @@ async function fixture() {
     const brother = await ctx.db.insert("registrations", { ...base, name: "Synthetic Brother", gender: "male", email: "brother@example.com" });
     const other = await ctx.db.insert("registrations", { ...base, name: "Other", gender: "male", email: "other@example.com" });
     const event = await ctx.db.insert("events", { title: "Synthetic", eventCode: "test", eventMonth: "2026-11", series: "test", location: "Test", startsAt: now, endsAt: now, status: "completed", maleCapacity: 1, femaleCapacity: 1, createdAt: now, updatedAt: now });
-    const interestId = await ctx.db.insert("interests", { fromRegistrationId: sister, toRegistrationId: brother, eventId: event, source: "platform_submission", status: "new", visibility: "internal_only", senderPhotoConsent: "no", femaleWorkflow: { state: "private_documented" }, createdAt: now, updatedAt: now });
-    await ctx.db.insert("interestFlows", { interestId, fromRegistrationId: sister, toRegistrationId: brother, flowStatus: "private_documented", recipientDecision: "pending", requesterFinalApproval: "pending", recipientFinalApproval: "pending", photoDecision: "pending", createdAt: now, updatedAt: now });
+    const interestId = await ctx.db.insert("interests", { fromRegistrationId: general ? brother : sister, toRegistrationId: general ? sister : brother, eventId: event, source: "platform_submission", status: "new", visibility: general ? "admin_actionable" : "internal_only", senderPhotoConsent: "no", ...(general ? {} : { femaleWorkflow: { state: "private_documented" as const } }), createdAt: now, updatedAt: now });
+    await ctx.db.insert("interestFlows", { interestId, fromRegistrationId: general ? brother : sister, toRegistrationId: general ? sister : brother, flowStatus: general ? "awaiting_inbound_response" : "private_documented", recipientDecision: "pending", requesterFinalApproval: "pending", recipientFinalApproval: "pending", photoDecision: "pending", createdAt: now, updatedAt: now });
     for (const [registrationId, sessionHash] of [[sister, "sister"], [brother, "brother"], [other, "other"]] as const) await ctx.db.insert("applicantSessions", { registrationId, sessionHash, expiresAt: now + 86400000, createdAt: now });
     return { sister, brother, interestId };
   });
@@ -147,4 +147,77 @@ test("production delivery configuration requires explicit release approval and e
  expect(deliveryConfig("recipient@example.invalid")).toBeNull();
  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "disabled");
  expect(deliveryConfig("recipient@example.invalid")).toBeNull();
+});
+
+async function reviewing(general = false) {
+  const f = general ? await fixture(true) : await accepted();
+  if (general) {
+    await f.t.mutation(api.applicantInterests.respondToInbound, { sessionHash: "sister", interestId: f.interestId, decision: "accept" });
+    for (const sessionHash of ["brother", "sister"]) await f.t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash, interestId: f.interestId, approved: true });
+  } else await f.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId: f.interestId, confirmed: true });
+  return { ...f, matchId: (await f.t.run(ctx => ctx.db.get(f.interestId)))!.matchId! };
+}
+
+for (const general of [false, true]) for (const kind of ["pending_review", "contacts_ready"] as const) test(`paused ${general ? "general" : "female"} ${kind} retry replays only the failed recipient without changing disclosure history`, async () => {
+  const { t, interestId, matchId } = await reviewing(general); isolated();
+  let fail = true;
+  const subject = kind === "pending_review" ? "Mutual match pending admin approval" : "Your contacts are ready in the portal";
+  const provider = vi.fn<typeof fetch>().mockImplementation(async (_url, options) => {
+    const payload = JSON.parse(options!.body as string);
+    return new Response("{}", { status: fail && payload.subject === subject && payload.to[0] === "brother@example.com" ? 400 : 200 });
+  });
+  vi.stubGlobal("fetch", provider);
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  if (kind === "contacts_ready") {
+    await t.mutation(api.matches.updateStatus, { adminSecret, id: matchId, status: "contact_shared" });
+    await t.action(internal.femaleWorkflowDelivery.drain, {});
+  }
+  const rows = await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId });
+  const failed = rows.find(row => row.kind === kind && row.status === "failed")!;
+  const sibling = rows.find(row => row.kind === kind && row.status === "sent")!;
+  expect(failed.providerPayload).toBeTruthy(); expect(sibling).toBeTruthy();
+  await t.mutation(api.matches.updateStatus, { adminSecret, id: matchId, status: "paused" });
+  const history = () => t.run(async ctx => ({ interest: await ctx.db.get(interestId), match: await ctx.db.get(matchId), flows: await ctx.db.query("interestFlows").collect(), events: await ctx.db.query("interestFlowEvents").collect(), people: await ctx.db.query("registrations").collect() }));
+  const before = await history();
+  await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { deliveryId: failed._id })).rejects.toThrow("Unauthorized");
+  await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: sibling._id })).rejects.toThrow("Only failed delivery");
+  const calls = provider.mock.calls.length;
+  fail = false;
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "changed@example.com");
+  vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://changed.example.com");
+  await t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: failed._id });
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  expect(provider).toHaveBeenCalledTimes(calls + 1);
+  const replay = provider.mock.calls.at(-1)![1]!;
+  expect(JSON.parse(replay.body as string)).toEqual(failed.providerPayload);
+  expect(new Headers(replay.headers).get("Idempotency-Key")).toBe(failed.key);
+  const retried = (await t.run(ctx => ctx.db.get(failed._id)))!;
+  expect(retried.status).toBe("sent"); expect(retried.firstAttemptAt).toBe(failed.firstAttemptAt);
+  expect(retried.providerPayload).toEqual(failed.providerPayload);
+  expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
+  expect(await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId })).toHaveLength(rows.length);
+  expect(await history()).toEqual(before);
+  expect(before.match?.status).toBe("paused");
+  expect(before.match?.contactGate).toBe(kind === "contacts_ready" ? "contacts_released" : "pending_admin_approval");
+});
+
+for (const invalid of ["closed", "declined", "interest_reset", "match_reset", "identity_corruption", "expired_window"] as const) test(`paused retry rejects ${invalid} without resending a successful sibling`, async () => {
+  const { t, interestId, matchId, brother } = await reviewing(); isolated();
+  const provider = vi.fn<typeof fetch>().mockImplementation(async (_url, options) => new Response("{}", { status: JSON.parse(options!.body as string).to[0] === "brother@example.com" ? 400 : 200 }));
+  vi.stubGlobal("fetch", provider);
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  const rows = await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId });
+  const failed = rows.find(row => row.status === "failed")!;
+  const sibling = rows.find(row => row.status === "sent")!;
+  await t.mutation(api.matches.updateStatus, { adminSecret, id: matchId, status: "paused" });
+  if (invalid === "closed" || invalid === "declined") await t.mutation(api.matches.updateStatus, { adminSecret, id: matchId, status: invalid });
+  if (invalid === "interest_reset") await t.run(ctx => ctx.db.patch(interestId, { testReset: { at: Date.now(), reason: "Historical reset fixture", actor: "admin" } }));
+  if (invalid === "match_reset") await t.run(ctx => ctx.db.patch(matchId, { testResetAt: Date.now() }));
+  if (invalid === "identity_corruption") await t.run(ctx => ctx.db.patch(matchId, { femaleRegistrationId: brother }));
+  if (invalid === "expired_window") vi.spyOn(Date, "now").mockReturnValue(failed.firstAttemptAt! + 23 * 3600000);
+  await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: failed._id })).rejects.toThrow(invalid === "expired_window" ? "Idempotency window expired" : /unavailable|Unavailable/);
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  expect(provider).toHaveBeenCalledTimes(2);
+  expect(await t.run(ctx => ctx.db.get(failed._id))).toEqual(failed);
+  expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
 });
