@@ -222,6 +222,7 @@ function ProfilesContent({
                 <th>Applicant #</th>
                 <th>Member</th>
                 <th>Age</th>
+                <th scope="col">Ethnicity</th>
                 <th>Background</th>
                 <th>Status</th>
                 <th>Payment</th>
@@ -244,6 +245,7 @@ function ProfilesContent({
                     />
                   </td>
                   <td>{r.age}</td>
+                  <td>{r.ethnicity?.trim() ? r.ethnicity : "Not provided"}</td>
                   <td style={{ fontSize: 12 }}>
                     <div>{r.maritalStatus || "—"}</div>
                     <div className="sub" style={{ color: "var(--mute)" }}>

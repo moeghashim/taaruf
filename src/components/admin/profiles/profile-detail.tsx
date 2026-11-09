@@ -104,6 +104,7 @@ export function ProfileDetail({
   const facts: Fact[] = [
     { label: "Applicant #", value: registrationNumber ?? "—" },
     { label: "Marital status", value: profile.maritalStatus || "—" },
+    { label: "Ethnicity", value: profile.ethnicity?.trim() ? profile.ethnicity : "Not provided" },
     { label: "Education", value: profile.education || "—" },
     { label: "Occupation", value: profile.job || "—" },
     { label: "Email", value: profile.email },
