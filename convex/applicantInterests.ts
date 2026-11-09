@@ -1,4 +1,4 @@
-import { recordPairApproval, contactsVisible, linkedFlows } from "./contactGate";
+import { recordPairApproval, contactsVisible, linkedFlows, assertMatchInterest } from "./contactGate";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
 import { matchesInterestFirstName } from "./interestIdentity";
@@ -196,6 +196,16 @@ function isVisibleInApplicantDashboard(interest: Interest) {
   return !["closed", "declined", "withdrawn"].includes(interest.status);
 }
 
+function dashboardDirection(viewer: Registration, interest: Interest) {
+  if (interest.testReset || !isVisibleInApplicantDashboard(interest) || interest.fromRegistrationId === interest.toRegistrationId || (interest.femaleWorkflow && ["declined", "revoked"].includes(interest.femaleWorkflow.state))) return null;
+  if (interest.fromRegistrationId === viewer._id) {
+    if (viewer.gender === "female" && interest.visibility === "internal_only") return "private" as const;
+    if (viewer.gender === "male" && interest.visibility !== "internal_only") return "outbound" as const;
+  }
+  if (interest.toRegistrationId === viewer._id && interest.visibility !== "internal_only") return "inbound" as const;
+  return null;
+}
+
 async function serializeInterest(
   ctx: ReadCtx,
   viewer: Registration,
@@ -210,6 +220,7 @@ async function serializeInterest(
 
   return {
     interestId: interest._id,
+    ...(interest.femaleWorkflow ? { femaleWorkflow: { state: interest.femaleWorkflow.state } } : {}),
     matchId: interest.matchId ?? null,
     paused: interest.matchId ? (await ctx.db.get(interest.matchId))?.status === "paused" : false,
     direction,
@@ -251,9 +262,21 @@ export const getInterestEligibility = query({
 export const getDashboard = query({
   args: {
     sessionHash: v.string(),
+    connectionId: v.optional(v.id("interests")),
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    const requested = args.connectionId ? await ctx.db.get(args.connectionId) : null;
+    if (args.connectionId) {
+      if (!requested || !dashboardDirection(registration, requested)) throw new Error("Connection unavailable");
+      const flow = await ensureFlowForQuery(ctx, requested);
+      if (flow && (flow.fromRegistrationId !== requested.fromRegistrationId || flow.toRegistrationId !== requested.toRegistrationId || ["closed", "declined"].includes(flow.flowStatus))) throw new Error("Connection unavailable");
+      if (requested.matchId) {
+        const match = await ctx.db.get(requested.matchId);
+        if (!match || match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) throw new Error("Connection unavailable");
+        try { assertMatchInterest(match, requested); await linkedFlows(ctx, requested); } catch { throw new Error("Connection unavailable"); }
+      }
+    }
     const { byId } = await getRegistrationNumberMap(ctx);
     const eligibleEvent = await findEligibleInterestSubmissionEvent(ctx, registration._id);
     const inboundRows = await ctx.db
@@ -265,25 +288,18 @@ export const getDashboard = query({
       .withIndex("by_fromRegistrationId_and_testReset", (q) => q.eq("fromRegistrationId", registration._id).eq("testReset", undefined))
       .take(100);
 
-    const visibleInbound = inboundRows.filter(
-      (interest) => interest.visibility !== "internal_only" && isVisibleInApplicantDashboard(interest)
-    );
-    const privateDocumented =
-      registration.gender === "female"
-        ? outboundRows.filter(
-            (interest) => interest.visibility === "internal_only" && isVisibleInApplicantDashboard(interest)
-          )
-        : [];
-    const visibleOutbound =
-      registration.gender === "male"
-        ? outboundRows.filter(
-            (interest) => interest.visibility !== "internal_only" && isVisibleInApplicantDashboard(interest)
-          )
-        : [];
+    if (requested) {
+      const rows = requested.toRegistrationId === registration._id ? inboundRows : outboundRows;
+      if (!rows.some(row => row._id === requested._id)) rows.push(requested);
+    }
+    const visibleInbound = inboundRows.filter(interest => dashboardDirection(registration, interest) === "inbound");
+    const privateDocumented = outboundRows.filter(interest => dashboardDirection(registration, interest) === "private");
+    const visibleOutbound = outboundRows.filter(interest => dashboardDirection(registration, interest) === "outbound");
 
     const submissions = eligibleEvent ? await ctx.db.query("interests")
       .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3) : [];
     return {
+      requestedConnectionId: args.connectionId ?? null,
       interestSubmissionEventId: eligibleEvent?._id ?? null,
       interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
       applicant: {

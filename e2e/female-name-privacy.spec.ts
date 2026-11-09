@@ -105,3 +105,39 @@ for (const width of [1280, 390]) test(`admin synthetic all-origin private action
   await expect(page.getByRole("button", { name: "Share contacts", exact: true })).toBeVisible();
   await expect.poll(() => mutations).toContain("matches.resume");
 });
+
+for (const width of [1280, 390]) test(`requested unavailable connection never selects another at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  let requested = false;
+  await page.route("**/api/**", route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/applicant/me") {
+      requested = url.searchParams.get("connection") === "missing";
+      return route.fulfill({ json: { applicant: { name: "Synthetic Brother", status: "approved", gender: "male", applicantNumber: 1, profileCompletionStatus: "completed" }, inbound: [], outbound: [{ interestId: "other", direction: "outbound", status: "new", flowStatus: "awaiting_inbound_response", counterparty: { label: "Applicant #999", gender: "female", age: 30, imageUrls: [] } }], privateDocumented: [], interestSubmissions: [] } });
+    }
+    if (url.pathname === "/api/applicant/female-review") return route.fulfill({ json: { page: [], isDone: true, continueCursor: "" } });
+    if (url.pathname === "/api/applicant/events") return route.fulfill({ json: { upcoming: [], history: [], eligibleInterestEvents: [] } });
+    return route.fulfill({ status: 400, json: { error: "Synthetic profile not loaded" } });
+  });
+  await page.goto("/me?connection=missing");
+  await expect(page.getByRole("heading", { name: "Outbound Interests", exact: true })).toBeVisible();
+  expect(requested).toBe(true);
+  await expect(page.locator(".interest-detail-panel").getByRole("heading", { name: "Applicant #999", exact: true })).toHaveCount(0);
+  await expect(page.locator(".interest-detail-panel").getByText("No profile selected", { exact: true }).first()).toBeVisible();
+});
+
+for (const width of [1280, 390]) test(`older female discriminator suppresses generic controls at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const row = { interestId: "older-female", direction: "private", status: "new", visibility: "internal_only", flowStatus: "private_documented", bioVisibleAt: 1, requesterFinalApproval: "pending", recipientFinalApproval: "pending", femaleWorkflow: { state: "awaiting_sister_confirmation" }, counterparty: { label: "Synthetic Brother", gender: "male", age: 30, fullProfileVisible: true, imageUrls: [] } };
+  await page.route("**/api/**", route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/applicant/me") return route.fulfill({ json: { applicant: { name: "Synthetic Sister", status: "approved", gender: "female", applicantNumber: 73, profileCompletionStatus: "completed" }, inbound: [], outbound: [], privateDocumented: [row], interestSubmissions: [] } });
+    if (url.pathname === "/api/applicant/female-review") return route.fulfill({ json: { page: [], isDone: false, continueCursor: "newer-history" } });
+    if (url.pathname === "/api/applicant/events") return route.fulfill({ json: { upcoming: [], history: [], eligibleInterestEvents: [] } });
+    return route.fulfill({ status: 400, json: { error: "Synthetic profile not loaded" } });
+  });
+  await page.goto("/me?connection=older-female");
+  const card = page.locator(".interest-detail-panel").filter({ has: page.getByRole("heading", { name: "Synthetic Brother", exact: true }) });
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("button")).toHaveCount(0);
+});

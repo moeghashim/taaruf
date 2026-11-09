@@ -23,17 +23,18 @@ for (const [name, handler] of [["me", me], ["profile", profile], ["save profile"
 }
 test("ordinary dashboard returns data and touches the authenticated session", async () => {
   const dashboard = { applicant: { name: "Synthetic", status: "approved" }, inbound: [], outbound: [], privateDocumented: [] };
-  mocks.query.mockResolvedValueOnce(dashboard).mockResolvedValueOnce([]); mocks.mutation.mockResolvedValue(true);
-  const response = await me();
+  mocks.query.mockResolvedValueOnce(dashboard); mocks.mutation.mockResolvedValue(true);
+  const response = await me(new NextRequest("https://synthetic.invalid/api/applicant/me"));
   expect(response.status).toBe(200); expect(await response.json()).toEqual(dashboard);
   expect(mocks.mutation).toHaveBeenCalledWith(expect.anything(), { adminSecret: "synthetic", sessionHash: "old-session" });
+  expect(mocks.query).toHaveBeenCalledTimes(1);
 });
 
 test("pending dashboard skips protected female review queries", async () => {
   const dashboard = { applicant: { name: "Pending Applicant", status: "pending" }, inbound: [], outbound: [], privateDocumented: [] };
   mocks.query.mockResolvedValueOnce(dashboard).mockRejectedValue(new Error("Unauthorized"));
   mocks.mutation.mockResolvedValue(true);
-  const response = await me();
+  const response = await me(new NextRequest("https://synthetic.invalid/api/applicant/me"));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual(dashboard);
   expect(mocks.query).toHaveBeenCalledTimes(1);

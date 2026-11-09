@@ -54,6 +54,7 @@ type DashboardInterest = {
 };
 
 type DashboardData = {
+  requestedConnectionId?: string | null;
   applicant: {
     status?: string;
     name: string;
@@ -551,9 +552,11 @@ function Section({
   title,
   description,
   interests,
+  requestedConnectionId,
   onAction,
   busy,
 }: {
+  requestedConnectionId?: string | null;
   title: string;
   description: string;
   interests: DashboardInterest[];
@@ -562,7 +565,7 @@ function Section({
 }) {
   const [selectedInterestId, setSelectedInterestId] = useState<string | null>(null);
   const selectedInterest =
-    interests.find((interest) => interest.interestId === selectedInterestId) ?? interests[0] ?? null;
+    interests.find((interest) => interest.interestId === (selectedInterestId ?? requestedConnectionId)) ?? (requestedConnectionId ? null : interests[0] ?? null);
 
   useEffect(() => {
     if (!interests.length) {
@@ -570,10 +573,9 @@ function Section({
       return;
     }
     if (!selectedInterestId || !interests.some((interest) => interest.interestId === selectedInterestId)) {
-      const requested = new URLSearchParams(window.location.search).get("connection");
-      setSelectedInterestId(interests.find(row => row.interestId === requested)?.interestId ?? interests[0].interestId);
+      setSelectedInterestId(requestedConnectionId ? interests.find(row => row.interestId === requestedConnectionId)?.interestId ?? null : interests[0].interestId);
     }
-  }, [interests, selectedInterestId]);
+  }, [interests, selectedInterestId, requestedConnectionId]);
 
   return (
     <section id={sectionId(title)} className="panel applicant-section">
@@ -633,14 +635,15 @@ export default function ApplicantDashboardPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/applicant/me", { cache: "no-store" });
+      const requested = new URLSearchParams(window.location.search).get("connection");
+      const response = await fetch("/api/applicant/me" + (requested !== null ? "?connection=" + encodeURIComponent(requested) : ""), { cache: "no-store" });
       if (response.status === 401) {
         router.replace("/login");
         return;
       }
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Failed to load dashboard");
-      setData(payload);
+      if (!response.ok) { setData(null); throw new Error(payload.error || "Failed to load dashboard"); }
+      setData({ ...payload, requestedConnectionId: requested });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1370,6 +1373,7 @@ export default function ApplicantDashboardPage() {
               <Section
                 title="Inbound Interests"
                 description="People who expressed interest in you."
+                requestedConnectionId={data.requestedConnectionId}
                 interests={data.inbound}
                 onAction={async body => { await runAction(body); }}
                 busy={busy}
@@ -1377,6 +1381,7 @@ export default function ApplicantDashboardPage() {
               <Section
                 title="Outbound Interests"
                 description="Visible interests you sent."
+                requestedConnectionId={data.requestedConnectionId}
                 interests={data.outbound}
                 onAction={async body => { await runAction(body); }}
                 busy={busy}
@@ -1385,6 +1390,7 @@ export default function ApplicantDashboardPage() {
                 <Section
                   title="Private Documented Interests"
                   description="Interests you documented for yourself and the admin team. These remain private until the team creates a recipient-specific review."
+                  requestedConnectionId={data.requestedConnectionId}
                   interests={data.privateDocumented}
                   onAction={async body => { await runAction(body); }}
                   busy={busy}
