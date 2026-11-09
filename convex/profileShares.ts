@@ -45,7 +45,7 @@ async function imagesAllowed(ctx: QueryCtx, share: ShareScope & { includeImages:
   return owner.photoSharingPermission === "yes";
 }
 
-import { assertProfileCompleted, getRegistrationOrThrow } from "./interestRules";
+import { assertProfileCompleted, getRegistrationOrThrow, assertMatchingParticipants } from "./interestRules";
 
 export const getAll = query({
   args: { adminSecret: v.optional(v.string()),},
@@ -82,6 +82,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     if (await resolvedInterest(ctx, args) === false) throw new Error("Share context is unavailable; select the active interest");
+    await assertMatchingParticipants(ctx, args.ownerRegistrationId, args.recipientRegistrationId);
     const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
     assertProfileCompleted(ownerRegistration, "Profile owner");
     if (args.includeImages && !(await imagesAllowed(ctx, args, ownerRegistration))) throw new Error("Photo sharing requires explicit owner consent");

@@ -37,5 +37,12 @@ export async function promoteWaitlist(ctx: MutationCtx, eventId: Id<"events">, g
   const available = eventCapacityForGender(event, gender) - await countCapacityUsed(ctx, eventId, gender);
   if (available <= 0) return;
   queued.sort((a, b) => (a.waitlistedAt ?? a.createdAt) - (b.waitlistedAt ?? b.createdAt) || a._creationTime - b._creationTime || String(a._id).localeCompare(String(b._id)));
-  for (const row of queued.slice(0, available)) await ctx.db.patch(row._id, { registrationStatus: "pending", approvedAt: undefined, updatedAt: Date.now() });
+  let promoted = 0;
+  for (const row of queued) {
+    if (promoted >= available) break;
+    const registration = await ctx.db.get(row.registrationId);
+    if (!registration || registration.archivedAt !== undefined) continue;
+    await ctx.db.patch(row._id, { registrationStatus: "pending", approvedAt: undefined, updatedAt: Date.now() });
+    promoted++;
+  }
 }

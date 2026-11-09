@@ -64,16 +64,25 @@ export async function POST(request: NextRequest) {
     }
 
     let applicantPortalUrl: string | undefined;
-    if (claim.kind === "confirmation_request" || claim.kind === "reminder") {
-      const loginToken = createToken();
-      const loginRegistration = await convex.mutation(api.applicantAuth.createLoginToken, { adminSecret: getAdminSecret(),
-        email: claim.email,
-        tokenHash: hashToken(loginToken),
-        expiresInMs: 48 * 60 * 60 * 1000,
-      });
-      if (loginRegistration) {
-        applicantPortalUrl = `${getAppUrl(request)}/api/applicant/login/verify?token=${encodeURIComponent(loginToken)}`;
+    try {
+      if (claim.kind === "confirmation_request" || claim.kind === "reminder") {
+        const loginToken = createToken();
+        const loginRegistration = await convex.mutation(api.applicantAuth.createLoginToken, {
+          email: claim.email,
+          adminSecret: getAdminSecret(),
+          tokenHash: hashToken(loginToken),
+          expiresInMs: 48 * 60 * 60 * 1000,
+        });
+        if (loginRegistration) {
+          applicantPortalUrl = `${getAppUrl(request)}/api/applicant/login/verify?token=${encodeURIComponent(loginToken)}`;
+        }
       }
+
+      await convex.mutation(api.events.validateEventRegistrationEmail, { adminSecret: getAdminSecret(), emailId: claim.emailId });
+    } catch (cause) {
+      const error = cause instanceof Error ? cause.message : String(cause);
+      await convex.mutation(api.events.recordEventRegistrationEmailFailure, { adminSecret: getAdminSecret(), emailId: claim.emailId, error });
+      return NextResponse.json({ success: false, error }, { status: 409 });
     }
 
     const result = await sendEventRegistrationStatusEmail({

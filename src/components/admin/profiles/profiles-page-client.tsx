@@ -8,6 +8,7 @@ import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
 import { WhoCell } from "@/components/admin/primitives/who-cell";
 import { Ico } from "@/components/admin/primitives/icons";
 import { ProfileDetail } from "./profile-detail";
+import { isArchivedProfile } from "@/lib/profile-archive-filter";
 import {
   useRegistrations,
   type FilterGender,
@@ -38,6 +39,7 @@ const TAB_DEFS: Array<{ id: FilterStatus; label: string }> = [
   { id: "approved", label: "Approved" },
   { id: "pending", label: "Pending" },
   { id: "rejected", label: "Rejected" },
+  { id: "archived", label: "Archived" },
 ];
 
 const PROFILE_STATUS_DEFS: Array<{ id: FilterProfileCompletionStatus; label: string }> = [
@@ -151,6 +153,7 @@ function ProfilesContent({
                   key={id}
                   type="button"
                   className={`tab ${tab === id ? "active" : ""}`}
+                  aria-pressed={tab === id}
                   onClick={() => setTab(id)}
                 >
                   {label} <span className="cnt">{c}</span>
@@ -253,6 +256,7 @@ function ProfilesContent({
                   <td>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                       <StatusPill status={r.status} />
+                      {isArchivedProfile(r) && <Pill tone="plain">Archived</Pill>}
                     </div>
                   </td>
                   <td>
