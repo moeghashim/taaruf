@@ -634,3 +634,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-08
 - Prepared centralized monotonic capability cutoff and authenticated recovery in convex auth/profile/share/settings paths; integrated explicit saved Yes/No editors, tests and release documentation. No production activation. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-09
+- Issue67 review fixes: authenticated minimal paginated event catalog/membership queries, complete-scan retry UI, permanent filter pagination resets; regression tests for 101 events, 1001 relationships, round trips and 503 recovery. No schema/status/archive changes or deployment.
