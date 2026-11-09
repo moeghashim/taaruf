@@ -22,13 +22,8 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
       return NextResponse.json({ error: "Shared profile not found" }, { status: 404 });
     }
 
-    const imageStorageIds = share.includeImages ? (share.owner.imageStorageIds || []) : [];
-    const imageUrls = imageStorageIds.length
-      ? await convexClient.query(api.registrations.getImageUrls, { storageIds: imageStorageIds })
-      : [];
-    const images = imageUrls.flatMap((image) =>
-      image.url ? [{ storageId: image.storageId, url: image.url }] : []
-    );
+    // Consent/ownership and URLs are resolved in the same backend snapshot.
+    const images = share.images;
 
     try {
       await convexClient.mutation(api.profileShares.markViewed, { shareToken: token });
@@ -65,9 +60,9 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
       },
       { headers: { "Cache-Control": "no-store" } }
     );
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete request" },
       { status: 500 }
     );
   }

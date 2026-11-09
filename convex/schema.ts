@@ -138,6 +138,12 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  photoUploads: defineTable({
+    storageId: v.id("_storage"),
+    registrationId: v.optional(v.id("registrations")),
+    signupCapabilityHash: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_storageId", ["storageId"]),
   checkoutLinks: defineTable({
     stripeSessionId: v.string(), registrationId: v.id("registrations"),
     eventRegistrationId: v.optional(v.id("eventRegistrations")),
@@ -189,6 +195,7 @@ export default defineSchema({
     searchStatusNote: v.optional(v.string()),
     createdAt: v.number(),
     profileAccessToken: v.optional(v.string()),
+    profileAccessTokenIssuedAt: v.optional(v.number()),
     profileCompletionStatus: v.optional(
       v.union(v.literal("not_started"), v.literal("in_progress"), v.literal("completed"))
     ),
@@ -224,6 +231,8 @@ export default defineSchema({
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
   interests: defineTable({
+    senderPhotoConsent: v.optional(v.union(v.literal("yes"), v.literal("no"))),
+    senderPhotoConsentRevokedAt: v.optional(v.number()),
     testReset: v.optional(v.object({ at: v.number(), reason: v.string(), actor: v.literal("admin") })),
     fromRegistrationId: v.id("registrations"),
     toRegistrationId: v.id("registrations"),

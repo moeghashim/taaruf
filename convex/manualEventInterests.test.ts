@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
@@ -25,7 +26,7 @@ async function fixture() {
   });
   const toggle = (eventId: typeof ids.older, enabled: boolean) => t.mutation(api.events.setInterestSubmissionsEnabled, { adminSecret: "synthetic-secret", eventId, enabled });
   const dashboard = () => t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" });
-  const submit = (applicantNumber = 2) => t.mutation(api.applicantInterests.submitInterestNumber, { expectedEventId: ids.older, sessionHash: "session0", applicantNumber, applicantName: "Person" });
+  const submit = (applicantNumber = 2) => t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no", expectedEventId: ids.older, sessionHash: "session0", applicantNumber, applicantName: "Person" });
   return { t, ...ids, toggle, dashboard, submit };
 }
 
@@ -35,7 +36,7 @@ test("unset is off; selected older event persists beyond all dates and newer eve
   await expect(submit()).rejects.toThrow("unavailable");
   await toggle(older, true);
   vi.useFakeTimers(); vi.setSystemTime(Date.now() + 365 * 86400000);
-  expect((await t.query(api.events.getDetail, { eventId: older })).interestSubmissionsEnabled).toBe(true);
+  expect((await t.query(api.events.getDetail, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  eventId: older })).interestSubmissionsEnabled).toBe(true);
   expect((await dashboard()).interestSubmissionEventId).toBe(older);
   const interest = await submit();
   expect((await t.run(ctx => ctx.db.get(interest.interestId)))?.eventId).toBe(older);
@@ -68,7 +69,7 @@ test("single active event requires explicit off; concurrent enables cannot both 
   await expect(t.mutation(api.events.deleteEvent, { adminSecret: "synthetic-secret", eventId: active!._id })).rejects.toThrow("Turn off");
   await toggle(active!._id, false);
   await toggle(other, true);
-  expect((await t.query(api.events.getDetail, { eventId: other })).interestSubmissionsEnabled).toBe(true);
+  expect((await t.query(api.events.getDetail, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,  eventId: other })).interestSubmissionsEnabled).toBe(true);
 });
 
 test("toggle rejects unauthorized callers and unsupported series without writes", async () => {

@@ -1,4 +1,5 @@
 "use client";
+import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useState } from "react";
 
@@ -17,6 +18,7 @@ export function InterestSubmissionsToggle({ eventId, enabled }: { eventId: strin
         body: JSON.stringify({ eventId, enabled: !enabled }),
       });
       const result = await response.json();
+      if (response.ok) refreshAdminData();
       if (!response.ok) throw new Error(result.error || "Unable to save interest settings");
       setMessage(result.enabled ? "Interest submissions turned on." : "Interest submissions turned off. Existing interests are unchanged.");
     } catch (err) {

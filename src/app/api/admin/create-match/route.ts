@@ -11,11 +11,12 @@ export async function POST(request: NextRequest) {
   const expected = password ? crypto.createHash("sha256").update(password + (process.env.ADMIN_TOKEN_SALT || "taaruf-admin-salt")).digest("hex") : "";
   if (!token || !/^[a-f0-9]{64}$/.test(token) || !expected || token.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) return NextResponse.json({ error: "Your admin session has expired. Sign in again." }, { status: 401 });
   const origin = request.headers.get("origin");
+  if (!origin) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   if (origin) {
     try {
       // Next normalizes loopback/proxy URLs; Host retains the browser-facing authority.
       const parsed = new URL(origin);
-      if (!["http:", "https:"].includes(parsed.protocol) || parsed.host !== (request.headers.get("host") || request.nextUrl.host)) throw new Error("Origin mismatch");
+      if (!["http:", "https:"].includes(parsed.protocol) || parsed.protocol !== request.nextUrl.protocol || parsed.host !== (request.headers.get("host") || request.nextUrl.host)) throw new Error("Origin mismatch");
     } catch { return NextResponse.json({ error: "Invalid request origin." }, { status: 403 }); }
   }
   const adminSecret = process.env.ATTENDANCE_ADMIN_SECRET;

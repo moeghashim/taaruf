@@ -5,8 +5,6 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useForm, useStore } from "@tanstack/react-form";
-import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 import { Ico } from "@/components/admin/primitives/icons";
 
@@ -57,7 +55,6 @@ const prayerOptions = [
 const photoSharingOptions = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
-  { value: "ask_me_first", label: "Ask me first" },
 ] as const;
 
 const duplicateEmailMessage =
@@ -89,7 +86,6 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
-  const generateUploadUrl = useMutation(api.registrations.generateImageUploadUrl);
 
   const form = useForm({
     defaultValues: {
@@ -190,11 +186,11 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
 
       for (const file of chosenFiles) {
         const preparedFile = await prepareImageFileForUpload(file);
-        const uploadUrl = await generateUploadUrl({});
-        const result = await fetch(uploadUrl, {
+        const result = await fetch("/api/photos/upload", {
           method: "POST",
           headers: {
             "Content-Type": preparedFile.type || "application/octet-stream",
+            "x-upload-context": "signup",
           },
           body: preparedFile,
         });

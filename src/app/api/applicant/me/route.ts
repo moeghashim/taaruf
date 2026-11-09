@@ -1,3 +1,5 @@
+import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
+import { getAdminSecret } from "@/lib/admin-server";
 import { NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
@@ -14,13 +16,13 @@ export async function GET() {
 
     const convex = getConvexClient();
     const dashboard = await convex.query(api.applicantInterests.getDashboard, { sessionHash });
-    await convex.mutation(api.applicantAuth.touchSession, { sessionHash });
+    await convex.mutation(api.applicantAuth.touchSession, { adminSecret: getAdminSecret(),  sessionHash });
 
     return NextResponse.json(dashboard, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
+      { error: "Unable to complete request" },
+      { status: isApplicantUnauthorized(error) ? 401 : 500 }
     );
   }
 }

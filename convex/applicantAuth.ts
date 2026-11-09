@@ -1,3 +1,5 @@
+import { sessionAllowed, capabilityAllowed } from "./capabilitySecurity";
+import { requireAdmin } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -6,12 +8,13 @@ const LOGIN_TOKEN_TTL_MS = 30 * 60 * 1000;
 const SESSION_TTL_MS = 30 * DAY_MS;
 
 export const createLoginToken = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     email: v.string(),
     tokenHash: v.string(),
     expiresInMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const email = args.email.trim().toLowerCase();
     const exactRegistration = await ctx.db
       .query("registrations")
@@ -45,17 +48,18 @@ export const createLoginToken = mutation({
 });
 
 export const claimLoginToken = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     tokenHash: v.string(),
     sessionHash: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const loginToken = await ctx.db
       .query("applicantLoginTokens")
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
       .unique();
 
-    if (!loginToken || loginToken.consumedAt || loginToken.expiresAt <= Date.now()) {
+    if (!loginToken || loginToken.consumedAt !== undefined || loginToken.expiresAt <= Date.now() || !(await capabilityAllowed(ctx, loginToken.createdAt))) {
       return null;
     }
 
@@ -87,16 +91,17 @@ export const claimLoginToken = mutation({
 });
 
 export const getSession = query({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     sessionHash: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const session = await ctx.db
       .query("applicantSessions")
       .withIndex("by_sessionHash", (q) => q.eq("sessionHash", args.sessionHash))
       .unique();
 
-    if (!session || session.revokedAt || session.expiresAt <= Date.now()) {
+    if (!session || !(await sessionAllowed(ctx, session))) {
       return null;
     }
 
@@ -113,16 +118,17 @@ export const getSession = query({
 });
 
 export const touchSession = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     sessionHash: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const session = await ctx.db
       .query("applicantSessions")
       .withIndex("by_sessionHash", (q) => q.eq("sessionHash", args.sessionHash))
       .unique();
 
-    if (!session || session.revokedAt || session.expiresAt <= Date.now()) {
+    if (!session || !(await sessionAllowed(ctx, session))) {
       return false;
     }
 
@@ -135,10 +141,11 @@ export const touchSession = mutation({
 });
 
 export const revokeSession = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     sessionHash: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const session = await ctx.db
       .query("applicantSessions")
       .withIndex("by_sessionHash", (q) => q.eq("sessionHash", args.sessionHash))

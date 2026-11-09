@@ -1,4 +1,5 @@
 "use client";
+import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 import { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 export function TestResetDialog({ selection, onClose, onSuccess }: { selection: { id: string; pair: string; event: string } | null; onClose: () => void; onSuccess: (message: string) => void; }) {
@@ -19,7 +20,7 @@ export function TestResetDialog({ selection, onClose, onSuccess }: { selection: 
      if (!response.ok) throw new Error(result?.error || "The server could not confirm the reset. Your reason is kept. Please retry.");
      if (!result || typeof result.alreadyReset !== "boolean") throw new Error("Unexpected response. Refresh the list before retrying this same record.");
      const success = result.alreadyReset ? "This test submission was already reset. No additional slot was restored." : "Test submission reset. One event slot restored; audit retained.";
-     setDone(true); setMessage(success); onSuccess(success);
+     refreshAdminData(); setDone(true); setMessage(success); onSuccess(success);
    } catch (error) {
      setMessage(error instanceof Error && !["TypeError", "TimeoutError", "AbortError"].includes(error.name) ? error.message : "Connection interrupted. The reset may have completed. Refresh the list or retry this same record safely; no extra slot will be restored.");
    } finally { pending.current = false; setBusy(false); }

@@ -1,3 +1,4 @@
+import { adminRequestError } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
@@ -8,11 +9,14 @@ function authorized(request: NextRequest) {
   return request.cookies.get("admin_token")?.value === expected;
 }
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const adminSecret = process.env.ATTENDANCE_ADMIN_SECRET;
   if (!adminSecret) return NextResponse.json({ error: "Event service not configured" }, { status: 503 });
   try {
     const { action, ...body } = await request.json();
+    if (Object.keys(body).some(key => /secret|password|token|sessionHash/i.test(key))) return NextResponse.json({ error: "Client credentials are not accepted" }, { status: 400 });
     const client = getConvexClient();
     // Convex validates each action's exact arguments. Never forward a client secret.
     const args = { ...body, adminSecret };

@@ -8,7 +8,7 @@
 - Event receipts render pending/waitlisted status read by the authorized atomic claim. Approved/rejected/withdrawn rows suppress automatic receipts; approval emails remain manual.
 - Receipt delivery ledger uses server ATTENDANCE_ADMIN_SECRET authorization, ownership tokens, a two-minute lease, explicit provider-result completion, stable persisted payload and provider idempotency keys. Sent timestamps are written after provider success, never at claim time. Concurrent/in-flight claims return retryable errors rather than success.
 - Rejoining withdrawn/rejected event rows increments an attempt counter, resets receipt flags, and creates a new dedupe key. Old checkout attempts cannot claim the new attempt.
-- Non-event welcome follows the same durable lease/completion pattern. Its login token is inserted atomically with the claim and the URL/payload is reused across retries, preventing provider idempotency payload conflicts and duplicate concurrent sends.
+- Non-event welcome follows the same durable lease/completion pattern. Its login token is inserted atomically with the claim and the URL/payload is reused across retries, preventing provider idempotency payload conflicts and duplicate concurrent sends. A persisted claim denied by the [capability cutoff](capability-cutoff-recovery.md) stops with a manual-reconciliation error; it never substitutes a fresh URL under the same provider key.
 - Schema additions are widen-only. No existing data was rewritten.
 
 ## External delivery limits / rollout requirements

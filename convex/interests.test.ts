@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
@@ -190,7 +191,7 @@ describe("interest rules", () => {
       })
     ).rejects.toThrow("Applicant already has 3 open interests");
 
-    await t.mutation(api.interests.updateStatus, {
+    await t.mutation(api.interests.updateStatus, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: first,
       status: "declined",
     });
@@ -224,7 +225,7 @@ describe("interest rules", () => {
       })
     ).rejects.toThrow("An open interest already exists");
 
-    await t.mutation(api.interests.updateStatus, {
+    await t.mutation(api.interests.updateStatus, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: first,
       status: "closed",
     });
@@ -263,7 +264,7 @@ describe("interest rules", () => {
     expect(maleRegistration.activeMatchId).toBeUndefined();
     expect(femaleRegistration.activeMatchId).toBeUndefined();
 
-    const match = await t.query(api.matches.getById, {
+    const match = await t.query(api.matches.getById, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: reciprocalInterest.matchId as Id<"matches">,
     });
     expect(match).toMatchObject({
@@ -284,7 +285,7 @@ describe("interest rules", () => {
       toRegistrationId: female,
       source: "admin_entered",
     });
-    const matchId = await t.mutation(api.interests.convertToMatch, {
+    const matchId = await t.mutation(api.interests.convertToMatch, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       interestId,
     });
 
@@ -293,7 +294,7 @@ describe("interest rules", () => {
       toRegistrationId: queuedTarget,
       source: "admin_entered",
     });
-    vi.stubEnv("ADMIN_PASSWORD", "test-only-secret");
+    vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "test-only-secret");
     await t.run(async ctx => {
       const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interestId)).unique();
       await ctx.db.patch(flow!._id, { requesterFinalApproval: "approved", recipientFinalApproval: "approved" });
@@ -323,7 +324,7 @@ describe("interest rules", () => {
       status: "queued",
     });
 
-    await t.mutation(api.matches.updateStatus, {
+    await t.mutation(api.matches.updateStatus, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: matchId,
       status: "closed",
     });
@@ -350,12 +351,12 @@ describe("interest rules", () => {
       source: "admin_entered",
     });
 
-    await t.mutation(api.interests.updateAdminStatus, {
+    await t.mutation(api.interests.updateAdminStatus, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: interestId,
       adminStatus: "declined",
     });
 
-    const firstClaim = await t.mutation(api.interests.claimDeclineNotification, {
+    const firstClaim = await t.mutation(api.interests.claimDeclineNotification, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: interestId,
     });
     expect(firstClaim).toMatchObject({
@@ -364,7 +365,7 @@ describe("interest rules", () => {
       targetNumber: 2,
     });
 
-    const secondClaim = await t.mutation(api.interests.claimDeclineNotification, {
+    const secondClaim = await t.mutation(api.interests.claimDeclineNotification, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: interestId,
     });
     expect(secondClaim).toMatchObject({
@@ -372,7 +373,7 @@ describe("interest rules", () => {
       alreadySent: true,
     });
 
-    await t.mutation(api.interests.recordDeclineNotificationFailure, {
+    await t.mutation(api.interests.recordDeclineNotificationFailure, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: interestId,
       error: "provider failed",
     });
@@ -380,7 +381,7 @@ describe("interest rules", () => {
     expect(failedNotificationInterest.declineNotificationSentAt).toBeUndefined();
     expect(failedNotificationInterest.declineNotificationError).toBe("provider failed");
 
-    const retryClaim = await t.mutation(api.interests.claimDeclineNotification, {
+    const retryClaim = await t.mutation(api.interests.claimDeclineNotification, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: interestId,
     });
     expect(retryClaim).toMatchObject({
@@ -395,7 +396,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -439,7 +440,7 @@ describe("interest rules", () => {
     });
     const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash: maleSession });
     expect(dashboard).not.toHaveProperty("eligibleInterestTargets");
-    await expect(t.mutation(api.applicantInterests.submitInterestNumber, {
+    await expect(t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession, applicantNumber: 2, applicantName: "Cross",
     })).resolves.toHaveProperty("interestId");
@@ -455,7 +456,7 @@ describe("interest rules", () => {
       await ctx.db.patch(male, { status: "pending" });
     });
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -501,7 +502,7 @@ describe("interest rules", () => {
       });
     });
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 3,
@@ -521,7 +522,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    await t.mutation(api.applicantInterests.submitInterestNumber, {
+    await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -577,7 +578,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -629,7 +630,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: maleSession,
       applicantNumber: 2,
@@ -720,7 +721,7 @@ describe("interest rules", () => {
       interestId: result.interestId,
     });
 
-    const closedMatch = await t.query(api.matches.getById, {
+    const closedMatch = await t.query(api.matches.getById, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       id: secondApproval.matchId as Id<"matches">,
     });
     expect(closedMatch).toMatchObject({
@@ -747,7 +748,7 @@ describe("interest rules", () => {
     const female = await createRegistration(t, "Documenting Female", "female");
     const femaleSession = await createSession(t, female);
 
-    await t.mutation(api.applicantInterests.submitInterestNumber, {
+    await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: femaleSession,
       applicantNumber: 1,
@@ -779,7 +780,7 @@ describe("interest rules", () => {
     const maleSession = await createSession(t, male);
     const femaleSession = await createSession(t, female);
 
-    const result = await t.mutation(api.applicantInterests.submitInterestNumber, {
+    const result = await t.mutation(api.applicantInterests.submitInterestNumber, { photoConsent: "no",
       expectedEventId: await getTestEvent(t),
       sessionHash: femaleSession,
       applicantNumber: 1,

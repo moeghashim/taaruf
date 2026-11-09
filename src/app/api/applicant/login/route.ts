@@ -1,3 +1,4 @@
+import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getConvexClient } from "@/lib/convex";
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const token = createToken();
     const convex = getConvexClient();
-    const registration = await convex.mutation(api.applicantAuth.createLoginToken, {
+    const registration = await convex.mutation(api.applicantAuth.createLoginToken, { adminSecret: getAdminSecret(),
       email,
       tokenHash: hashToken(token),
     });
@@ -41,9 +42,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete request" },
       { status: 500 }
     );
   }

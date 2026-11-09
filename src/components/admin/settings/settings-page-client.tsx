@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAdminMutation as useMutation, useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { Pill } from "@/components/admin/primitives/status-pill";
-import { api } from "../../../../convex/_generated/api";
 
 type FixResult =
   | { ok: true; sessionsChecked: number; fixed: number; emailsSent: number }
@@ -15,8 +14,8 @@ type FixResult =
  * Convex mutations or the existing /api/admin/fix-payments route.
  */
 export function SettingsPageClient() {
-  const adminNameValue = useQuery(api.settings.get, { key: "admin_name" });
-  const setSetting = useMutation(api.settings.set);
+  const adminNameValue = useQuery("settings.get", { key: "admin_name" });
+  const setSetting = useMutation("settings.set");
 
   // Admin name
   const [adminName, setAdminName] = useState("");

@@ -1,3 +1,4 @@
+import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
@@ -17,8 +18,8 @@ export async function GET() {
     return NextResponse.json(events, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
+      { error: "Unable to complete request" },
+      { status: isApplicantUnauthorized(error) ? 401 : 500 }
     );
   }
 }
@@ -54,8 +55,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, result, notification });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
+      { error: "Unable to complete request" },
+      { status: isApplicantUnauthorized(error) ? 401 : 500 }
     );
   }
 }

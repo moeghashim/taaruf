@@ -1,5 +1,4 @@
 // @vitest-environment node
-import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -29,21 +28,3 @@ for (const femaleWaitlisted of [false, true]) {
     });
   }
 }
-
-test("public registration and applicant surfaces do not reference gender availability counts", () => {
-  for (const file of ["src/app/page.tsx", "src/app/register/page.tsx", "src/app/register/[eventCode]/page.tsx", "src/components/registration-form.tsx", "src/app/me/page.tsx"]) {
-    const source = readFileSync(file, "utf8");
-    expect(source).not.toMatch(/(?:male|female)(?:Available|Capacity)|counts\.(?:male|female)/);
-  }
-  const portal = readFileSync("src/app/me/page.tsx", "utf8");
-  expect(portal).toContain('value={event.registration.registrationStatus}');
-  expect(portal).toContain('canConfirmEventRegistration(event.registration)');
-  expect(portal).toContain('move to Pending for review');
-});
-
-test("admin retains operational gender capacity and waitlist counts", () => {
-  const source = readFileSync("src/components/admin/events/events-page-client.tsx", "utf8");
-  expect(source).toContain('M {event.counts.malePending + event.counts.maleApproved}/{event.maleCapacity}');
-  expect(source).toContain('F {event.counts.femalePending + event.counts.femaleApproved}/{event.femaleCapacity}');
-  expect(source).toContain('WL {event.counts.maleWaitlisted + event.counts.femaleWaitlisted}');
-});

@@ -25,7 +25,7 @@ beforeEach(() => {
   mutation.mockResolvedValue("synthetic-match");
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
-function request(body: unknown = valid, cookie = token, origin?: string, raw = false) {
+function request(body: unknown = valid, cookie = token, origin: string = "https://synthetic.invalid", raw = false) {
   return new NextRequest("https://synthetic.invalid/api/admin/create-match", {
     method: "POST", headers: { cookie: cookie ? "admin_token=" + cookie : "", ...(origin ? { origin } : {}) },
     body: raw ? String(body) : JSON.stringify(body),
@@ -44,12 +44,12 @@ test("fails closed with no configured admin password", async () => {
   expect(mutation).not.toHaveBeenCalled();
 });
 test("allows browser-facing loopback host despite Next URL normalization", async () => {
-  const req = request();
+  const req = new NextRequest("http://localhost:3342/api/admin/create-match", { method: "POST", headers: { cookie: "admin_token=" + token, "content-type": "application/json" }, body: JSON.stringify(valid) });
   req.headers.set("host", "127.0.0.1:3342");
   req.headers.set("origin", "http://127.0.0.1:3342");
   expect((await POST(req)).status).toBe(200);
 });
-test.each(["null", "not-a-url", "file://synthetic.invalid", "https://synthetic.invalid:444"])("rejects invalid origin %s", async origin => {
+test.each(["null", "not-a-url", "http://synthetic.invalid", "file://synthetic.invalid", "https://synthetic.invalid:444"])("rejects invalid origin %s", async origin => {
   expect((await POST(request(valid, token, origin))).status).toBe(403);
   expect(mutation).not.toHaveBeenCalled();
 });

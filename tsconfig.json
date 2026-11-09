@@ -23,5 +23,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "remotion-video", "ops/interest-runtime"]
+  "exclude": ["ops/*-runtime*/**", "node_modules", "remotion-video", "ops/interest-runtime", "ops/photo-runtime", "ops/security-runtime", "ops/security-release", "ops/security-release-runtime"]
 }

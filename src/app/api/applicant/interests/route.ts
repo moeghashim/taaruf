@@ -1,3 +1,5 @@
+import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
+import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
@@ -74,11 +76,11 @@ function applicantInterestErrorResponse(error: unknown) {
     );
   }
 
-  if (message.includes("Unauthorized")) {
+  if (isApplicantUnauthorized(error)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  console.error("Applicant interest action failed", error);
+  console.error("Applicant interest action failed");
   return NextResponse.json(
     { error: "Something went wrong while updating your interest. Please try again, or contact the team if it keeps happening." },
     { status: 500 }
@@ -92,10 +94,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     const convex = getConvexClient();
 
+    if (body.action === "revoke_photos") {
+      if (typeof body.interestId !== "string" || !body.interestId) return NextResponse.json({ error: "interestId is required" }, { status: 400 });
+      await convex.mutation(api.applicantInterests.revokeSenderPhotoConsent, { sessionHash, interestId: body.interestId });
+      return NextResponse.json({ success: true, message: "Photo sharing revoked for this interest. Previously obtained photos or links cannot be recalled." });
+    }
+
     if (body.action === "submit_number") {
+      if (!["yes", "no"].includes(body.photoConsent)) return NextResponse.json({ error: "Choose whether to share your photos with this recipient" }, { status: 400 });
       if (!Number.isInteger(body.applicantNumber) || body.applicantNumber <= 0) {
         return NextResponse.json({ error: "A valid applicant number is required" }, { status: 400 });
       }
@@ -107,6 +117,7 @@ export async function POST(request: NextRequest) {
       }
       const result = await convex.mutation(api.applicantInterests.submitInterestNumber, {
         expectedEventId: body.expectedEventId,
+        photoConsent: body.photoConsent,
         sessionHash,
         applicantNumber: body.applicantNumber,
         applicantName: body.applicantName,
@@ -116,7 +127,7 @@ export async function POST(request: NextRequest) {
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
-          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, {
+          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { adminSecret: getAdminSecret(),
             interestId: result.inboundInterestNotification.interestId,
             error,
           });
@@ -135,7 +146,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (!emailResult.success) {
-          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, {
+          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { adminSecret: getAdminSecret(),
             interestId: result.inboundInterestNotification.interestId,
             error: emailResult.error || "Failed to send inbound interest email",
           });
@@ -184,7 +195,7 @@ export async function POST(request: NextRequest) {
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
-          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, {
+          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, { adminSecret: getAdminSecret(),
             interestId: body.interestId,
             error,
           });
@@ -202,7 +213,7 @@ export async function POST(request: NextRequest) {
         });
 
         if (!emailResult.success) {
-          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, {
+          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, { adminSecret: getAdminSecret(),
             interestId: body.interestId,
             error: emailResult.error || "Failed to send final approval requested email",
           });
@@ -224,7 +235,7 @@ export async function POST(request: NextRequest) {
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
-          await convex.mutation(api.matches.markContactSharedNotificationSent, {
+          await convex.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: getAdminSecret(),
             id: result.contactSharedNotification.matchId,
             sent: false,
             error,
@@ -248,7 +259,7 @@ export async function POST(request: NextRequest) {
         );
         const failures = emailResults.filter((item) => !item.result.success);
         const success = failures.length === 0;
-        await convex.mutation(api.matches.markContactSharedNotificationSent, {
+        await convex.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: getAdminSecret(),
           id: result.contactSharedNotification.matchId,
           sent: success,
           error: success

@@ -1,10 +1,12 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api } from "./_generated/api";
 import schema from "./schema";
 import { modules } from "./test.setup";
 const secret = "receipt-test";
 beforeEach(() => vi.stubEnv("ATTENDANCE_ADMIN_SECRET", secret));
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 async function setup() {
  const t = convexTest(schema, modules);
  const ids = await t.run(async ctx => {
@@ -58,6 +60,7 @@ it("welcome retries preserve token URL and exclude concurrent sends",async()=>{
  await t.mutation(api.registrations.finishWelcomeReceipt,{stripeSessionId:"cs_one",adminSecret:secret,token:"a",error:"retry"});
  const retry=await t.mutation(api.registrations.claimWelcomeReceipt,{...args,token:"b",profileUrl:"changed",tokenHash:"two"});
  expect(retry.profileUrl).toBe(first.profileUrl);
+ expect(retry.key).toBe(first.key);
  expect(await t.run(ctx=>ctx.db.query("applicantLoginTokens").collect())).toHaveLength(1);
 });
 
@@ -71,13 +74,44 @@ it("overlapping event checkouts retain immutable links after latest session chan
   return ["one","two"];
  });
  const args={name:"New",email:"new@example.invalid",age:28,gender:"male" as const,maritalStatus:"single",education:"College",job:"Job",phone:"999"};
- const registrationId=await t.mutation(api.registrations.create,{...args,eventCode:eventCodes[0],stripeSessionId:"cs_first"});
- await t.mutation(api.registrations.create,{...args,eventCode:eventCodes[1],stripeSessionId:"cs_second"});
+ const registrationId=await t.mutation(api.registrations.create,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, ...args,eventCode:eventCodes[0],stripeSessionId:"cs_first"});
+ await t.mutation(api.registrations.create,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, ...args,eventCode:eventCodes[1],stripeSessionId:"cs_second"});
  const first=await t.query(api.registrations.resolveCheckoutReceipt,{stripeSessionId:"cs_first",adminSecret:secret});
  const second=await t.query(api.registrations.resolveCheckoutReceipt,{stripeSessionId:"cs_second",adminSecret:secret});
  expect(first?.registrationId).toBe(registrationId);
  expect(first?.eventRegistrationId).not.toBe(second?.eventRegistrationId);
- expect((await t.query(api.registrations.getByStripeSession,{stripeSessionId:"cs_first"}))?._id).toBe(registrationId);
- await t.mutation(api.registrations.updatePaymentStatus,{stripeSessionId:"cs_first",paymentStatus:"paid"});
- expect((await t.query(api.registrations.getById,{id:registrationId}))?.paymentStatus).toBe("paid");
+ expect((await t.query(api.registrations.getByStripeSession,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, stripeSessionId:"cs_first"}))?._id).toBe(registrationId);
+ await t.mutation(api.registrations.updatePaymentStatus,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, stripeSessionId:"cs_first",paymentStatus:"paid"});
+ expect((await t.query(api.registrations.getById,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, id:registrationId}))?.paymentStatus).toBe("paid");
+});
+
+it("cutoff-denied welcome retries require reconciliation without changing persisted payload or key", async () => {
+ const now = 1800000000000;
+ vi.spyOn(Date, "now").mockReturnValue(now);
+ const {t,registrationId} = await setup();
+ await t.run(ctx => ctx.db.insert("checkoutLinks", { registrationId, stripeSessionId: "cs_cutoff", createdAt: now }));
+ const args = { stripeSessionId: "cs_cutoff", adminSecret: secret, token: "first", profileUrl: "https://example.invalid/old-login", tokenHash: "old-login-hash" };
+ expect((await t.mutation(api.registrations.claimWelcomeReceipt, args)).claimed).toBe(true);
+ await t.mutation(api.registrations.finishWelcomeReceipt, { stripeSessionId: args.stripeSessionId, adminSecret: secret, token: "first", error: "temporary provider failure" });
+ const snapshot = () => t.run(async ctx => ({ deliveries: await ctx.db.query("receiptDeliveries").collect(), tokens: await ctx.db.query("applicantLoginTokens").collect(), registration: await ctx.db.get(registrationId) }));
+ const before = await snapshot();
+ await t.mutation(api.settings.set, { adminSecret: secret, key: "capabilitySecurityCutoffMs", value: String(now) });
+ vi.spyOn(Date, "now").mockReturnValue(now + 1000);
+ expect(await t.mutation(api.registrations.claimWelcomeReceipt, { ...args, token: "retry", profileUrl: "https://example.invalid/new-login", tokenHash: "new-login-hash" })).toEqual({ claimed: false, error: "Welcome delivery uncertain; manual reconciliation required" });
+ expect(await snapshot()).toEqual(before);
+ expect(await t.mutation(api.applicantAuth.claimLoginToken, { adminSecret: secret, tokenHash: args.tokenHash, sessionHash: "denied" })).toBeNull();
+});
+
+it("a first welcome claim at the cutoff boundary cannot mint an unusable URL", async () => {
+ const now = 1800000000000;
+ vi.spyOn(Date, "now").mockReturnValue(now);
+ const { t, registrationId } = await setup();
+ await t.run(ctx => ctx.db.insert("checkoutLinks", { registrationId, stripeSessionId: "cs_equal", createdAt: now }));
+ await t.mutation(api.settings.set, { adminSecret: secret, key: "capabilitySecurityCutoffMs", value: String(now) });
+ expect((await t.mutation(api.registrations.claimWelcomeReceipt, { stripeSessionId: "cs_equal", adminSecret: secret, token: "first", profileUrl: "https://example.invalid/equal", tokenHash: "equal" })).claimed).toBe(false);
+ expect(await t.run(ctx => ctx.db.query("receiptDeliveries").collect())).toEqual([]);
+ expect(await t.run(ctx => ctx.db.query("applicantLoginTokens").collect())).toEqual([]);
+ vi.spyOn(Date, "now").mockReturnValue(now + 1);
+ expect((await t.mutation(api.registrations.claimWelcomeReceipt, { stripeSessionId: "cs_equal", adminSecret: secret, token: "fresh", profileUrl: "https://example.invalid/fresh", tokenHash: "fresh" })).claimed).toBe(true);
+ expect(await t.mutation(api.applicantAuth.claimLoginToken, { adminSecret: secret, tokenHash: "fresh", sessionHash: "fresh-session" })).not.toBeNull();
 });

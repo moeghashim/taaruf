@@ -626,4 +626,11 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Integrate scoped PR55 on live 784bb73 with reactive eligibility and stale/cancellation safety; provenance recorded in docs/pr55-scoped-release.md. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 ## 2026-11-06
+- Issue58: added recipient-specific submission photo choice, owner revocation, atomic retry behavior, UI and 261-test validation on isolated ac5db90 lineage. Actual synthetic backend/browser passed portal behavior; independent review found inherited authorization blockers, so draft only and no live deployment.
 - Added explicit authenticated per-submission test reset, retained audit and quota indexes, stale-action/share guards, safe deletion feedback and backend/bridge regressions; preview-only, no live data reset. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-08
+- Resumed issue58 on current PR60/PR63 lineage; added authenticated server transport, backend authorization, durable photo ownership and atomic consent-aware URL reads. Preserved reset implementations and data; isolated347-test gate and final review/runtime validation, no live deployment pending operational decisions.
+
+## 2026-11-08
+- Prepared centralized monotonic capability cutoff and authenticated recovery in convex auth/profile/share/settings paths; integrated explicit saved Yes/No editors, tests and release documentation. No production activation. <!-- project: github.com/moeghashim/clawscrewskill -->

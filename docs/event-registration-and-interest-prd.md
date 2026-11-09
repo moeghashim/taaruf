@@ -2,7 +2,7 @@
 
 ## Overview
 
-The application needs event management as a first-class matching primitive. Admins should be able to create distinct events, applicants should be able to register for those events, admins should approve attendance and check attendees in, and applicants should only express event-based interest in people who attended the same event.
+The application needs event management as a first-class matching primitive. Admins should be able to create distinct events, applicants should be able to register for those events, admins should approve attendance and check attendees in, and applicant submissions should follow the [enabled-event eligibility contract](#shared-event-interest-requirements).
 
 The current app already supports applicant registrations, applicant login, profile completion, interests, interest flows, matches, and admin matching workflows. This project should extend that system rather than replace it.
 
@@ -12,17 +12,15 @@ The current app already supports applicant registrations, applicant login, profi
 - Let applicants register for specific upcoming events.
 - Track per-event applicant registration status separately from the applicant's overall registration/payment/background-check status.
 - Automatically waitlist event registrants when their gender capacity is full.
-- Carry prior-event waitlisted applicants into the next event before new registrations consume capacity.
+- Use the [current event-only queue policy](event-only-waitlists-review.md#implemented); automatic cross-event carryover is retired.
 - Let admins approve, reject, cancel, waitlist, and check in event registrants.
 - Show event history and upcoming event status in both applicant and admin views.
 - Store an `eventId` on every interest.
-- Require applicant-submitted interests to pass a shared-attended-event check.
-- Require both applicants to have attended at least one same event before either can submit interest through the applicant portal.
-- Limit applicant-submitted interests to the 7-day window after an event ends.
+- Apply the [current interest eligibility rules](#shared-event-interest-requirements).
 - Preserve the current gender-specific interest behavior:
   - male-to-female interests are visible/actionable for the female recipient.
   - female-to-male interests are private/internal first.
-- Backfill current approved applicants as attended at the legacy April 2026 event.
+- Preserve historical data under the [legacy compatibility policy](event-only-waitlists-review.md#parent-audit-correction--staged-compatibility-supersedes-initial-assumption).
 - Send an initial event registration received email after event registration is submitted.
 
 ## Non-Goals
@@ -79,12 +77,7 @@ Requirements:
 - Event attendee lists and interest submission should use the permanent applicant number.
 - Event-specific numbering should not be introduced.
 
-Current implementation note:
-
-- The current app appears to derive applicant numbers from registration creation order in some places.
-- Implementation should add a persisted applicant number field if one does not already exist.
-- Existing registrations should be backfilled with their current derived number before event attendee lists depend on it.
-- After backfill, future registrations should receive the next available permanent applicant number at creation time.
+The permanent-number invariant and issuance rules are owned by [AGENTS.md](../AGENTS.md#public-applicant-numbers-are-permanent-and-never-reused), with regression coverage in `convex/registrations.test.ts`. This plan does not authorize another number backfill.
 
 ## Event Model
 
@@ -131,7 +124,7 @@ Event identity:
 - `eventCode` should be a compact lowercase month/year code such as `may26`.
 - `eventMonth` should be an ISO year-month string such as `2026-05`.
 - `series` should identify the event family, defaulting to `1plus1_match`.
-- `series + eventMonth` should identify the normal monthly event for carryover logic.
+- `series + eventMonth` identify the monthly event family; cross-event copying follows the [event-only policy](event-only-waitlists-review.md#implemented).
 - If more than one event exists in the same series and month, implementation should require a distinct `eventCode`.
 
 Indexes should support:
@@ -166,13 +159,7 @@ Required fields:
 - `createdAt`
 - `updatedAt`
 
-Registration statuses:
-
-- `pending`: applicant is in the active review pool and awaiting admin event approval.
-- `approved`: admin approved the applicant to attend this event.
-- `waitlisted`: gender capacity is full; applicant is waiting for a spot.
-- `rejected`: admin rejected the event registration.
-- `cancelled`: applicant or admin cancelled the event registration.
+The schema owns registration status values; see [`eventRegistrationStatus`](../convex/schema.ts). Queue and cancellation semantics follow the [event-only policy](event-only-waitlists-review.md#implemented).
 
 Attendance statuses:
 
@@ -201,26 +188,9 @@ Indexes should support:
 
 ## Event Registration Flow
 
-### Prior Waitlist Carryover
+### Waitlist and Confirmation Policy
 
-When a new event is opened for registration, applicants who were waitlisted from the previous event in the same series should get first access to the new event.
-
-Requirements:
-
-- The previous event is the most recent earlier event with the same `series`, ordered by `eventMonth` and then `startsAt`.
-- Existing waitlisted applicants from that previous event are automatically created or moved into the new event as `pending`.
-- These carryover pending registrations count toward the new event's gender capacity.
-- Carryover should happen before new applicant registrations are evaluated for capacity.
-- `waitlistCarryoverFromEventId` should point to the event where the applicant was previously waitlisted.
-- If carryover would exceed the new event's gender capacity, the system should not silently exceed capacity.
-- Preferred implementation for overflow carryover: promote prior waitlisted applicants by original waitlist order until capacity is reached, and keep the remainder waitlisted for the next event unless admin explicitly overrides capacity.
-- Admin can explicitly override capacity when promoting additional carryover applicants.
-- Prior waitlisted applicants who are carried into the new event should be asked to confirm participation.
-- When confirmation is requested, set `confirmationRequestedAt` and `confirmationExpiresAt`.
-- The confirmation window is 48 hours.
-- If the applicant does not confirm within 48 hours, the current event registration becomes `cancelled` and no longer counts toward capacity.
-- Confirming participation does not approve attendance; it only preserves the applicant's pending event registration.
-- Admin approval/background/payment checks still move `pending` to `approved`.
+See [event-only waitlists](event-only-waitlists-review.md#implemented) for capacity, FIFO promotion, confirmation deadlines, expiration, and explicit cross-event copying. The original automatic carryover proposal is retired.
 
 ### Applicant Starts Event Registration
 
@@ -231,22 +201,14 @@ Requirements:
 - Applicant must be authenticated.
 - Applicant must have a completed profile.
 - Applicant cannot create duplicate active registrations for the same event.
-- Cancelled/rejected duplicate behavior should be explicit during implementation:
-  - preferred: allow a new request only if previous registration is `cancelled` or `rejected`.
-  - otherwise patch/reactivate the existing record with a new status and timestamp.
+- Rejoining a Withdrawn/Rejected row follows the [event-only queue policy](event-only-waitlists-review.md#implemented); receipt attempts follow the [receipt guide](signup-receipt-review.md#implemented).
 
 Eligibility derivation:
 
 - If global applicant is approved and payment/background-check requirements are complete, set `eligibilityStatus` to `approved_member`.
 - If global applicant is pending, unpaid, new, or otherwise not fully approved, set `eligibilityStatus` to `awaiting_background_check`.
 
-Capacity derivation:
-
-- Count `pending + approved` event registrations for the applicant's gender.
-- Do not count `waitlisted`, `rejected`, or `cancelled`.
-- If count is below gender capacity, create as `pending`.
-- If count is at or above gender capacity, create as `waitlisted` for the next event.
-- New applicant registrations are evaluated after any prior waitlist carryover has consumed capacity.
+Capacity derivation follows the [event-only queue policy](event-only-waitlists-review.md#implemented).
 
 ### New Applicant Event Registration
 
@@ -260,13 +222,7 @@ Requirements:
 - The event registration should use `eligibilityStatus: "awaiting_background_check"` until payment/background-check approval is complete.
 - Admin should be able to see that the applicant is both a new/pending global registration and a pending/waitlisted event registrant.
 
-Confirmation:
-
-- Prior waitlisted applicants who are carried into a new event can be asked to confirm participation.
-- `confirmationRequestedAt` should be set when admin asks a waitlisted applicant to confirm.
-- `confirmationExpiresAt` should be set to 48 hours after the confirmation request.
-- `confirmedAt` should be set when the applicant confirms.
-- If the applicant does not confirm before `confirmationExpiresAt`, the event registration should become `cancelled`.
+Confirmation follows the [event-only queue policy](event-only-waitlists-review.md#implemented).
 
 ### Admin Reviews Event Registrations
 
@@ -276,14 +232,10 @@ Admins can:
 - reject event registrations.
 - cancel event registrations.
 - move `waitlisted` registrations to `pending` if capacity is available.
-- explicitly override capacity when moving waitlisted users if needed.
-- request confirmation from carryover pending registrants.
+- request confirmation according to the [event-only queue policy](event-only-waitlists-review.md#implemented).
 - update admin notes.
 
-When moving `waitlisted -> pending`:
-
-- Re-check `pending + approved` gender capacity.
-- If capacity is full and no override is provided, reject the transition with a clear error.
+When moving `waitlisted -> pending`, follow the [event-only queue policy](event-only-waitlists-review.md#implemented).
 
 When moving `pending -> approved`:
 
@@ -318,17 +270,11 @@ Applicant dashboard should include:
   - registered events.
   - pending/approved/waitlisted/rejected/cancelled statuses.
   - attended/no-show status after event.
-- Post-event interest submission for eligible attendees who share an attended event inside the 7-day interest window.
+- Interest submission according to [current eligibility](#shared-event-interest-requirements).
 
 Applicants should not see full attendee profiles from event attendee lists.
 
-Eligible attendee list should show only:
-
-- global applicant number.
-- first name.
-- gender may be omitted because the list should already be opposite-gender only.
-
-Applicants should choose or enter an eligible attendee. They do not need to attach an event to the interest; the app verifies shared attendance server-side.
+Applicants enter the recipient’s permanent applicant number and first name using Submit Interest. See [current eligibility](#shared-event-interest-requirements) and [submission consent](issue58-photo-consent.md#behavior).
 
 ## Admin Event UI
 
@@ -365,56 +311,26 @@ Admin profile detail should show:
 Admin interest creation:
 
 - Admins may create interests without being restricted by same-event attendance.
-- Admin-created interests must link to an event, but admins may choose the event manually and bypass applicant shared-attendance/deadline restrictions.
+- Admin-created interests follow [the event-context requirements](#shared-event-interest-requirements).
 - Admin override behavior should be explicit in the mutation/API name or argument.
 
 ## Shared-Event Interest Requirements
 
-Add required `eventId` to `interests`.
+Applicant submissions use exactly one explicitly enabled `1plus1_match` event with scheduled/completed status; missing flags, multiple enabled events, manual events, or cancellation fail closed. There is no automatic seven-day opening or closing rule. The sender must have an Approved, confirmed, attended registration for that event. The target must be globally Approved, opposite gender, and have a completed profile; both profiles must be completed. Target attendance at the enabled event is not required.
 
-Important UX distinction:
+The browser sends `expectedEventId`; the mutation rechecks the active event, session-derived sender, target’s permanent applicant number and first name. Stale event submissions reject. Submit Interest accepts globally Pending or Approved senders meeting the event and profile requirements. There is no browsable attendee picker. The resulting interest stores the server-validated event ID.
 
-- Applicants do not need to manually prove or point to an event.
-- The backend must verify the requester and target share an eligible attended event.
-- The backend then stores that shared event as `interests.eventId`.
-- If more than one shared event is eligible, use the most recent shared event still inside the active interest window.
+Male-to-female interests are `admin_actionable`; female-to-male interests are `internal_only`. Photo choices, retry behavior, and revocation are owned by [the consent guide](issue58-photo-consent.md#behavior). Per-event quota/reset behavior is owned by [the reset guide](../ops/reset-review.md).
 
-Applicant-created interests:
-
-- must be allowed only when the requester and target share at least one attended event.
-- must use server-side attendance records to verify shared event attendance.
-- must not trust a client-selected event as proof of eligibility.
-- must store the eligible shared event on `interests.eventId`.
-- must require opposite-gender pairing.
-- must require completed profiles as the current rules do.
-- must preserve current visibility behavior:
-  - male requester to female target: `admin_actionable`.
-  - female requester to male target: `internal_only`.
-- must be submitted within 7 days after at least one shared attended event ends.
-- if the applicants share multiple attended events, use the most recent shared event that is still inside the submission window.
-
-Admin-created interests:
-
-- may bypass same-event attendance.
-- may bypass the 7-day event interest window.
-- must still provide an `eventId`.
-- must use the dedicated `1Plus1 Manual/Admin Interest` event when the interest is not tied to a real attended-event flow.
-
-Applicant target selection:
-
-- The app returns eligible opposite-gender attendees who share an attended event with the applicant and are inside the active 7-day interest window.
-- The attendee list shows applicant number + first name only.
-- The mutation should still validate the selected target server-side.
+Admin-created interests require service authorization and an event ID. They may bypass applicant attendance checks; real-event creation still requires submissions ON. `1Plus1 Manual/Admin Interest` is the dedicated context for manual interests outside that flow.
 
 ## Duplicate Interest Rules
 
-Current rules block duplicate open interests between the same pair globally.
-
-New desired behavior:
+Open-interest checks are scoped to the directed pair and event:
 
 - Prevent duplicate open interests for the same pair within the same event.
 - Allow a future event to create a new interest between the same pair.
-- Closed, declined, withdrawn, and converted interests should not block future event-specific interests.
+- Submission quota and retry rules remain subject to [the consent guide](issue58-photo-consent.md#behavior) and [reset guide](../ops/reset-review.md).
 
 Because interests store an event pointer, duplicate open interest checks should use:
 
@@ -424,29 +340,7 @@ Admin override behavior can remain more flexible.
 
 ## Legacy Backfill
 
-Create a legacy past event:
-
-- Title: `1Plus1 Match Event - Apr26`
-- Event code: `apr26`
-- Event month: `2026-04`
-- Series: `1plus1_match`
-- Location: `ROIC`
-- Start: April 12, 2026, 3:00pm America/Chicago
-- End: April 12, 2026, 5:30pm America/Chicago
-- Status: `completed`
-- Male capacity: `60`
-- Female capacity: `60`
-- Interest deadline: 3 weeks after end time as a one-time legacy exception.
-
-Backfill:
-
-- Create event registration records for all current approved applicants.
-- Mark those April event records as `approved` and `attended`.
-- Patch all existing interests to use the April 2026 event as `eventId`.
-- Existing approved applicants should therefore satisfy the shared-attended-event check for the April 2026 event.
-- Avoid overwriting existing future event registration records if the migration is rerun.
-
-Migration should be idempotent.
+The April attendance/interest backfill is retired and rejects without writes. Historical records and the separate legacy holding list follow the [compatibility policy](event-only-waitlists-review.md#parent-audit-correction--staged-compatibility-supersedes-initial-assumption). Global approval must not manufacture attendance.
 
 Create a manual/admin event:
 
@@ -460,31 +354,7 @@ Create a manual/admin event:
 
 ## Data Migration Strategy
 
-Follow Convex widen-migrate-narrow.
-
-Deploy 1:
-
-- Add `events` table.
-- Add `eventRegistrations` table.
-- Add optional `eventId` to `interests`.
-- Add indexes needed for event, attendance, and shared-event eligibility queries.
-- Update applicant interest creation to verify shared attendance and write `eventId` before creating an interest.
-- Update admin interest creation to require an explicit `eventId`.
-
-Migration:
-
-- Create April 12 event if it does not exist.
-- Create `1Plus1 Manual/Admin Interest` event if it does not exist.
-- Backfill current approved applicants as approved and attended for the April 2026 event.
-- Verify every current approved applicant has one April 2026 event attendance row.
-- Patch existing interests lacking `eventId` to the April 2026 event.
-- Verify every interest has `eventId`.
-
-Deploy 2:
-
-- Narrow `interests.eventId` from optional to required in the schema.
-- Enforce shared-attended-event validation at the applicant mutation/API level.
-- Keep admin/manual interest creation able to bypass shared-event validation through explicit admin-only code paths.
+The original April backfill and automatic carryover migration plan is retired; use the [legacy compatibility policy](event-only-waitlists-review.md#parent-audit-correction--staged-compatibility-supersedes-initial-assumption). This change does not authorize a historical rewrite or schema narrowing.
 
 ## Emails
 
@@ -510,7 +380,7 @@ Later email phase:
 - checked-in/attendance confirmation if desired.
 - post-event interest window reminder.
 
-Email sending should follow the existing pattern in `src/lib/email.ts` and API route handlers that record Convex send timestamps/errors.
+Receipt delivery, retries, and reconciliation are owned by the [signup receipt guide](signup-receipt-review.md). Manual lifecycle emails remain separate.
 
 ## Access and Authorization
 
@@ -523,7 +393,7 @@ Applicant actions:
 Admin actions:
 
 - Continue using existing admin auth protection.
-- Admin APIs/mutations must enforce intended admin-only access at the route layer and should avoid exposing unrestricted mutations directly to applicant UI.
+- Administrative service authorization follows [the current remediation scope](issue58-photo-consent.md#limits-and-release-gate).
 
 ## Validation Rules
 
@@ -546,16 +416,7 @@ Attendance:
 - only admins can mark attendance.
 - attendance can only be marked for known event registrants.
 
-Interest submission:
-
-- event must exist.
-- requester and target must share at least one attended event.
-- at least one shared attended event must be completed or otherwise eligible for post-event interest submission.
-- current time must be within 7 days after at least one shared attended event end.
-- target must be opposite gender.
-- target must come from the server-validated eligible attendee set or pass the same server-side eligibility check when entered by number.
-- interest must store the chosen/derived shared event as `eventId`.
-- duplicate open interest for the same pair and event must be blocked.
+Interest submission follows [the eligibility contract](#shared-event-interest-requirements).
 
 ## Reporting and Admin Counts
 
@@ -570,48 +431,28 @@ Event detail should expose:
 - attended count by gender.
 - no-show count by gender.
 
-Capacity count:
-
-- `pending + approved`.
-
-Capacity does not count:
-
-- `waitlisted`
-- `rejected`
-- `cancelled`
+Capacity counts follow the [event-only queue policy](event-only-waitlists-review.md#implemented).
 
 ## Acceptance Criteria
 
+Queue/confirmation acceptance follows the [event-only policy](event-only-waitlists-review.md#implemented); submission acceptance follows [current eligibility](#shared-event-interest-requirements) and [consent](issue58-photo-consent.md#behavior).
+
 - Admin can create a scheduled event with default 60 male and 60 female capacity.
 - Admin-created monthly events use `title`, `eventCode`, `eventMonth`, and `series`.
-- Waitlist carryover uses the previous event in the same `series`, ordered by `eventMonth` and `startsAt`.
 - Applicant with completed profile can register for a scheduled event.
 - Applicant without completed profile cannot register and is directed to complete profile.
-- Prior-event waitlisted applicants are carried into the next event before new registrations consume capacity.
-- Prior-event waitlisted applicants carried into the next event become `pending`, subject to gender capacity unless admin overrides capacity.
-- Carryover pending applicants can be asked to confirm participation.
-- Carryover pending applicants who do not confirm within 48 hours become `cancelled`.
-- If gender capacity is available, event registration becomes `pending`.
-- If gender capacity is full, event registration becomes `waitlisted`.
 - Existing approved paid/background-checked applicant is labeled `approved_member` on event registration.
 - Pending/new applicant is labeled `awaiting_background_check` on event registration.
 - Admin can approve a pending event registration.
-- Admin can move a waitlisted applicant to pending only when capacity is available or with explicit override.
 - Admin can mark an approved or registered applicant as attended.
 - Admin can see event history on an applicant profile.
 - Applicant can see upcoming event registrations and event history.
-- Applicant can see eligible opposite-gender attendees who share an attended event within the active 7-day interest window, by applicant number and first name only.
-- Applicant cannot express interest in someone who does not share an attended event.
-- Applicant cannot express interest after the 7-day window.
 - Admin can manually create an interest without same-event restriction, but must choose an event for the interest record.
 - Admin can use `1Plus1 Manual/Admin Interest` for manual interests that do not belong to a real attended event.
-- Current approved applicants are backfilled as approved and attended for the April 2026 event.
-- Existing interests are backfilled with the April 2026 event as `eventId`.
 - Current male/female interest visibility behavior remains unchanged.
 
 ## Open Implementation Decisions
 
-- Whether rejected/cancelled event registrations can be reactivated or whether a new record should be created.
 - Whether event registration approval should strictly enforce payment status in the first pass if historical payment data is incomplete.
 - Whether admin event check-in should support QR/token check-in later or only manual admin check-in now.
 - Whether to support more than one `1plus1_match` event in the same month, and what admin workflow should create the distinct `eventCode`.
@@ -623,12 +464,10 @@ Capacity does not count:
 2. Event registration backend:
    - Applicant event listing and registration mutations.
    - Admin event CRUD and registrant status mutations.
-3. Migration:
-   - Create April 12 Event.
-   - Backfill current approved applicants as April 2026 approved attendees.
+3. Legacy compatibility:
+   - Preserve historical records under the [compatibility policy](event-only-waitlists-review.md#parent-audit-correction--staged-compatibility-supersedes-initial-assumption).
 4. Interest rules update:
-   - Add shared-attended-event applicant interest validation.
-   - Add same-event attendance and 7-day validations.
+   - Apply [current eligibility](#shared-event-interest-requirements).
    - Update duplicate open-interest checks to include `eventId`.
 5. Admin UI:
    - Events list/detail, registrant review, capacity, and check-in.
@@ -642,6 +481,6 @@ Capacity does not count:
    - Capacity/waitlist behavior.
    - approval transitions.
    - attendance gating for interests.
-   - 7-day deadline.
+   - Enabled-event eligibility and stale-event rejection.
    - duplicate open interest by pair and event.
-   - legacy backfill idempotency.
+   - retired legacy backfill rejects without writes.

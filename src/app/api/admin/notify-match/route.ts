@@ -1,3 +1,4 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
@@ -16,6 +17,8 @@ function isAdmin(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     if (!isAdmin(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,14 +35,14 @@ export async function POST(request: NextRequest) {
     }
 
     const convexClient = new ConvexHttpClient(convexUrl);
-    const match = await convexClient.query(api.matches.getById, { id: matchId });
+    const match = await convexClient.query(api.matches.getById, { adminSecret: getAdminSecret(),  id: matchId });
 
     if (!match) {
       return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
 
-    const male = await convexClient.query(api.registrations.getById, { id: match.maleRegistrationId });
-    const female = await convexClient.query(api.registrations.getById, { id: match.femaleRegistrationId });
+    const male = await convexClient.query(api.registrations.getById, { adminSecret: getAdminSecret(),  id: match.maleRegistrationId });
+    const female = await convexClient.query(api.registrations.getById, { adminSecret: getAdminSecret(),  id: match.femaleRegistrationId });
 
     if (!male || !female) {
       return NextResponse.json({ error: "Matched applicant not found" }, { status: 404 });
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const success = results.every((result) => result.success);
-    await convexClient.mutation(api.matches.markNotificationSent, {
+    await convexClient.mutation(api.matches.markNotificationSent, { adminSecret: getAdminSecret(),
       id: match._id,
       sent: success,
       error: success ? undefined : results.filter((result) => !result.success).map((result) => `${result.email}: ${result.error}`).join(" | "),
@@ -87,9 +90,9 @@ export async function POST(request: NextRequest) {
         failed: results.filter((result) => !result.success).length,
       },
     }, { status: success ? 200 : 502 });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete admin request" },
       { status: 500 }
     );
   }

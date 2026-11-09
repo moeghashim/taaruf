@@ -14,5 +14,5 @@ test("read-only and private even across repeated eligibility changes", async () 
   expect(mutation).not.toHaveBeenCalled();
 });
 test("no session fails closed", async () => { session.mockResolvedValue(null); expect((await GET()).status).toBe(401); expect(query).not.toHaveBeenCalled(); });
-test("expired session fails closed without exposing backend details", async () => { query.mockRejectedValue(new Error("Convex: Unauthorized private-hash")); const response = await GET(); expect(response.status).toBe(401); expect(await response.text()).not.toContain("private-hash"); });
+test("expired session fails closed without exposing backend details", async () => { query.mockRejectedValue(new Error("[Request ID: synthetic] Server Error\nUncaught Error: Unauthorized\n at private-hash")); const response = await GET(); expect(response.status).toBe(401); expect(await response.text()).not.toContain("private-hash"); });
 test("network errors are retryable and redacted", async () => { query.mockRejectedValue(new Error("private trace")); const response = await GET(); expect(response.status).toBe(503); expect(await response.text()).not.toContain("private trace"); });

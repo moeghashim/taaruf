@@ -1,5 +1,7 @@
-import { requireEventAdmin, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
-import { mutation, query } from "./_generated/server";
+import { sessionAllowed } from "./capabilitySecurity";
+import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
+import { requireEventAdmin, confirmationExpired, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -72,7 +74,7 @@ async function getRegistrationForSession(ctx: ReadCtx, sessionHash: string) {
     .withIndex("by_sessionHash", (q) => q.eq("sessionHash", sessionHash))
     .unique();
 
-  if (!session || session.revokedAt || session.expiresAt <= Date.now()) {
+  if (!session || !(await sessionAllowed(ctx, session))) {
     throw new Error("Unauthorized");
   }
 
@@ -99,7 +101,7 @@ async function serializeEventRegistration(ctx: ReadCtx, row: EventRegistration) 
     ctx.db.get(row.eventId),
     ctx.db.get(row.registrationId),
   ]);
-  return { ...row, confirmationStatus: confirmationStatusForRow(row), event, registration };
+  return withoutCapabilities({ ...row, confirmationStatus: confirmationStatusForRow(row), event, registration });
 }
 
 async function serializeEventWaitlistEntry(ctx: ReadCtx, row: Doc<"eventWaitlistEntries">) {
@@ -108,7 +110,7 @@ async function serializeEventWaitlistEntry(ctx: ReadCtx, row: Doc<"eventWaitlist
     ctx.db.get(row.registrationId),
     row.sourceEventId ? ctx.db.get(row.sourceEventId) : Promise.resolve(null),
   ]);
-  return { ...row, event, registration, sourceEvent };
+  return withoutCapabilities({ ...row, event, registration, sourceEvent });
 }
 
 
@@ -206,8 +208,9 @@ async function carryOverRegistrationsFromEvent(
 }
 
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const events = await ctx.db.query("events").withIndex("by_startsAt").order("desc").take(100);
     return await Promise.all(
       events.map(async (event) => {
@@ -312,8 +315,9 @@ export const getPublicByCode = query({
 });
 
 export const getWaitlistedRegistrationIds = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const activeRegistrationIds = new Set<Id<"registrations">>();
     const waitlistEntries = await ctx.db
       .query("eventWaitlistEntries")
@@ -328,8 +332,9 @@ export const getWaitlistedRegistrationIds = query({
 });
 
 export const getDetail = query({
-  args: { eventId: v.id("events") },
+  args: { adminSecret: v.optional(v.string()), eventId: v.id("events") },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
     // Isolate statuses so historical rows cannot hide a new queue. Never return partial counts.
@@ -401,13 +406,14 @@ export const getApplicantEvents = query({
 });
 
 export const getByRegistration = query({
-  args: { registrationId: v.id("registrations") },
+  args: { adminSecret: v.optional(v.string()), registrationId: v.id("registrations") },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const rows = await ctx.db
       .query("eventRegistrations")
       .withIndex("by_registrationId", (q) => q.eq("registrationId", args.registrationId))
       .take(100);
-    return await Promise.all(rows.map((row) => serializeEventRegistration(ctx, row)));
+    return withoutCapabilities(await Promise.all(rows.map((row) => serializeEventRegistration(ctx, row))));
   },
 });
 
@@ -860,8 +866,9 @@ export const updateRegistrationConfirmation = mutation({
 });
 
 export const verifyEventRegistrationStatusAxes = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const rows = await ctx.db.query("eventRegistrations").take(1000);
     return {
       checked: rows.length,
@@ -912,18 +919,19 @@ export const confirmParticipation = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
-    if (reservesCapacity(row.registrationStatus) && confirmationStatusForRow(row) === "confirmed") {
+    if ((reservesCapacity(row.registrationStatus) || row.registrationStatus === "waitlisted") && confirmationStatusForRow(row) === "confirmed") {
       return row._id;
     }
-    if (row.confirmationRequestedAt && row.confirmationExpiresAt && row.confirmationExpiresAt < Date.now()) {
+    if (row.confirmationRequestedAt !== undefined && row.confirmationExpiresAt !== undefined && row.confirmationExpiresAt < Date.now()) {
       throw new Error("Confirmation window has expired");
     }
-    if (row.registrationStatus === "withdrawn" && (!row.confirmationRequestedAt || !row.confirmationExpiresAt)) {
+    if ((row.registrationStatus === "withdrawn" || row.registrationStatus === "waitlisted") && (row.confirmationRequestedAt === undefined || row.confirmationExpiresAt === undefined)) {
       throw new Error("This event registration cannot be confirmed");
     }
     if (
       row.registrationStatus !== "pending" &&
       row.registrationStatus !== "approved" &&
+      row.registrationStatus !== "waitlisted" &&
       row.registrationStatus !== "withdrawn"
     ) {
       throw new Error("This event registration cannot be confirmed");
@@ -940,30 +948,26 @@ export const confirmParticipation = mutation({
   },
 });
 
-export const expireUnconfirmed = mutation({
+export const expireUnconfirmed = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const pending = await ctx.db.query("eventRegistrations").take(500);
-    let cancelled = 0;
-    for (const row of pending) {
-      if (
-        confirmationStatusForRow(row) === "not_confirmed" &&
-        row.confirmationExpiresAt &&
-        row.confirmationExpiresAt < now &&
-        !row.confirmedAt && reservesCapacity(row.registrationStatus)
-      ) {
-        await ctx.db.patch(row._id, {
-          registrationStatus: "withdrawn",
-          confirmationStatus: "cancelled",
-          cancelledAt: now,
-          updatedAt: now,
-        });
-        await promoteWaitlist(ctx, row.eventId, row.gender);
-        cancelled += 1;
+    const expired = [];
+    for (const status of ["pending", "approved", "waitlisted"] as const) {
+      for await (const row of ctx.db.query("eventRegistrations").withIndex("by_registrationStatus", q => q.eq("registrationStatus", status))) {
+        if (confirmationExpired(row, now)) {
+          await ctx.db.patch(row._id, {
+            registrationStatus: "withdrawn",
+            confirmationStatus: "cancelled",
+            cancelledAt: now,
+            updatedAt: now,
+          });
+          expired.push(row);
+        }
       }
     }
-    return { cancelled };
+    for (const row of expired) await promoteWaitlist(ctx, row.eventId, row.gender);
+    return { cancelled: expired.length };
   },
 });
 
@@ -1004,12 +1008,13 @@ export const recordRegistrationReceivedEmailFailure = mutation({
 });
 
 export const claimEventRegistrationEmail = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     eventRegistrationId: v.id("eventRegistrations"),
     kind: eventRegistrationEmailKind,
     force: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
     const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(row.registrationId)]);
@@ -1057,10 +1062,11 @@ export const claimEventRegistrationEmail = mutation({
 });
 
 export const recordEventRegistrationEmailSuccess = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     emailId: v.id("eventRegistrationEmails"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     await ctx.db.patch(args.emailId, {
       sentAt: Date.now(),
       error: undefined,
@@ -1070,11 +1076,12 @@ export const recordEventRegistrationEmailSuccess = mutation({
 });
 
 export const recordEventRegistrationEmailFailure = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     emailId: v.id("eventRegistrationEmails"),
     error: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     await ctx.db.patch(args.emailId, {
       sentAt: undefined,
       error: args.error,
@@ -1086,8 +1093,9 @@ export const recordEventRegistrationEmailFailure = mutation({
 export const backfillApril2026 = mutation({ args: {  }, handler: async () => { throw new Error("Legacy cross-event migration is retired; no data changed"); } });
 
 export const verifyEventBackfill = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const aprilEvent = await ctx.db
       .query("events")
       .withIndex("by_eventCode", (q) => q.eq("eventCode", "apr26"))

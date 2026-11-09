@@ -1,7 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 
 /**
  * Reads the admin display name from the `settings` table (key:
@@ -14,7 +13,7 @@ import { api } from "../../../../convex/_generated/api";
  *   - undefined while the query is loading
  */
 export function useAdminName(): string | null | undefined {
-  const value = useQuery(api.settings.get, { key: "admin_name" });
+  const value = useQuery("settings.get", { key: "admin_name" });
   if (value === undefined) return undefined;
   if (typeof value !== "string") return null;
   const trimmed = value.trim();

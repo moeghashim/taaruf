@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
@@ -20,7 +21,7 @@ async function fixture() {
     for (const [registrationId, sessionHash] of [[male, "male-session"], [female, "female-session"]] as const) await ctx.db.insert("applicantSessions", { registrationId, sessionHash, expiresAt: now + 100000, createdAt: now });
     return { male, female, interest, match, flow };
   });
-  vi.stubEnv("ADMIN_PASSWORD", "test-only-secret");
+  vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "test-only-secret");
   return { t, ...ids };
 }
 test("contact share requires admin credentials and bilateral consent", async () => {

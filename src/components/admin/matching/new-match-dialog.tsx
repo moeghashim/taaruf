@@ -1,9 +1,9 @@
 "use client";
+import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useRef, useState } from "react";
-import { useQuery } from "convex/react";
+import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import { useRouter } from "next/navigation";
-import { api } from "../../../../convex/_generated/api";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Ico } from "@/components/admin/primitives/icons";
 
@@ -18,7 +18,7 @@ export function NewMatchDialog() {
 }
 
 function NewMatchForm({ onCreated }: { onCreated: () => void }) {
-  const registrations = useQuery(api.registrations.getAll);
+  const registrations = useQuery("registrations.getAll");
   const router = useRouter();
   const [male, setMale] = useState("");
   const [female, setFemale] = useState("");
@@ -36,6 +36,7 @@ function NewMatchForm({ onCreated }: { onCreated: () => void }) {
     try {
       const response = await fetch("/api/admin/create-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ maleRegistrationId: male, femaleRegistrationId: female, adminNotes: notes }) });
       const result = await response.json();
+      if (response.ok) refreshAdminData();
       if (!response.ok || typeof result.matchId !== "string") throw new Error(result.error || "Unable to create match. Please try again.");
       router.push("/admin/workbench?match=" + encodeURIComponent(result.matchId));
       onCreated();

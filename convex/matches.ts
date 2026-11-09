@@ -1,3 +1,4 @@
+import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
@@ -32,8 +33,9 @@ const interestFlowStatuses = [
 
 /** Creates an admin-only suggestion. Consent and sharing remain separate. */
 export const create = mutation({
-  args: { adminSecret: v.string(), maleRegistrationId: v.id("registrations"), femaleRegistrationId: v.id("registrations"), adminNotes: v.optional(v.string()) },
+  args: { adminSecret: v.optional(v.string()), maleRegistrationId: v.id("registrations"), femaleRegistrationId: v.id("registrations"), adminNotes: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     if (args.maleRegistrationId === args.femaleRegistrationId) throw new ConvexError("Select two different applicants.");
     const male = await ctx.db.get(args.maleRegistrationId);
@@ -54,21 +56,23 @@ export const create = mutation({
 });
 
 export const getById = query({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("matches"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const match = await ctx.db.get(args.id);
     return match?.testResetAt !== undefined ? null : match;
   },
 });
 
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const matches = await ctx.db.query("matches").take(1000);
 
-    return await Promise.all(
+    return withoutCapabilities(await Promise.all(
       matches.filter(match => match.testResetAt === undefined).map(async (match) => {
         const maleRegistration = await ctx.db.get(match.maleRegistrationId);
         const femaleRegistration = await ctx.db.get(match.femaleRegistrationId);
@@ -81,16 +85,17 @@ export const getAll = query({
           interest,
         };
       })
-    );
+    ));
   },
 });
 
 export const resetPair = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     registrationAId: v.id("registrations"),
     registrationBId: v.id("registrations"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const registrations = await Promise.all([
       ctx.db.get(args.registrationAId),
       ctx.db.get(args.registrationBId),
@@ -194,11 +199,12 @@ export const resetPair = mutation({
 });
 
 export const deletePairConnection = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     registrationAId: v.id("registrations"),
     registrationBId: v.id("registrations"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const registrations = await Promise.all([
       ctx.db.get(args.registrationAId),
       ctx.db.get(args.registrationBId),
@@ -366,6 +372,7 @@ export const updateStatus = mutation({
     closedReason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const match = await ctx.db.get(args.id);
     if (!match) {
       throw new Error("Match not found");
@@ -375,7 +382,7 @@ export const updateStatus = mutation({
 
     // Contact disclosure is a privileged, consent-gated transaction, not a status label.
     if (args.status === "contact_shared") {
-      if (!process.env.ADMIN_PASSWORD || args.adminSecret !== process.env.ADMIN_PASSWORD) throw new Error("Unauthorized");
+      requireAdmin(args.adminSecret);
       if (["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
       const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
       if (!interest || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Active linked interest required");
@@ -470,8 +477,9 @@ export const updateStatus = mutation({
 });
 
 export const verifyActiveMatchInvariant = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const issues: Array<{
       kind: string;
       registrationId?: string;
@@ -535,12 +543,13 @@ export const verifyActiveMatchInvariant = query({
 });
 
 export const markNotificationSent = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("matches"),
     sent: v.boolean(),
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     if ((await ctx.db.get(args.id))?.testResetAt !== undefined) throw new Error("Reset test match is read-only");
     await ctx.db.patch(args.id, {
       matchNotificationSentAt: args.sent ? Date.now() : undefined,
@@ -553,12 +562,13 @@ export const markNotificationSent = mutation({
 });
 
 export const markContactSharedNotificationSent = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("matches"),
     sent: v.boolean(),
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     if ((await ctx.db.get(args.id))?.testResetAt !== undefined) throw new Error("Reset test match is read-only");
     await ctx.db.patch(args.id, {
       contactSharedNotificationSentAt: args.sent ? Date.now() : undefined,
