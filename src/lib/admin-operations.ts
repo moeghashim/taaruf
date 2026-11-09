@@ -21,6 +21,7 @@ export const adminMutations = {
  'interests.remove': api.interests.remove,
  'interests.progressFirst': api.interests.progressFirst,
  'interests.convertToMatch': api.interests.convertToMatch,
+ 'matches.resume': api.matches.resume,
  'matches.updateStatus': api.matches.updateStatus,
  'matches.resetPair': api.matches.resetPair,
  'settings.set': api.settings.set,

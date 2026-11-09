@@ -1,17 +1,20 @@
 "use client";
 
+import { applicantDestination } from "@/lib/applicant-destination";
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
 
 export default function ApplicantLoginPage() {
+  const [ready, setReady] = useState(false);
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setReady(true);
     if (new URLSearchParams(window.location.search).get("error")) {
       setError("That login link is invalid or expired. Request a new link.");
     }
@@ -27,7 +30,7 @@ export default function ApplicantLoginPage() {
       const response = await fetch("/api/applicant/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, next: applicantDestination(new URLSearchParams(window.location.search).get("next")) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Failed to send login link");
@@ -73,6 +76,7 @@ export default function ApplicantLoginPage() {
               <label htmlFor="email">Email</label>
               <input
                 id="email"
+                disabled={!ready}
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -82,7 +86,7 @@ export default function ApplicantLoginPage() {
             </div>
             {message && <p className="notice success">{message}</p>}
             {error && <p className="notice error">{error}</p>}
-            <button type="submit" className="btn btn-primary full" disabled={isSubmitting}>
+            <button type="submit" className="btn btn-primary full" disabled={!ready || isSubmitting}>
               {Ico.inbox}
               <span>{isSubmitting ? "Sending..." : "Send Login Link"}</span>
             </button>

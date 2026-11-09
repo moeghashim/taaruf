@@ -55,7 +55,7 @@ stripe listen --forward-to localhost:3000/api/webhook
 | `/admin` | Admin dashboard (password protected) |
 | `/me` | Applicant profile, event registrations, and interests |
 
-For event queue and confirmation behavior, see [event-only waitlists](docs/event-only-waitlists-review.md#implemented). For submission photo choices and revocation, see [photo consent](docs/issue58-photo-consent.md#behavior). For invalidated links and fresh sign-in recovery, see [capability cutoff and recovery](docs/capability-cutoff-recovery.md).
+For profile reviews, participant approvals, and final admin contact release, see the [interest workflow guide](docs/female-website-interest-flow.md). For event queue and confirmation behavior, see [event-only waitlists](docs/event-only-waitlists-review.md#implemented). For submission photo choices and revocation, see [photo consent](docs/issue58-photo-consent.md#behavior). For invalidated links and fresh sign-in recovery, see [capability cutoff and recovery](docs/capability-cutoff-recovery.md).
 
 ## Create GitHub Repo & Deploy
 

@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as femaleInterestWorkflow from "../femaleInterestWorkflow.js";
+import type * as femaleWorkflowDelivery from "../femaleWorkflowDelivery.js";
 import type * as applicantAuth from "../applicantAuth.js";
 import type * as applicantInterests from "../applicantInterests.js";
 import type * as applicantProfile from "../applicantProfile.js";
@@ -35,6 +37,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  femaleInterestWorkflow: typeof femaleInterestWorkflow;
+  femaleWorkflowDelivery: typeof femaleWorkflowDelivery;
   applicantAuth: typeof applicantAuth;
   applicantInterests: typeof applicantInterests;
   applicantProfile: typeof applicantProfile;

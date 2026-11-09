@@ -1,9 +1,11 @@
 "use client";
 
+import { applicantLoginHref } from "@/lib/applicant-destination";
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
 import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
@@ -11,7 +13,10 @@ import { Pill, type Tone } from "@/components/admin/primitives/status-pill";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 
 type DashboardInterest = {
+  femaleWorkflow?: { state: string };
   interestId: string;
+  matchId?: string | null;
+  paused?: boolean;
   direction: "inbound" | "outbound" | "private";
   status: string;
   flowStatus: string;
@@ -27,7 +32,7 @@ type DashboardInterest = {
   senderPhotoConsentRevokedAt: number | null;
   counterparty: {
     applicantNumber: number | null;
-    name: string | null;
+    name?: string;
     age: number;
     gender: string;
     maritalStatus: string | null;
@@ -50,7 +55,9 @@ type DashboardInterest = {
 };
 
 type DashboardData = {
+  requestedConnectionId?: string | null;
   applicant: {
+    status?: string;
     name: string;
     gender: "male" | "female";
     applicantNumber: number | null;
@@ -234,6 +241,7 @@ function counterpartyFinalApprovalFor(interest: DashboardInterest) {
 }
 
 function canRespondToInterest(interest: DashboardInterest) {
+  if (interest.femaleWorkflow) return false;
   return (
     interest.direction === "inbound" &&
     interest.visibility !== "internal_only" &&
@@ -242,6 +250,7 @@ function canRespondToInterest(interest: DashboardInterest) {
 }
 
 function canFinalApproveInterest(interest: DashboardInterest) {
+  if (interest.femaleWorkflow) return false;
   return Boolean(
     interest.bioVisibleAt &&
     viewerFinalApprovalFor(interest) === "pending" &&
@@ -252,6 +261,7 @@ function canFinalApproveInterest(interest: DashboardInterest) {
 }
 
 function canWithdrawInterest(interest: DashboardInterest) {
+  if (interest.femaleWorkflow) return false;
   return (
     (interest.direction === "outbound" || interest.direction === "private") &&
     (interest.flowStatus === "awaiting_inbound_response" ||
@@ -343,7 +353,7 @@ function ProfileSideCard({
     viewerFinalApprovalFor(interest);
   const counterpartyFinalApproval = counterpartyFinalApprovalFor(interest);
   const canRespond = canRespondToInterest(interest);
-  const canFinalApprove = canFinalApproveInterest(interest);
+  const canFinalApprove = !interest.paused && canFinalApproveInterest(interest);
   const canWithdraw = canWithdrawInterest(interest);
   const canClose = canCloseConnection(interest);
   const profileFacts = counterparty.fullProfileVisible ? profileFactsFor(counterparty) : [];
@@ -361,12 +371,14 @@ function ProfileSideCard({
         </div>
       </div>
 
+      {interest.matchId && <button type="button" className="btn" disabled={busy} onClick={() => onAction({ action: interest.paused ? "resume_connection" : "pause_connection", interestId: interest.interestId })}>{interest.paused ? "Resume" : "Pause"}</button>}
+      {interest.paused && <p className="notice">This connection is paused.</p>}
       {interest.keepOpenExpiresAt && (
         <p className="notice warning">Keep Open expires {formatDate(interest.keepOpenExpiresAt)}.</p>
       )}
 
       {viewerFinalApproval === "approved" && interest.flowStatus !== "contact_shared" && (
-        <p className="notice success">Your final approval is recorded. Waiting for the other applicant.</p>
+        <p className="notice success">{counterpartyFinalApproval === "approved" ? "Both final approvals are recorded. Pending final admin approval; contacts remain private." : "Your final approval is recorded. Waiting for the other applicant."}</p>
       )}
 
       {viewerFinalApproval === "pending" && counterpartyFinalApproval === "approved" && (
@@ -541,9 +553,11 @@ function Section({
   title,
   description,
   interests,
+  requestedConnectionId,
   onAction,
   busy,
 }: {
+  requestedConnectionId?: string | null;
   title: string;
   description: string;
   interests: DashboardInterest[];
@@ -552,7 +566,7 @@ function Section({
 }) {
   const [selectedInterestId, setSelectedInterestId] = useState<string | null>(null);
   const selectedInterest =
-    interests.find((interest) => interest.interestId === selectedInterestId) ?? interests[0] ?? null;
+    interests.find((interest) => interest.interestId === (selectedInterestId ?? requestedConnectionId)) ?? (requestedConnectionId ? null : interests[0] ?? null);
 
   useEffect(() => {
     if (!interests.length) {
@@ -560,9 +574,9 @@ function Section({
       return;
     }
     if (!selectedInterestId || !interests.some((interest) => interest.interestId === selectedInterestId)) {
-      setSelectedInterestId(interests[0].interestId);
+      setSelectedInterestId(requestedConnectionId ? interests.find(row => row.interestId === requestedConnectionId)?.interestId ?? null : interests[0].interestId);
     }
-  }, [interests, selectedInterestId]);
+  }, [interests, selectedInterestId, requestedConnectionId]);
 
   return (
     <section id={sectionId(title)} className="panel applicant-section">
@@ -619,23 +633,30 @@ export default function ApplicantDashboardPage() {
   const [sideOpen, setSideOpen] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(false);
 
+  const applicantFetch = useCallback(async (url: string, init?: RequestInit) => {
+    const loginHref = applicantLoginHref(window.location.pathname + window.location.search);
+    const response = await fetch(url, init);
+    if (response.status === 401) router.replace(loginHref);
+    return response;
+  }, [router]);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/applicant/me", { cache: "no-store" });
+      const requested = new URLSearchParams(window.location.search).get("connection");
+      const response = await applicantFetch("/api/applicant/me" + (requested !== null ? "?connection=" + encodeURIComponent(requested) : ""), { cache: "no-store" });
       if (response.status === 401) {
-        router.replace("/login");
         return;
       }
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Failed to load dashboard");
-      setData(payload);
+      if (!response.ok) { setData(null); throw new Error(payload.error || "Failed to load dashboard"); }
+      setData({ ...payload, requestedConnectionId: requested });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsLoading(false);
     }
-  }, [router]);
+  }, [applicantFetch]);
 
   useEffect(() => {
     void load();
@@ -652,9 +673,9 @@ export default function ApplicantDashboardPage() {
       if (document.hidden) { timer = setTimeout(refresh, 3000); return; }
       active = new AbortController();
       try {
-        const response = await fetch("/api/applicant/interest-eligibility", { cache: "no-store", signal: active.signal });
+        const response = await applicantFetch("/api/applicant/interest-eligibility", { cache: "no-store", signal: active.signal });
         if (stopped) return;
-        if (response.status === 401) { router.replace("/login"); return; }
+        if (response.status === 401) return;
         if (!response.ok) throw new Error("Availability refresh failed");
         const eligibility = await response.json();
         if (stopped) return;
@@ -679,7 +700,7 @@ export default function ApplicantDashboardPage() {
       document.removeEventListener("visibilitychange", onFocus);
     };
     // Poll only eligibility; do not refetch the profile or write touchSession.
-  }, [hasDashboard, busy, router]);
+  }, [hasDashboard, busy, applicantFetch]);
 
   useEffect(() => {
     setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "", photoConsent: "" })));
@@ -688,9 +709,8 @@ export default function ApplicantDashboardPage() {
   const loadProfile = useCallback(async () => {
     setIsProfileLoading(true);
     try {
-      const response = await fetch("/api/applicant/profile", { cache: "no-store" });
+      const response = await applicantFetch("/api/applicant/profile", { cache: "no-store" });
       if (response.status === 401) {
-        router.replace("/login");
         return;
       }
       const payload = await response.json();
@@ -706,7 +726,7 @@ export default function ApplicantDashboardPage() {
     } finally {
       setIsProfileLoading(false);
     }
-  }, [router]);
+  }, [applicantFetch]);
 
   useEffect(() => {
     void loadProfile();
@@ -714,9 +734,8 @@ export default function ApplicantDashboardPage() {
 
   const loadEvents = useCallback(async () => {
     try {
-      const response = await fetch("/api/applicant/events", { cache: "no-store" });
+      const response = await applicantFetch("/api/applicant/events", { cache: "no-store" });
       if (response.status === 401) {
-        router.replace("/login");
         return;
       }
       const payload = await response.json();
@@ -725,7 +744,7 @@ export default function ApplicantDashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [router]);
+  }, [applicantFetch]);
 
   useEffect(() => {
     void loadEvents();
@@ -738,7 +757,7 @@ export default function ApplicantDashboardPage() {
     setMessage(null);
     setError(null);
     try {
-      const response = await fetch("/api/applicant/interests", {
+      const response = await applicantFetch("/api/applicant/interests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -773,7 +792,7 @@ export default function ApplicantDashboardPage() {
     setMessage(null);
     setError(null);
     try {
-      const response = await fetch("/api/applicant/events", {
+      const response = await applicantFetch("/api/applicant/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "register", eventId }),
@@ -798,7 +817,7 @@ export default function ApplicantDashboardPage() {
     setMessage(null);
     setError(null);
     try {
-      const response = await fetch("/api/applicant/events", {
+      const response = await applicantFetch("/api/applicant/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "confirm", eventRegistrationId }),
@@ -833,7 +852,7 @@ export default function ApplicantDashboardPage() {
 
       for (const file of chosenFiles) {
         const preparedFile = await prepareImageFileForUpload(file);
-        const result = await fetch("/api/photos/upload", {
+        const result = await applicantFetch("/api/photos/upload", {
           method: "POST",
           headers: {
             "Content-Type": preparedFile.type || "application/octet-stream",
@@ -887,7 +906,7 @@ export default function ApplicantDashboardPage() {
     }
 
     try {
-      const response = await fetch("/api/applicant/profile", {
+      const response = await applicantFetch("/api/applicant/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1053,6 +1072,8 @@ export default function ApplicantDashboardPage() {
                 </p>
               </div>
             </div>
+
+            {data.applicant.status === "approved" && <FemaleReviews />}
 
             <div className="stats">
               <div className="stat">
@@ -1357,6 +1378,7 @@ export default function ApplicantDashboardPage() {
               <Section
                 title="Inbound Interests"
                 description="People who expressed interest in you."
+                requestedConnectionId={data.requestedConnectionId}
                 interests={data.inbound}
                 onAction={async body => { await runAction(body); }}
                 busy={busy}
@@ -1364,6 +1386,7 @@ export default function ApplicantDashboardPage() {
               <Section
                 title="Outbound Interests"
                 description="Visible interests you sent."
+                requestedConnectionId={data.requestedConnectionId}
                 interests={data.outbound}
                 onAction={async body => { await runAction(body); }}
                 busy={busy}
@@ -1371,7 +1394,8 @@ export default function ApplicantDashboardPage() {
               {data.applicant.gender === "female" && (
                 <Section
                   title="Private Documented Interests"
-                  description="Interests you documented for yourself and the admin team. These are not visible to men before a match."
+                  description="Interests you documented for yourself and the admin team. These remain private until the team creates a recipient-specific review."
+                  requestedConnectionId={data.requestedConnectionId}
                   interests={data.privateDocumented}
                   onAction={async body => { await runAction(body); }}
                   busy={busy}

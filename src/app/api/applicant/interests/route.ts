@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
 import { getConvexClient } from "@/lib/convex";
-import { sendContactSharedEmail, sendFinalApprovalRequestedEmail, sendInboundInterestReceivedEmail } from "@/lib/email";
+import { sendFinalApprovalRequestedEmail, sendInboundInterestReceivedEmail } from "@/lib/email";
 
 function getAppUrl() {
   return process.env.NEXT_PUBLIC_APP_URL
@@ -98,6 +98,12 @@ export async function POST(request: NextRequest) {
     if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     const convex = getConvexClient();
 
+    if (["pause_connection", "resume_connection"].includes(body.action)) {
+      if (typeof body.interestId !== "string" || !body.interestId) return NextResponse.json({ error: "interestId is required" }, { status: 400 });
+      await convex.mutation(api.matches.setPausedForApplicant, { sessionHash, interestId: body.interestId, paused: body.action === "pause_connection" });
+      return NextResponse.json({ success: true });
+    }
+
     if (body.action === "revoke_photos") {
       if (typeof body.interestId !== "string" || !body.interestId) return NextResponse.json({ error: "interestId is required" }, { status: 400 });
       await convex.mutation(api.applicantInterests.revokeSenderPhotoConsent, { sessionHash, interestId: body.interestId });
@@ -124,6 +130,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (result.inboundInterestNotification) {
+        const recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: result.interestId, kind: "inbound" });
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
@@ -140,9 +147,9 @@ export async function POST(request: NextRequest) {
         }
 
         const emailResult = await sendInboundInterestReceivedEmail({
-          name: result.inboundInterestNotification.name,
-          email: result.inboundInterestNotification.email,
-          applicantPortalUrl: `${appUrl}/me`,
+          name: recipient.name,
+          email: recipient.email,
+          applicantPortalUrl: `${appUrl}/me?connection=${encodeURIComponent(result.interestId)}`,
         });
 
         if (!emailResult.success) {
@@ -192,6 +199,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (result.finalApprovalNotification) {
+        const recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: body.interestId, kind: "final_approval" });
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
@@ -207,9 +215,9 @@ export async function POST(request: NextRequest) {
         }
 
         const emailResult = await sendFinalApprovalRequestedEmail({
-          name: result.finalApprovalNotification.name,
-          email: result.finalApprovalNotification.email,
-          applicantPortalUrl: `${appUrl}/me`,
+          name: recipient.name,
+          email: recipient.email,
+          applicantPortalUrl: `${appUrl}/me?connection=${encodeURIComponent(body.interestId)}`,
         });
 
         if (!emailResult.success) {
@@ -228,55 +236,6 @@ export async function POST(request: NextRequest) {
           success: true,
           message: "Approval recorded. The other applicant has been notified.",
           notification: { sent: true, providerId: emailResult.id },
-        });
-      }
-
-      if (result.contactSharedNotification?.recipients.length) {
-        const appUrl = getAppUrl();
-        if (!appUrl) {
-          const error = "App URL not configured";
-          await convex.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: getAdminSecret(),
-            id: result.contactSharedNotification.matchId,
-            sent: false,
-            error,
-          });
-          return NextResponse.json({
-            success: true,
-            message: "Contact information is shared, but the notification email could not be sent.",
-            notification: { sent: false, error },
-          });
-        }
-
-        const emailResults = await Promise.all(
-          result.contactSharedNotification.recipients.map(async (recipient) => ({
-            recipient,
-            result: await sendContactSharedEmail({
-              name: recipient.name,
-              email: recipient.email,
-              applicantPortalUrl: `${appUrl}/me`,
-            }),
-          }))
-        );
-        const failures = emailResults.filter((item) => !item.result.success);
-        const success = failures.length === 0;
-        await convex.mutation(api.matches.markContactSharedNotificationSent, { adminSecret: getAdminSecret(),
-          id: result.contactSharedNotification.matchId,
-          sent: success,
-          error: success
-            ? undefined
-            : failures.map((item) => `${item.recipient.email}: ${item.result.error}`).join(" | "),
-        });
-
-        return NextResponse.json({
-          success: true,
-          message: success
-            ? "Contact information is shared. Both applicants have been notified."
-            : "Contact information is shared, but one or more notification emails failed.",
-          notification: {
-            sent: success,
-            requested: emailResults.length,
-            failed: failures.length,
-          },
         });
       }
 

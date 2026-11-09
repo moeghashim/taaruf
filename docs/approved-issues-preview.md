@@ -9,7 +9,7 @@ This branch is based on origin/main after PRs #34 and #35. It does not incorpora
 - Preview middleware blocks API access (including GET magic-link/session mutations), except local admin sign-in. The client provider uses a non-routable backend and the page shows a UI-review-only notice. This is fail-closed, not a functioning isolated backend.
 - Functional preview requires a separately provisioned Convex deployment containing this branch, synthetic fixtures only, matching server credentials, and PREVIEW_BACKEND_ISOLATED=true only after both backend URLs have been verified isolated. Do not set that flag on the current live-backed preview environment.
 - Configure isolated service credentials according to [.env.example](../.env.example), including for contact sharing.
-- Contact sharing means actually revealing contact details in both authenticated portals after bilateral final approval. The admin action does not send emails. Photos require separate owner consent; legacy share links no longer override a refusal.
+- Contact release and its queued portal notifications follow the [all-origin workflow gate](female-website-interest-flow.md#all-origin-final-approval-expanded-issue-64). Photo access follows the [consent guide](issue58-photo-consent.md#behavior).
 - Current authorization remediation and acceptance status are owned by [the photo-consent release gate](issue58-photo-consent.md#limits-and-release-gate).
 
 ## Attendance semantics

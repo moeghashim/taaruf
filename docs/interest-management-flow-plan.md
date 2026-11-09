@@ -19,12 +19,11 @@
 2. Decide whether to store workflow fields directly on `interests` or in a new `interestFlows` table.
 3. Default recommendation: add an `interestFlows` table keyed by `interestId` because the flow has many applicant decisions, timestamps, and audit-sensitive transitions.
 4. Define exact terminal behavior for photo decline:
-   - Confirmed: continue to automatic contact sharing after both final approvals even if photos are declined.
+   - Photo decisions follow the [consent guide](issue58-photo-consent.md#behavior).
 5. Contact sharing behavior:
-   - Confirmed: contact sharing happens automatically after both applicants give final approval.
-   - Implementation should not require management to manually release contact details unless management later adds an override/hold flag.
+   - Follow the [all-origin final contact gate](female-website-interest-flow.md#all-origin-final-approval-expanded-issue-64).
 6. Visibility behavior:
-   - Confirmed: applicant names become visible once the bio-review state opens.
+   - Follow [brother-facing identity privacy](female-website-interest-flow.md#pause-resume-and-privacy).
 7. Queue behavior:
    - Confirmed: each candidate is limited to one active bio-review flow at a time.
    - Keep the existing active-match queue behavior and apply the same principle to active bio-review flows.
@@ -65,12 +64,12 @@
    - Look up approved registration by email.
    - Create one-time token.
    - Store only token hash in Convex.
-   - Email `/login/verify?token=<rawToken>`.
-3. Add `/login/verify` route:
+   - Follow the [authenticated login destination flow](female-website-interest-flow.md#applicant-notification-destinations).
+3. Use `/api/applicant/login/verify`:
    - Hash provided token and claim it once.
    - Create hashed applicant session record.
    - Set HTTP-only session cookie.
-   - Redirect to `/me`.
+   - Restore the validated destination described in the workflow guide.
 4. Add logout endpoint to clear cookie and expire the session.
 5. Add server helper to resolve the current applicant from the session cookie.
 6. Keep applicant API access behind Next.js route handlers or server components so Convex mutations do not trust browser-provided identity.
@@ -105,7 +104,7 @@
    - Patch workflow state atomically.
    - Append an event.
    - Return only safe data.
-5. Update existing admin mutations where needed to keep `interestFlows` synchronized when admins convert, decline, close, or reset pairs.
+5. Keep `interestFlows` synchronized with the [derived lifecycle and supported admin actions](female-website-interest-flow.md#pause-resume-and-privacy).
 
 ## Phase 5: Email Flow
 
@@ -123,7 +122,7 @@
    - photo decision made.
 2. Add route handlers or actions to send emails after state transitions.
 3. Store send timestamps and errors either on `interestFlows` for latest state notifications or in `interestFlowEvents` for full audit history.
-4. Include applicant links to `/me/interests/<interestId>`.
+4. Follow the [applicant notification destinations](female-website-interest-flow.md#applicant-notification-destinations).
 5. Include management links:
    - `/admin/workbench?interest=<interestId>&step=<step>`
    - `/admin/workbench?match=<matchId>&step=<step>`
@@ -137,7 +136,7 @@
    - Inbound Interests section.
    - Outbound Interests section.
    - Status labels matching the workflow states.
-2. Build `/me/interests/[interestId]`:
+2. Render selected connections via the [authenticated destination flow](female-website-interest-flow.md#applicant-notification-destinations):
    - Timeline/status panel.
    - Action buttons relevant to the current applicant and current state.
    - Bio comparison section that appears only when `bioVisibleAt` is set.
@@ -157,7 +156,7 @@
 2. Add management action controls for:
    - approve bio review.
    - approve contact sharing.
-   - override photo decline outcome.
+   - enforce the [recipient photo consent rules](issue58-photo-consent.md#behavior).
    - close/reopen flow where allowed.
 3. Add flow timeline to workbench using `interestFlowEvents`.
 4. Update `/admin/inbox` to show:
@@ -166,31 +165,19 @@
    - photo request decisions.
    - contact-ready flows.
    - notification failures.
-5. Preserve current actions: progress, convert, decline, notify, reset pair, and create share link.
+5. Use the [supported admin actions](female-website-interest-flow.md#pause-resume-and-privacy); manual Progress/Convert controls are retired.
 
 ## Phase 8: Contact Sharing
 
-1. Implement a single server-side transition to `contact_shared`.
-2. In that transition:
-   - Set `interestFlows.contactSharedAt`.
-   - Patch linked `matches.status` to `contact_shared` when a match exists.
-   - Preserve existing active-match queue behavior from `matches.updateStatus`.
-   - Send both applicants a contact-shared email.
-   - Run automatically when both final approvals are present, even if a photo request was declined.
-3. Applicant UI should reveal:
-   - name.
-   - email.
-   - phone.
-   - any management-approved notes.
-4. Ensure contact info never appears in earlier API responses.
+Use the [all-origin final contact gate](female-website-interest-flow.md#all-origin-final-approval-expanded-issue-64) and its durable delivery contract. Contact information must remain absent from earlier API responses; photo visibility remains governed by the [consent guide](issue58-photo-consent.md#behavior).
 
 ## Phase 9: Tests
 
 1. Convex unit tests:
    - inbound accept/decline/keep open.
    - male number submission creates a visible inbound interest for the female recipient.
-   - female number submission creates a documented interest visible only to the female applicant and admins before match.
-   - female documented interest does not notify the male applicant before match.
+   - female number submission creates a private documented interest; sharing follows the workflow guide.
+   - private female review access follows the [admin sharing boundary](female-website-interest-flow.md#all-origin-final-approval-expanded-issue-64).
    - multiple male inbound interests can appear for one female applicant.
    - interest submission is only by applicant/event number, not browsing.
    - bio visibility opens only after the female recipient accepts a visible male outbound interest.
@@ -198,7 +185,7 @@
    - photo request and approval.
    - photo decline does not block contact sharing.
    - contact sharing visibility.
-   - contact sharing happens automatically after both final approvals.
+   - contact sharing obeys the [final admin contact gate](female-website-interest-flow.md#all-origin-final-approval-expanded-issue-64).
    - Keep Open expires and releases the flow.
    - only one active bio-review flow is allowed per applicant.
    - unauthorized applicant action rejected.
@@ -246,8 +233,7 @@
 - Women can document private interests because many are not comfortable visibly expressing interest.
 - Men and women express interest only by submitting the other person's applicant/event number.
 - Male number submission creates a visible outbound interest to the woman.
-- Female number submission creates a private documented interest visible only to the female applicant and admins before match.
-- Female-documented interests must not notify the male applicant or open bio review by themselves before match.
-- Once a match is in place, normal match visibility rules can show that mutual interest exists.
+- Female private review sharing follows the [workflow guide](female-website-interest-flow.md).
+- Canonical pair approval does not bypass the private sharing boundary; see the workflow guide.
 - No applicant browsing is used to express interest.
-- Full names and bios still remain hidden until the bio-review state opens.
+- Brother-facing identity follows the [workflow privacy policy](female-website-interest-flow.md#pause-resume-and-privacy).

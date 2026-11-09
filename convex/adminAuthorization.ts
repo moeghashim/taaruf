@@ -9,7 +9,7 @@ export function withoutCapabilities<T>(value: T): T {
   if (Array.isArray(value)) return value.map(withoutCapabilities) as T;
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value).filter(([key]) =>
-      !["profileAccessToken", "shareToken", "sessionHash", "tokenHash", "stripeSessionId"].includes(key)
+      !["profileAccessToken", "shareToken", "sessionHash", "tokenHash", "reviewTokenHash", "stripeSessionId"].includes(key)
     ).map(([key, item]) => [key, withoutCapabilities(item)])) as T;
   }
   return value;

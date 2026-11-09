@@ -316,7 +316,7 @@ Admin interest creation:
 
 ## Shared-Event Interest Requirements
 
-Applicant submissions use exactly one explicitly enabled `1plus1_match` event with scheduled/completed status; missing flags, multiple enabled events, manual events, or cancellation fail closed. There is no automatic seven-day opening or closing rule. The sender must have an Approved, confirmed, attended registration for that event. The target must be globally Approved, opposite gender, and have a completed profile; both profiles must be completed. Target attendance at the enabled event is not required.
+Applicant submissions use exactly one explicitly enabled `1plus1_match` event with scheduled/completed status; missing flags, multiple enabled events, manual events, or cancellation fail closed. There is no automatic seven-day opening or closing rule. The sender must have an Approved, confirmed, attended event registration. The target must be globally Approved, opposite gender, and have a completed profile; both profiles must be completed. Target attendance at the enabled event is not required.
 
 The browser sends `expectedEventId`; the mutation rechecks the active event, session-derived sender, target’s permanent applicant number and first name. Stale event submissions reject. Submit Interest accepts globally Pending or Approved senders meeting the event and profile requirements. There is no browsable attendee picker. The resulting interest stores the server-validated event ID.
 
@@ -449,7 +449,7 @@ Queue/confirmation acceptance follows the [event-only policy](event-only-waitlis
 - Applicant can see upcoming event registrations and event history.
 - Admin can manually create an interest without same-event restriction, but must choose an event for the interest record.
 - Admin can use `1Plus1 Manual/Admin Interest` for manual interests that do not belong to a real attended event.
-- Current male/female interest visibility behavior remains unchanged.
+- Male/female review visibility follows the [current workflow guide](female-website-interest-flow.md).
 
 ## Open Implementation Decisions
 

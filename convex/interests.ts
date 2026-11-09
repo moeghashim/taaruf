@@ -4,7 +4,6 @@ import { v } from "convex/values";
 import {
   activateInterestAndQueueCompetitors,
   createInterestWithRules,
-  createMatchFromInterest,
 } from "./interestRules";
 
 const interestSource = v.union(
@@ -87,6 +86,7 @@ export const updateAdminStatus = mutation({
       throw new Error("Interest not found");
     }
 
+    if (args.adminStatus === "matched" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
     await ctx.db.patch(args.id, {
       adminStatus: args.adminStatus,
       status: args.adminStatus === "declined" ? "declined" : interest.status,
@@ -201,6 +201,13 @@ export const updateStatus = mutation({
       throw new Error("Interest not found");
     }
 
+    if (interest.femaleWorkflow) {
+      if (interest.matchId || !["closed", "declined"].includes(args.status)) throw new Error("Use female website workflow");
+      await ctx.db.patch(interest._id, { femaleWorkflow: { ...interest.femaleWorkflow, state: args.status === "declined" ? "declined" : "revoked" } });
+      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
+      if (flow) await ctx.db.patch(flow._id, { flowStatus: args.status as "closed" | "declined", updatedAt: Date.now() });
+    }
+    if (args.status === "converted_to_match" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
     await ctx.db.patch(args.id, {
       status: args.status,
       adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,
@@ -276,7 +283,8 @@ export const convertToMatch = mutation({
       throw new Error("Interest not found");
     }
 
-    return await createMatchFromInterest(ctx, interest, args.adminNotes);
+    if (interest.femaleWorkflow || (interest.source === "platform_submission" && interest.visibility === "internal_only")) throw new Error("Use female website workflow");
+    throw new Error("Matches are created automatically after both participant final approvals");
   },
 });
 

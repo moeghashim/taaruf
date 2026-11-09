@@ -63,6 +63,11 @@ next-env.d.ts
 /ops/security-*.log
 /*-consent-local-review/
 
+/ops/female-runtime/
+/ops/female-*.log
+/ops/female-coordinator-status.md
+
+/ops/all-origin-runtime/
 /ops/security-release-runtime/
 
 /ops/*-runtime*/

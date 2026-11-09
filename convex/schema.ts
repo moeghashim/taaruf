@@ -230,7 +230,21 @@ export default defineSchema({
     .index("by_stripeSessionId", ["stripeSessionId"])
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
+  femaleWorkflowDeliveries: defineTable({
+    interestId: v.id("interests"), recipientId: v.id("registrations"),
+    kind: v.union(v.literal("sister_confirmation"), v.literal("pending_review"), v.literal("contacts_ready")),
+    key: v.string(), status: v.union(v.literal("pending"), v.literal("sending"), v.literal("sent"), v.literal("failed"), v.literal("cancelled")),
+    attempts: v.number(), nextAttemptAt: v.number(), leaseUntil: v.optional(v.number()),
+    providerCooldownUntil: v.optional(v.number()),
+    providerPayload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string() })),
+    firstAttemptAt: v.optional(v.number()), sentAt: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(),
+  }).index("by_key", ["key"]).index("by_interestId", ["interestId"]).index("by_interestId_and_status", ["interestId", "status"]).index("by_status_and_nextAttemptAt", ["status", "nextAttemptAt"]).index("by_providerCooldownUntil", ["providerCooldownUntil"]),
   interests: defineTable({
+    femaleWorkflow: v.optional(v.object({
+      state: v.union(v.literal("private_documented"), v.literal("awaiting_brother_review"), v.literal("awaiting_sister_confirmation"), v.literal("pending_admin_approval"), v.literal("contacts_released"), v.literal("declined"), v.literal("revoked")),
+      reviewTokenHash: v.optional(v.string()), reviewExpiresAt: v.optional(v.number()),
+      brotherAcceptedAt: v.optional(v.number()), sisterConfirmedAt: v.optional(v.number()), adminReleasedAt: v.optional(v.number()),
+    })),
     senderPhotoConsent: v.optional(v.union(v.literal("yes"), v.literal("no"))),
     senderPhotoConsentRevokedAt: v.optional(v.number()),
     testReset: v.optional(v.object({ at: v.number(), reason: v.string(), actor: v.literal("admin") })),
@@ -373,6 +387,8 @@ export default defineSchema({
   }).index("by_operationKey", ["operationKey"]),
 
   matches: defineTable({
+    contactGate: v.optional(v.union(v.literal("pending_admin_approval"), v.literal("contacts_released"))),
+    adminReleasedAt: v.optional(v.number()),
     testResetAt: v.optional(v.number()),
     maleRegistrationId: v.id("registrations"),
     femaleRegistrationId: v.id("registrations"),

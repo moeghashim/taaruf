@@ -42,34 +42,7 @@ function currentLookingFor(profile: RegistrationDoc) {
   return requirements.length ? requirements.join(", ") : profile.lookingFor?.trim() || "";
 }
 
-function interestTone(status?: string) {
-  switch (status || "pending") {
-    case "matched":
-      return "green" as const;
-    case "requested":
-      return "blue" as const;
-    case "declined":
-      return "rose" as const;
-    default:
-      return "gold" as const;
-  }
-}
 
-function summarizeInterestStatuses(interests: Array<{ adminStatus?: string; status?: string; matchId?: string | null }>) {
-  return {
-    pending: interests.filter((interest) => (interest.adminStatus || "pending") === "pending").length,
-    requested: interests.filter((interest) => (interest.adminStatus || "pending") === "requested").length,
-    declined: interests.filter((interest) => (interest.adminStatus || "pending") === "declined").length,
-    matched: interests.filter((interest) => (interest.adminStatus || "pending") === "matched" || interest.matchId).length,
-    activeWorkflow: interests.filter((interest) => interest.status === "active" || interest.status === "converted_to_match").length,
-  };
-}
-
-/**
- * Body of the detail pane drawer for a single registration. Renders
- * profile facts + applicant long-form text + an editable admin notes
- * field + the action bar (approve/reject/delete).
- */
 export function ProfileDetail({
   profile,
   registrationNumber,
@@ -93,8 +66,8 @@ export function ProfileDetail({
   const lookingFor = currentLookingFor(profile);
   const outboundInterests = interestHistory?.outbound ?? [];
   const inboundInterests = interestHistory?.inbound ?? [];
-  const outboundSummary = summarizeInterestStatuses(outboundInterests);
-  const inboundSummary = summarizeInterestStatuses(inboundInterests);
+
+
 
   // Reset notes whenever the visible profile changes.
   useEffect(() => {
@@ -225,11 +198,8 @@ export function ProfileDetail({
             <Pill tone="plain">{outboundInterests.length}</Pill>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Pill tone={interestTone("pending")}>Pending {outboundSummary.pending}</Pill>
-            <Pill tone={interestTone("requested")}>Requested {outboundSummary.requested}</Pill>
-            <Pill tone={interestTone("declined")}>Declined {outboundSummary.declined}</Pill>
-            <Pill tone={interestTone("matched")}>Matched {outboundSummary.matched}</Pill>
-            <Pill tone="plain">Active {outboundSummary.activeWorkflow}</Pill>
+            <Pill tone="plain">Historical requested {outboundInterests.filter(interest => interest.adminStatus === "requested").length}</Pill>
+            <Pill tone="plain">Historical matched {outboundInterests.filter(interest => interest.adminStatus === "matched").length}</Pill>
           </div>
         </div>
         <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12, background: "var(--bg-tint)" }}>
@@ -238,11 +208,8 @@ export function ProfileDetail({
             <Pill tone="plain">{inboundInterests.length}</Pill>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Pill tone={interestTone("pending")}>Pending {inboundSummary.pending}</Pill>
-            <Pill tone={interestTone("requested")}>Requested {inboundSummary.requested}</Pill>
-            <Pill tone={interestTone("declined")}>Declined {inboundSummary.declined}</Pill>
-            <Pill tone={interestTone("matched")}>Matched {inboundSummary.matched}</Pill>
-            <Pill tone="plain">Active {inboundSummary.activeWorkflow}</Pill>
+            <Pill tone="plain">Historical requested {inboundInterests.filter(interest => interest.adminStatus === "requested").length}</Pill>
+            <Pill tone="plain">Historical matched {inboundInterests.filter(interest => interest.adminStatus === "matched").length}</Pill>
           </div>
         </div>
       </div>
@@ -340,8 +307,7 @@ export function ProfileDetail({
               <strong style={{ fontSize: 13 }}>{interest.toRegistration?.name ?? "Unknown"}</strong>
               <div style={{ color: "var(--mute)", fontSize: 12 }}>{interest.toRegistration?.email ?? "—"}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Pill tone={interestTone(interest.adminStatus)}>Status: {(interest.adminStatus || "pending").replace(/_/g, " ")}</Pill>
-                <Pill tone="plain">Workflow: {interest.status.replace(/_/g, " ")}</Pill>
+                <Pill tone="plain">{interest.status.replaceAll("_", " ")}</Pill>
                 {interest.rank ? <Pill tone="plain">Rank {interest.rank}</Pill> : null}
                 <Pill tone="plain">{interest.source.replace(/_/g, " ")}</Pill>
                 {interest.matchId ? <Pill tone="green">Linked to match</Pill> : null}
@@ -366,8 +332,7 @@ export function ProfileDetail({
               <strong style={{ fontSize: 13 }}>{interest.fromRegistration?.name ?? "Unknown"}</strong>
               <div style={{ color: "var(--mute)", fontSize: 12 }}>{interest.fromRegistration?.email ?? "—"}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Pill tone={interestTone(interest.adminStatus)}>Status: {(interest.adminStatus || "pending").replace(/_/g, " ")}</Pill>
-                <Pill tone="plain">Workflow: {interest.status.replace(/_/g, " ")}</Pill>
+                <Pill tone="plain">{interest.status.replaceAll("_", " ")}</Pill>
                 {interest.rank ? <Pill tone="plain">Their rank {interest.rank}</Pill> : null}
                 <Pill tone="plain">{interest.visibility.replace(/_/g, " ")}</Pill>
                 {interest.matchId ? <Pill tone="green">Linked to match</Pill> : null}
