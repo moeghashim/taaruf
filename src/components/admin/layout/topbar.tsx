@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { profileSearchHref } from "@/lib/admin-profile-filters";
-import { NewMatchDialog } from "@/components/admin/matching/new-match-dialog";
 import { Ico } from "@/components/admin/primitives/icons";
 
 type Props = {
@@ -42,7 +41,6 @@ export function Topbar({ crumb, onMenu }: Props) {
           {Ico.bell}
           <span className="dot" />
         </button>
-        <NewMatchDialog />
       </div>
     </div>
   );
