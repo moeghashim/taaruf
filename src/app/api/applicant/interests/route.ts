@@ -98,6 +98,12 @@ export async function POST(request: NextRequest) {
     if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     const convex = getConvexClient();
 
+    if (["pause_connection", "resume_connection"].includes(body.action)) {
+      if (typeof body.interestId !== "string" || !body.interestId) return NextResponse.json({ error: "interestId is required" }, { status: 400 });
+      await convex.mutation(api.matches.setPausedForApplicant, { sessionHash, interestId: body.interestId, paused: body.action === "pause_connection" });
+      return NextResponse.json({ success: true });
+    }
+
     if (body.action === "revoke_photos") {
       if (typeof body.interestId !== "string" || !body.interestId) return NextResponse.json({ error: "interestId is required" }, { status: 400 });
       await convex.mutation(api.applicantInterests.revokeSenderPhotoConsent, { sessionHash, interestId: body.interestId });
@@ -124,6 +130,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (result.inboundInterestNotification) {
+        const recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: result.interestId, kind: "inbound" });
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
@@ -140,8 +147,8 @@ export async function POST(request: NextRequest) {
         }
 
         const emailResult = await sendInboundInterestReceivedEmail({
-          name: result.inboundInterestNotification.name,
-          email: result.inboundInterestNotification.email,
+          name: recipient.name,
+          email: recipient.email,
           applicantPortalUrl: `${appUrl}/me`,
         });
 
@@ -192,6 +199,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (result.finalApprovalNotification) {
+        const recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: body.interestId, kind: "final_approval" });
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
@@ -207,8 +215,8 @@ export async function POST(request: NextRequest) {
         }
 
         const emailResult = await sendFinalApprovalRequestedEmail({
-          name: result.finalApprovalNotification.name,
-          email: result.finalApprovalNotification.email,
+          name: recipient.name,
+          email: recipient.email,
           applicantPortalUrl: `${appUrl}/me`,
         });
 

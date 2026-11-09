@@ -1,4 +1,5 @@
-import { assertMatchInterest, linkedFlows, queuePendingReview, enqueueContactDelivery } from "./contactGate";
+import { sessionAllowed } from "./capabilitySecurity";
+import { assertMatchInterest, linkedFlows, releasePairContacts, setPairPaused, assertParticipantsAvailable } from "./contactGate";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
@@ -56,6 +57,7 @@ export const create = mutation({
         if (interest.toRegistrationId === to && !interest.testReset && !["closed", "declined", "withdrawn"].includes(interest.status)) throw new ConvexError("Use participant final approvals for an interest-backed pair; manual creation cannot substitute consent.");
       }
     }
+    await assertParticipantsAvailable(ctx, male._id, female._id);
     const now = Date.now();
     return await ctx.db.insert("matches", { maleRegistrationId: male._id, femaleRegistrationId: female._id, status: "new", interestType: "admin_suggested", initiatedBy: "admin_recommendation", adminNotes: args.adminNotes?.trim() || undefined, createdAt: now, updatedAt: now });
   },
@@ -386,37 +388,19 @@ export const updateStatus = mutation({
 
     if (match.testResetAt !== undefined) throw new Error("Reset test match is read-only");
 
-    if (match.interestId && (await ctx.db.get(match.interestId))?.femaleWorkflow && !["closed", "declined", "paused"].includes(args.status)) throw new Error("Use female website workflow");
-    // Contact disclosure is a privileged, consent-gated transaction, not a status label.
-    if (args.status === "contact_shared") {
-      requireAdmin(args.adminSecret);
-      if (["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
-      const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
-      if (!interest || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Active linked interest required");
-      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
-      if (!flow || ["closed", "declined"].includes(flow.flowStatus) || flow.requesterFinalApproval !== "approved" || flow.recipientFinalApproval !== "approved") throw new Error("Both applicants must give final approval before contacts can be shared");
-      const pair = await Promise.all([ctx.db.get(match.maleRegistrationId), ctx.db.get(match.femaleRegistrationId)]);
-      for (const person of pair) {
-        if (!person || person.status !== "approved" || !person.email || !person.phone) throw new Error("Both applicants must be approved and have contact details");
-        if (person.activeMatchId && person.activeMatchId !== match._id) throw new Error("Applicant already has an active match");
-      }
-      assertMatchInterest(match, interest);
-      const flows = await linkedFlows(ctx, interest);
-      if (flows.some(f => f.requesterFinalApproval !== "approved" || f.recipientFinalApproval !== "approved")) throw new Error("Both applicants must give final approval before contacts can be shared");
-      // A mutable status must never reset the first disclosure. Preserve legacy history too.
-      const alreadyReleased = match.contactGate === "contacts_released" ||
-        (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
-      if (!alreadyReleased) {
-        await queuePendingReview(ctx, match._id);
-        const now = Date.now();
-        await ctx.db.patch(match._id, { contactGate: "contacts_released", adminReleasedAt: match.adminReleasedAt ?? now });
-        for (const linked of flows) {
-          await ctx.db.patch(linked._id, { flowStatus: "contact_shared", contactSharedAt: linked.contactSharedAt ?? now, updatedAt: now });
-          await ctx.db.insert("interestFlowEvents", { interestFlowId: linked._id, interestId: linked.interestId, actor: "system", eventType: "contacts_disclosed_in_portal", message: "Final admin approval: contacts released.", createdAt: now });
-        }
-        for (const person of pair) await enqueueContactDelivery(ctx, interest._id, person!._id, "contacts_ready");
-      }
+    if (args.status === match.status && args.adminNotes !== undefined) {
+      await ctx.db.patch(match._id, { adminNotes: args.adminNotes, updatedAt: Date.now() });
+      return match._id;
     }
+
+    if (args.status === "paused") return await setPairPaused(ctx, match, true);
+    if (args.status === "contact_shared") {
+      await releasePairContacts(ctx, match);
+      for (const id of [match.maleRegistrationId, match.femaleRegistrationId]) await demoteOpenInterestsInvolvingRegistration(ctx, id, match._id);
+      return args.id;
+    }
+    if (args.status !== match.status && !["closed", "declined"].includes(args.status)) throw new Error("Use Resume for a paused match");
+    if (["closed", "declined"].includes(match.status) && args.status !== match.status) throw new Error("Match is not active");
     const previousStatus = match.status;
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -425,27 +409,6 @@ export const updateStatus = mutation({
       closedReason: args.closedReason ?? match.closedReason,
       updatedAt: now,
     });
-
-    if (args.status === "contact_shared" && previousStatus !== "contact_shared") {
-      const maleRegistration = await ctx.db.get(match.maleRegistrationId);
-      const femaleRegistration = await ctx.db.get(match.femaleRegistrationId);
-
-      if (maleRegistration?.activeMatchId && maleRegistration.activeMatchId !== args.id) {
-        throw new Error("Male registration already has an active match");
-      }
-      if (femaleRegistration?.activeMatchId && femaleRegistration.activeMatchId !== args.id) {
-        throw new Error("Female registration already has an active match");
-      }
-
-      await ctx.db.patch(match.maleRegistrationId, {
-        activeMatchId: args.id,
-      });
-      await ctx.db.patch(match.femaleRegistrationId, {
-        activeMatchId: args.id,
-      });
-      await demoteOpenInterestsInvolvingRegistration(ctx, match.maleRegistrationId, args.id);
-      await demoteOpenInterestsInvolvingRegistration(ctx, match.femaleRegistrationId, args.id);
-    }
 
     if (previousStatus === "contact_shared" && releasingStatuses.has(args.status)) {
       const maleRegistration = await ctx.db.get(match.maleRegistrationId);
@@ -466,27 +429,13 @@ export const updateStatus = mutation({
       await promoteOldestQueuedForRegistration(ctx, match.femaleRegistrationId);
     }
 
-    const linkedInterestId = match.interestId;
-    if ((args.status === "closed" || args.status === "declined") && linkedInterestId) {
-      const interest = await ctx.db.get(linkedInterestId);
-      if (interest) {
-        await ctx.db.patch(interest._id, {
-          status: args.status,
-          adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,
-          updatedAt: now,
-        });
-      }
-
-      const flow = await ctx.db
-        .query("interestFlows")
-        .withIndex("by_interestId", (q) => q.eq("interestId", linkedInterestId))
-        .unique();
-      if (flow) {
-        await ctx.db.patch(flow._id, {
-          flowStatus: args.status,
-          closedReason: args.closedReason ?? `match_${args.status}`,
-          updatedAt: now,
-        });
+    if (["closed", "declined"].includes(args.status) && match.interestId) {
+      const rows = await ctx.db.query("interests").withIndex("by_matchId", q => q.eq("matchId", match._id)).collect();
+      for (const row of rows) {
+        assertMatchInterest(match, row);
+        await ctx.db.patch(row._id, { status: args.status as "closed" | "declined", updatedAt: now });
+        const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
+        if (flow) await ctx.db.patch(flow._id, { flowStatus: args.status as "closed" | "declined", closedReason: args.closedReason ?? `match_${args.status}`, updatedAt: now });
       }
     }
 
@@ -595,5 +544,30 @@ export const markContactSharedNotificationSent = mutation({
     });
 
     return args.id;
+  },
+});
+
+export const resume = mutation({
+  args: { adminSecret: v.optional(v.string()), id: v.id("matches") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const match = await ctx.db.get(args.id);
+    if (!match) throw new Error("Match unavailable");
+    return await setPairPaused(ctx, match, false);
+  },
+});
+
+export const setPausedForApplicant = mutation({
+  args: { sessionHash: v.string(), interestId: v.id("interests"), paused: v.boolean() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.query("applicantSessions").withIndex("by_sessionHash", q => q.eq("sessionHash", args.sessionHash)).unique();
+    if (!session || !(await sessionAllowed(ctx, session))) throw new Error("Unauthorized");
+    const person = await ctx.db.get(session.registrationId);
+    const interest = await ctx.db.get(args.interestId);
+    if (!person || person.status !== "approved" || !interest || interest.testReset || ![interest.fromRegistrationId, interest.toRegistrationId].includes(person._id) || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Unauthorized");
+    const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+    if (!match) throw new Error("Match unavailable");
+    assertMatchInterest(match, interest);
+    return await setPairPaused(ctx, match, args.paused, person._id);
   },
 });

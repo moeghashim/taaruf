@@ -14,6 +14,8 @@ import { prepareImageFileForUpload } from "@/lib/image-upload";
 type DashboardInterest = {
   femaleWorkflow?: { state: string };
   interestId: string;
+  matchId?: string | null;
+  paused?: boolean;
   direction: "inbound" | "outbound" | "private";
   status: string;
   flowStatus: string;
@@ -53,6 +55,7 @@ type DashboardInterest = {
 
 type DashboardData = {
   applicant: {
+    status?: string;
     name: string;
     gender: "male" | "female";
     applicantNumber: number | null;
@@ -348,7 +351,7 @@ function ProfileSideCard({
     viewerFinalApprovalFor(interest);
   const counterpartyFinalApproval = counterpartyFinalApprovalFor(interest);
   const canRespond = canRespondToInterest(interest);
-  const canFinalApprove = canFinalApproveInterest(interest);
+  const canFinalApprove = !interest.paused && canFinalApproveInterest(interest);
   const canWithdraw = canWithdrawInterest(interest);
   const canClose = canCloseConnection(interest);
   const profileFacts = counterparty.fullProfileVisible ? profileFactsFor(counterparty) : [];
@@ -366,6 +369,8 @@ function ProfileSideCard({
         </div>
       </div>
 
+      {interest.matchId && <button type="button" className="btn" disabled={busy} onClick={() => onAction({ action: interest.paused ? "resume_connection" : "pause_connection", interestId: interest.interestId })}>{interest.paused ? "Resume" : "Pause"}</button>}
+      {interest.paused && <p className="notice">This connection is paused.</p>}
       {interest.keepOpenExpiresAt && (
         <p className="notice warning">Keep Open expires {formatDate(interest.keepOpenExpiresAt)}.</p>
       )}
@@ -565,7 +570,8 @@ function Section({
       return;
     }
     if (!selectedInterestId || !interests.some((interest) => interest.interestId === selectedInterestId)) {
-      setSelectedInterestId(interests[0].interestId);
+      const requested = new URLSearchParams(window.location.search).get("connection");
+      setSelectedInterestId(interests.find(row => row.interestId === requested)?.interestId ?? interests[0].interestId);
     }
   }, [interests, selectedInterestId]);
 
@@ -1059,7 +1065,7 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
-            <FemaleReviews />
+            {data.applicant.status === "approved" && <FemaleReviews />}
 
             <div className="stats">
               <div className="stat">

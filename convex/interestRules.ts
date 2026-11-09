@@ -12,7 +12,7 @@ type InterestSource = Doc<"interests">["source"];
 
 const openInterestStatusSet = new Set<InterestStatus>(openInterestStatuses);
 
-async function createInitialInterestFlow(ctx: MutationCtx, interest: Doc<"interests">) {
+export async function createInitialInterestFlow(ctx: MutationCtx, interest: Doc<"interests">) {
   const now = Date.now();
   const existingFlow = await ctx.db
     .query("interestFlows")
@@ -77,9 +77,6 @@ export function deriveVisibility(fromGender: "male" | "female", toGender: "male"
   return "admin_actionable" as const;
 }
 
-export function deriveInterestType(fromGender: "male" | "female") {
-  return fromGender === "male" ? "man_interested" : "woman_interested";
-}
 
 async function assertNoDuplicateOpenInterest(
   ctx: ReadCtx,
@@ -158,71 +155,6 @@ export async function assertCanCreateInterest(
   };
 }
 
-export async function createMatchFromInterest(
-  ctx: MutationCtx,
-  interest: Doc<"interests">,
-  adminNotes?: string
-) {
-  if (interest.femaleWorkflow || (interest.source === "platform_submission" && interest.visibility === "internal_only")) throw new Error("Use female website workflow");
-  if (interest.testReset) throw new Error("Reset test interest is read-only");
-  if (interest.matchId) {
-    throw new Error("Interest already linked to a match");
-  }
-
-  if (["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
-  const consent = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
-  if (!consent || consent.fromRegistrationId !== interest.fromRegistrationId || consent.toRegistrationId !== interest.toRegistrationId || ["closed", "declined"].includes(consent.flowStatus) || consent.requesterFinalApproval !== "approved" || consent.recipientFinalApproval !== "approved") throw new Error("Both applicants must give final approval before match creation");
-  const fromRegistration = await getRegistrationOrThrow(ctx, interest.fromRegistrationId);
-  const toRegistration = await getRegistrationOrThrow(ctx, interest.toRegistrationId);
-  deriveVisibility(fromRegistration.gender, toRegistration.gender);
-
-  const maleRegistrationId =
-    fromRegistration.gender === "male" ? interest.fromRegistrationId : interest.toRegistrationId;
-  const femaleRegistrationId =
-    fromRegistration.gender === "female" ? interest.fromRegistrationId : interest.toRegistrationId;
-  for (const person of [fromRegistration, toRegistration]) {
-    if (person.status !== "approved") throw new Error("Both applicants must be approved");
-    if (person.activeMatchId) throw new Error("Applicant already has an active match");
-  }
-  for await (const existing of ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", maleRegistrationId))) {
-    if (existing.femaleRegistrationId === femaleRegistrationId && existing.testResetAt === undefined && !["closed", "declined"].includes(existing.status)) throw new Error("Pair already has an open match");
-  }
-  const now = Date.now();
-
-  const matchId = await ctx.db.insert("matches", {
-    maleRegistrationId,
-    femaleRegistrationId,
-    interestType: deriveInterestType(fromRegistration.gender),
-    status: "reviewing",
-    contactGate: "pending_admin_approval",
-    adminNotes: adminNotes ?? interest.notes,
-    interestId: interest._id,
-    initiatedBy: "interest_signal",
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await ctx.db.patch(interest._id, {
-    matchId,
-    status: "converted_to_match",
-    adminStatus: "matched",
-    updatedAt: now,
-  });
-  const flow = await ctx.db
-    .query("interestFlows")
-    .withIndex("by_interestId", (q) => q.eq("interestId", interest._id))
-    .unique();
-  if (flow) {
-    await ctx.db.patch(flow._id, {
-      flowStatus: "bio_review",
-      bioVisibleAt: flow.bioVisibleAt ?? now,
-      updatedAt: now,
-    });
-  }
-
-  return matchId;
-}
-
 export async function createInterestWithRules(
   ctx: MutationCtx,
   args: {
@@ -257,7 +189,7 @@ export async function createInterestWithRules(
     eventId: args.eventId,
     rank: args.rank,
     source: args.source,
-    ...(args.source === "platform_submission" && visibility === "internal_only" ? { femaleWorkflow: { state: "private_documented" as const } } : {}),
+    ...(visibility === "internal_only" ? { femaleWorkflow: { state: "private_documented" as const } } : {}),
     status: initialStatus,
     visibility,
     adminStatus: "pending",

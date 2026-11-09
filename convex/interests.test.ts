@@ -282,10 +282,9 @@ describe("interest rules", () => {
     await expect(t.mutation(api.interests.convertToMatch, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, interestId })).rejects.toThrow("automatically");
     await t.run(async ctx => {
       const now = Date.now();
-      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interestId)).unique();
-      await ctx.db.patch(flow!._id, { bioVisibleAt: now });
       for (const [registrationId, sessionHash] of [[male, "consent-m"], [female, "consent-f"]] as const) await ctx.db.insert("applicantSessions", { registrationId, sessionHash, createdAt: now, expiresAt: now + 100000 });
     });
+    await t.mutation(api.applicantInterests.respondToInbound, { sessionHash: "consent-f", interestId, decision: "accept" });
     await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "consent-m", interestId, approved: true });
     const approved = await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "consent-f", interestId, approved: true });
     const matchId = approved.matchId!;
@@ -296,10 +295,6 @@ describe("interest rules", () => {
       source: "admin_entered",
     });
     vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "test-only-secret");
-    await t.run(async ctx => {
-      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interestId)).unique();
-      await ctx.db.patch(flow!._id, { requesterFinalApproval: "approved", recipientFinalApproval: "approved" });
-    });
     await t.mutation(api.matches.updateStatus, {
       id: matchId,
       status: "contact_shared",
@@ -408,8 +403,6 @@ describe("interest rules", () => {
     expect(result.private).toBe(false);
     expect(result.inboundInterestNotification).toMatchObject({
       interestId: result.interestId,
-      name: "Portal Female",
-      email: "portal.female@example.com",
     });
     expect(interest.visibility).toBe("admin_actionable");
     expect(interest.inboundInterestNotificationSentAt).toBeTypeOf("number");
@@ -557,7 +550,6 @@ describe("interest rules", () => {
       sessionHash: maleSession,
     });
     expect(maleDashboard.outbound[0]?.counterparty).toMatchObject({
-      name: "Visible Female",
       fullProfileVisible: true,
       maritalStatus: "single",
       education: "College",
@@ -565,7 +557,7 @@ describe("interest rules", () => {
       ethnicity: "Arab",
       spouseRequirement1: "Visible Female requirement one",
       shareableBio: "Visible Female bio text",
-      label: "Visible Female",
+      label: "Applicant #2",
       email: null,
       phone: null,
     });
@@ -651,9 +643,7 @@ describe("interest rules", () => {
     });
 
     expect(firstApproval.finalApprovalNotification).toMatchObject({
-      registrationId: male,
-      name: "Final Approval Male",
-      email: "final.approval.male@example.com",
+      interestId: result.interestId,
     });
 
     const femaleDashboard = await t.query(api.applicantInterests.getDashboard, {

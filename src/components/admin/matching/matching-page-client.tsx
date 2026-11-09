@@ -90,6 +90,7 @@ function useMatchingData() {
   const updateInterestNotes = useMutation("interests.updateNotes");
   const removeInterest = useMutation("interests.remove");
   const updateMatchStatus = useMutation("matches.updateStatus");
+  const resumeMatch = useMutation("matches.resume");
   const resetPair = useMutation("matches.resetPair");
 
   const interests = useMemo(() => (interestsRaw ?? []) as InterestRecord[], [interestsRaw]);
@@ -112,6 +113,7 @@ function useMatchingData() {
     registrations: registrationsData.registrations,
     registrationNumbers: registrationsData.registrationNumbers,
     actions: {
+      resumeMatch: (id: string) => resumeMatch({ id: id as Id<"matches"> }),
       updateInterestStatus: (id: string, status: InterestStatus) =>
         updateInterestStatus({ id: id as Id<"interests">, status }),
       updateInterestNotes: (id: string, notes: string) =>
@@ -542,10 +544,14 @@ function InterestActions({
   };
 
   if (interest.testReset) return <span role="status">Test reset — audit retained</span>;
-  if (interest.femaleWorkflow || (interest.source === "platform_submission" && interest.visibility === "internal_only" && interest.fromRegistration?.gender === "female" && !interest.matchId)) return <div>
+  if (interest.femaleWorkflow || (interest.visibility === "internal_only" && interest.fromRegistration?.gender === "female" && !interest.matchId)) return <div>
     <ContactRelease match={interest.match} femaleInterestId={interest.femaleWorkflow ? interest._id : undefined} onMessage={onMessage} />
     <FemaleWorkflowActions interestId={interest._id} state={interest.femaleWorkflow?.state ?? (isOpenInterest(interest.status) ? "private_documented" : "declined")} compact />
-    {!interest.matchId && <button className="btn btn-sm btn-ghost" type="button" onClick={() => onReset(interest)}>Reset test submission</button>}
+    {isOpenInterest(interest.status) && !interest.matchId && <>
+      <button className="btn btn-sm" disabled={busy !== null} onClick={() => void run("decline", () => data.actions.updateInterestStatus(interest._id, "declined"), "Interest declined.")}>Decline interest</button>
+      <button className="btn btn-sm" disabled={busy !== null} onClick={() => void run("close", () => data.actions.updateInterestStatus(interest._id, "closed"), "Interest closed.")}>Close interest</button>
+    </>}
+    {!interest.matchId && interest.source === "platform_submission" && <button className="btn btn-sm btn-ghost" type="button" onClick={() => onReset(interest)}>Reset test submission</button>}
   </div>;
 
   return (
@@ -666,7 +672,6 @@ function InterestRow({
 export function InterestsPageClient() {
   const data = useMatchingData();
   const [resetSelection, setResetSelection] = useState<{ id: string; pair: string; event: string } | null>(null);
-  const [showArchive, setShowArchive] = useState(false);
   const [visibility, setVisibility] = useState<"all" | "internal_only" | "admin_actionable">("all");
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -683,7 +688,6 @@ export function InterestsPageClient() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.interests
-      .filter((interest) => showArchive === isArchivedInterest(interest))
       .filter((interest) => visibility === "all" || interest.visibility === visibility)
       .filter((interest) => eventFilter === "all" || interest.eventId === eventFilter)
       .filter((interest) => {
@@ -701,7 +705,7 @@ export function InterestsPageClient() {
           .some((value) => value!.toLowerCase().includes(q));
       })
       .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [data.interests, eventFilter, search, visibility, showArchive]);
+  }, [data.interests, eventFilter, search, visibility]);
 
   return (
     <>
@@ -715,10 +719,6 @@ export function InterestsPageClient() {
         <LoadingPanel />
       ) : (
         <div className="panel">
-          <div className="tabs">
-            <button className={"tab " + (!showArchive ? "active" : "")} onClick={() => setShowArchive(false)}>Pending review</button>
-            <button className={"tab " + (showArchive ? "active" : "")} onClick={() => setShowArchive(true)}>Released / closed history</button>
-          </div>
           <div className="filters">
             <div className="search-inline">
               <span className="glass">{Ico.search}</span>
@@ -840,8 +840,9 @@ function MatchCard({
 
       <ContactRelease match={match} femaleInterestId={match.interest?.femaleWorkflow ? match.interest._id : undefined} onMessage={onMessage} />
       {match.interest?.femaleWorkflow && <FemaleWorkflowActions interestId={match.interest._id} state={match.interest.femaleWorkflow.state} />}
-      <AdminSelect label="Close or pause match" value={match.status} values={[match.status, ...(["closed", "declined", "paused"] as MatchStatus[]).filter(status => status !== match.status)]} onChange={(nextStatus) => void run("status", () => data.actions.updateMatchStatus(match._id, nextStatus, match.adminNotes), "Match status updated.")} />
-      {!match.interest?.femaleWorkflow && <NotesEditor initialValue={match.adminNotes} placeholder="Match notes..." onSave={(notes) => data.actions.updateMatchStatus(match._id, match.status, notes)} />}
+      {match.status === "paused" && <button type="button" className="btn" disabled={busy !== null} onClick={() => void run("resume", () => data.actions.resumeMatch(match._id), "Match resumed.")}>Resume</button>}
+      {!["closed", "declined"].includes(match.status) && <AdminSelect label="Close or pause match" value={match.status} values={[match.status, ...(["closed", "declined", "paused"] as MatchStatus[]).filter(status => status !== match.status)]} onChange={(nextStatus) => void run("status", () => data.actions.updateMatchStatus(match._id, nextStatus, match.adminNotes), "Match status updated.")} />}
+      <NotesEditor initialValue={match.adminNotes} placeholder="Match notes..." onSave={(notes) => data.actions.updateMatchStatus(match._id, match.status, notes)} />
 
       {match.matchNotificationError && (
         <p style={{ color: "var(--rose)", fontSize: 11 }}>Notification issue: {match.matchNotificationError}</p>
@@ -1098,10 +1099,10 @@ export function WorkbenchPageClient() {
               <h3>{mode === "interest" ? "Evaluating interest" : "Evaluating match"} · {selectedInterest ? interestLifecycle(selectedInterest) : selectedMatch?.status ?? "No selection"}</h3>
             </div>
             <div style={{ padding: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              {selectedInterest && !selectedInterest.femaleWorkflow && selectedInterest.source === "platform_submission" && selectedInterest.visibility === "internal_only" && selectedInterest.fromRegistration?.gender === "female" && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <FemaleWorkflowActions interestId={selectedInterest._id} state="private_documented" />}
+              {selectedInterest && !selectedInterest.femaleWorkflow && selectedInterest.visibility === "internal_only" && selectedInterest.fromRegistration?.gender === "female" && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <FemaleWorkflowActions interestId={selectedInterest._id} state="private_documented" />}
               {selectedInterest?.femaleWorkflow && <FemaleWorkflowActions interestId={selectedInterest._id} state={selectedInterest.femaleWorkflow.state} />}
               {selectedMatch?.interest?.femaleWorkflow && <FemaleWorkflowActions interestId={selectedMatch.interest._id} state={selectedMatch.interest.femaleWorkflow.state} />}
-              {selectedInterest && !selectedInterest.femaleWorkflow && (
+              {selectedInterest && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && (
                 <button
                   className="btn"
                   type="button"
@@ -1111,7 +1112,7 @@ export function WorkbenchPageClient() {
                       "decline",
                       async () => {
                         await data.actions.updateInterestStatus(selectedInterest._id, "declined");
-                        await notifyDecline(selectedInterest._id);
+                        if (!selectedInterest.femaleWorkflow) await notifyDecline(selectedInterest._id);
                       },
                       "Interest declined and notification processed."
                     )
@@ -1120,9 +1121,11 @@ export function WorkbenchPageClient() {
                   {busy === "decline" ? "Declining..." : "Decline interest"}
                 </button>
               )}
+              {selectedInterest && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <button type="button" className="btn" disabled={busy !== null} onClick={() => void run("close", () => data.actions.updateInterestStatus(selectedInterest._id, "closed"), "Interest closed.")}>Close interest</button>}
+              {(selectedMatch ?? selectedInterest?.match)?.status === "paused" && <button type="button" className="btn" disabled={busy !== null} onClick={() => void run("resume", () => data.actions.resumeMatch((selectedMatch ?? selectedInterest!.match)!._id), "Match resumed.")}>Resume</button>}
               <ContactRelease match={selectedMatch ?? selectedInterest?.match ?? null} femaleInterestId={selectedInterest?.femaleWorkflow ? selectedInterest._id : selectedMatch?.interest?.femaleWorkflow ? selectedMatch.interest._id : undefined} onMessage={setMessage} />
-              {!selectedInterest?.femaleWorkflow && !(selectedInterest?.source === "platform_submission" && selectedInterest?.fromRegistration?.gender === "female") && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />}
-              {!selectedInterest?.femaleWorkflow && !(selectedInterest?.source === "platform_submission" && selectedInterest?.fromRegistration?.gender === "female") && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />}
+              {!selectedInterest?.femaleWorkflow && !(selectedInterest?.fromRegistration?.gender === "female") && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />}
+              {!selectedInterest?.femaleWorkflow && !(selectedInterest?.fromRegistration?.gender === "female") && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />}
             </div>
           </div>
         </div>

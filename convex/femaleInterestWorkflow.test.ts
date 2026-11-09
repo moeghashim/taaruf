@@ -43,7 +43,7 @@ test("private -> authenticated read only review -> explicit accept -> one pendin
   expect(await t.run(ctx => ctx.db.query("matches").take(100))).toHaveLength(1);
   expect(await t.run(ctx => ctx.db.get(first.matchId!))).toMatchObject({ interestType: "mutual_interest", status: "reviewing" });
   expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(3);
-  await expect(t.mutation(api.matches.updateStatus, { adminSecret, id: first.matchId!, status: "contact_shared" })).rejects.toThrow("female website");
+  await expect(t.mutation(api.matches.updateStatus, { adminSecret: "wrong", id: first.matchId!, status: "contact_shared" })).rejects.toThrow("Unauthorized");
   await expect(t.mutation(api.femaleInterestWorkflow.releaseContacts, { interestId })).rejects.toThrow("Unauthorized");
   expect((await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "sister", interestId })).profile.email).toBeNull();
   await t.mutation(api.femaleInterestWorkflow.releaseContacts, { adminSecret, interestId });
@@ -174,7 +174,8 @@ test("serialized brother review surfaces omit sister identity throughout approva
     await ctx.db.patch(sister, { publicApplicantNumber: 73 });
     await ctx.db.patch(interestId, { visibility: "admin_actionable" });
     const now = Date.now();
-    await ctx.db.insert("interests", { fromRegistrationId: brother, toRegistrationId: sister, eventId: (await ctx.db.get(interestId))!.eventId, source: "admin_entered", status: "new", visibility: "admin_actionable", createdAt: now, updatedAt: now });
+    const reciprocal = await ctx.db.insert("interests", { fromRegistrationId: brother, toRegistrationId: sister, eventId: (await ctx.db.get(interestId))!.eventId, source: "admin_entered", status: "new", visibility: "admin_actionable", createdAt: now, updatedAt: now });
+    await ctx.db.insert("interestFlows", { interestId: reciprocal, fromRegistrationId: brother, toRegistrationId: sister, flowStatus: "awaiting_inbound_response", recipientDecision: "pending", requesterFinalApproval: "pending", recipientFinalApproval: "pending", photoDecision: "pending", createdAt: now, updatedAt: now });
   });
   async function check(state: string) {
     const review = await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId });

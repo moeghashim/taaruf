@@ -3,9 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { FactList } from "@/components/admin/primitives/fact-list";
 
-type Review = { interestId: string; state: string; role: string; reviewExpiresAt?: number; matchId?: string };
+type Review = { paused?: boolean; interestId: string; state: string; role: string; reviewExpiresAt?: number; matchId?: string };
 type Profile = { name?: string; label?: string; applicantNumber?: number; publicApplicantNumber?: number; age?: number; shareableBio?: string; education?: string; job?: string; ethnicity?: string; imageUrls?: string[]; email?: string; phone?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string };
-type Access = { state: string; role: string; profile?: Profile; counterparty?: Profile };
+type Access = { paused?: boolean; matchId?: string | null; state: string; role: string; profile?: Profile; counterparty?: Profile };
 const stateCopy: Record<string, string> = {
   private_documented: "Your interest is private with the team. The brother has not been notified.",
   awaiting_brother_review: "A profile is ready for the brother’s review. Accepting does not share contact details.",
@@ -65,15 +65,15 @@ export function FemaleReviews() {
       if (!stopped) { setAccess(payload); setError(""); }
     }).catch(error => { if (!stopped) setError(error.message); }).finally(() => { if (!stopped) setReviewLoading(false); });
     return () => { stopped = true; };
-  }, [selected, token, row?.role, row?.state]);
+  }, [selected, token, row?.role, row?.state, row?.paused]);
   async function act(body: Record<string, unknown>) {
     if (busy) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch("/api/applicant/female-review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const response = await fetch(["pause", "resume"].includes(String(body.action)) ? "/api/applicant/interests" : "/api/applicant/female-review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(["pause", "resume"].includes(String(body.action)) ? { ...body, action: body.action === "pause" ? "pause_connection" : "resume_connection" } : body) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to record your decision.");
-      setMessage("Your decision is recorded. Contact details stay private until final admin approval.");
+      setMessage(body.action === "pause" ? "Connection paused." : body.action === "resume" ? "Connection resumed. New contact disclosure still requires final admin approval." : "Your decision is recorded. Contact details stay private until final admin approval.");
       setAccess(null);
       if (body.decision === "decline" || body.confirmed === false) { setSelected(null); setToken(undefined); }
       await load();
@@ -89,15 +89,17 @@ export function FemaleReviews() {
       {listError && <p className="notice error" role="alert">{listError} Use Refresh or try Load more again.</p>}
       {loading ? <p role="status">Loading reviews…</p> : !rows.length && <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>}
       {rows.map(item => <div key={item.interestId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 16 }}>
+        {item.paused && <p>Paused</p>}
         <h4>{item.state.replaceAll("_", " ")}</h4><p>{stateCopy[item.state]}</p>
         {!["private_documented", "revoked", "declined"].includes(item.state) && <a className="btn" href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>Review profile</a>}
-        {item.role === "sister" && item.state === "awaiting_sister_confirmation" && <div className="action-row">
+        {!item.paused && item.role === "sister" && item.state === "awaiting_sister_confirmation" && <div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: item.interestId, confirmed: true })}>Confirm mutual interest</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: item.interestId, confirmed: false })}>Decline</button>
         </div>}
       </div>)}
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
       {selected && <section aria-label="Selected profile review" style={{ maxWidth: "70ch", display: "grid", gap: 16 }}>
+        {access?.matchId && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
         {reviewLoading && <p role="status">Loading profile…</p>}
         {profile && <><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
           {profile.age && <p>Age {profile.age}</p>}
@@ -107,7 +109,7 @@ export function FemaleReviews() {
           {!!profile.imageUrls?.length && <div className="photo-grid">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={320} height={320} unoptimized />)}</div>}
           {access?.state === "contacts_released" && <div className="contact-box"><h4>Contact details</h4><p>{profile.email}</p><p>{profile.phone}</p></div>}
         </>}
-        {access?.role === "brother" && access.state === "awaiting_brother_review" && <><p>Your acceptance asks the sister to confirm. It is not final admin approval.</p><div className="action-row">
+        {!access?.paused && access?.role === "brother" && access.state === "awaiting_brother_review" && <><p>Your acceptance asks the sister to confirm. It is not final admin approval.</p><div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "accept", ...(token ? { reviewToken: token } : {}) })}>Accept</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "decline", ...(token ? { reviewToken: token } : {}) })}>Decline</button>
         </div></>}

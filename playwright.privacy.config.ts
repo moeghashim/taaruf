@@ -10,6 +10,6 @@ export default defineConfig({
     url: "http://127.0.0.1:3113/dashboard",
     reuseExistingServer: false,
     timeout: 120000,
-    env: { VERCEL_ENV: "preview", PREVIEW_BACKEND_ISOLATED: "false" },
+    env: { VERCEL_ENV: "preview", PREVIEW_BACKEND_ISOLATED: "false", ADMIN_PASSWORD: "synthetic-ui-only", ADMIN_TOKEN_SALT: "taaruf-admin-salt" },
   },
 });

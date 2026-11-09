@@ -201,7 +201,12 @@ export const updateStatus = mutation({
       throw new Error("Interest not found");
     }
 
-    if (interest.femaleWorkflow) throw new Error("Use female website workflow");
+    if (interest.femaleWorkflow) {
+      if (interest.matchId || !["closed", "declined"].includes(args.status)) throw new Error("Use female website workflow");
+      await ctx.db.patch(interest._id, { femaleWorkflow: { ...interest.femaleWorkflow, state: args.status === "declined" ? "declined" : "revoked" } });
+      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
+      if (flow) await ctx.db.patch(flow._id, { flowStatus: args.status as "closed" | "declined", updatedAt: Date.now() });
+    }
     if (args.status === "converted_to_match" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
     await ctx.db.patch(args.id, {
       status: args.status,

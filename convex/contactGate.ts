@@ -19,6 +19,7 @@ export function assertMatchInterest(match: Doc<"matches">, interest: Doc<"intere
 }
 export async function linkedFlows(ctx: ReadCtx, interest: Doc<"interests">) {
   if (interest.fromRegistrationId === interest.toRegistrationId) throw new Error("Linked pair mismatch");
+  let eventId = interest.eventId;
   if (interest.matchId) {
     const match = await ctx.db.get(interest.matchId);
     if (!match) throw new Error("Linked match missing");
@@ -26,20 +27,20 @@ export async function linkedFlows(ctx: ReadCtx, interest: Doc<"interests">) {
     const primary = match.interestId ? await ctx.db.get(match.interestId) : null;
     if (!primary) throw new Error("Linked interest missing");
     assertMatchInterest(match, primary);
+    eventId = primary.eventId;
   }
   const interests = interest.matchId ? await ctx.db.query("interests").withIndex("by_matchId", q => q.eq("matchId", interest.matchId)).collect() : [interest];
   const flows = [];
   for (const row of interests) {
+    if (row.eventId !== eventId) throw new Error("Linked event mismatch");
     if (row.testReset || ["closed", "declined", "withdrawn"].includes(row.status)) throw new Error("Interest is no longer active");
     if (row.fromRegistrationId === row.toRegistrationId) throw new Error("Linked pair mismatch");
     if (!([interest.fromRegistrationId, interest.toRegistrationId].includes(row.fromRegistrationId) && [interest.fromRegistrationId, interest.toRegistrationId].includes(row.toRegistrationId))) throw new Error("Linked pair mismatch");
     const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
     if (!flow) throw new Error("Linked flow missing; explicit consent required");
     if (flow.fromRegistrationId !== row.fromRegistrationId || flow.toRegistrationId !== row.toRegistrationId) throw new Error("Linked flow identity mismatch");
-    if (flow) {
-      if (["closed", "declined"].includes(flow.flowStatus)) throw new Error("Interest is no longer active");
-      flows.push(flow);
-    }
+    if (["closed", "declined"].includes(flow.flowStatus)) throw new Error("Interest is no longer active");
+    flows.push(flow);
   }
   return flows;
 }
@@ -59,17 +60,166 @@ export async function queuePendingReview(ctx: MutationCtx, matchId: Id<"matches"
 export async function contactsVisible(ctx: ReadCtx, interest: Doc<"interests">, flow: Doc<"interestFlows"> | null) {
   if (!flow?.contactSharedAt) return false;
   const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+  if (interest.matchId) {
+    if (!match || match.testResetAt !== undefined) return false;
+    try { assertMatchInterest(match, interest); await linkedFlows(ctx, interest); } catch { return false; }
+  }
   return !match?.contactGate || match.contactGate === "contacts_released";
 }
 export async function deliveryParticipants(ctx: ReadCtx, interestId: Id<"interests">) {
   const interest = await ctx.db.get(interestId);
   if (!interest || interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Unavailable");
   const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
-  if (!match || match.testResetAt || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Unavailable");
+  if (!match || match.testResetAt || ["closed", "declined"].includes(match.status)) throw new Error("Unavailable");
   assertMatchInterest(match, interest);
   await linkedFlows(ctx, interest);
   const sister = await ctx.db.get(match.femaleRegistrationId);
   const brother = await ctx.db.get(match.maleRegistrationId);
   if (!sister || !brother || sister.status !== "approved" || brother.status !== "approved") throw new Error("Unavailable");
   return { sister, brother, workflow: { state: match.contactGate } };
+}
+
+export async function assertParticipantsAvailable(ctx: ReadCtx, maleId: Id<"registrations">, femaleId: Id<"registrations">, except?: Id<"matches">) {
+  const male = await ctx.db.get(maleId);
+  const female = await ctx.db.get(femaleId);
+  if (!male || !female || maleId === femaleId || male.gender !== "male" || female.gender !== "female") throw new Error("Linked pair mismatch");
+  for (const person of [male, female]) {
+    if (person.status !== "approved") throw new Error("Both applicants must be approved");
+    if (person.activeMatchId && person.activeMatchId !== except) throw new Error("Applicant already has an active match");
+  }
+  const maleMatches = await ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", maleId)).take(1001);
+  const femaleMatches = await ctx.db.query("matches").withIndex("by_femaleRegistrationId", q => q.eq("femaleRegistrationId", femaleId)).take(1001);
+  if (maleMatches.length > 1000 || femaleMatches.length > 1000) throw new Error("Match history requires manual review");
+  const matches = [...maleMatches, ...femaleMatches];
+  if (matches.some(m => m._id !== except && m.testResetAt === undefined && !["closed", "declined", "paused"].includes(m.status))) throw new Error("Applicant already has an active match");
+  return { male, female };
+}
+
+export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
+  if (interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
+  if (interest.fromRegistrationId === interest.toRegistrationId) throw new Error("Linked pair mismatch");
+  const rows = [];
+  for (const [from, to] of [[interest.fromRegistrationId, interest.toRegistrationId], [interest.toRegistrationId, interest.fromRegistrationId]]) {
+    const direction = await ctx.db.query("interests").withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", q => q.eq("fromRegistrationId", from).eq("toRegistrationId", to).eq("eventId", interest.eventId)).take(1001);
+    if (direction.length > 1000) throw new Error("Pair history requires manual review");
+    rows.push(...direction);
+  }
+  const result = [];
+  for (const row of rows) {
+    if (row.testReset || ["closed", "declined", "withdrawn"].includes(row.status)) continue;
+    const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
+    if (!flow) throw new Error("Linked flow missing; explicit consent required");
+    if (flow.fromRegistrationId !== row.fromRegistrationId || flow.toRegistrationId !== row.toRegistrationId) throw new Error("Linked flow identity mismatch");
+    if (["closed", "declined"].includes(flow.flowStatus)) throw new Error("Interest is no longer active");
+    if (row.matchId) {
+      const match = await ctx.db.get(row.matchId);
+      if (!match) throw new Error("Linked match missing");
+      assertMatchInterest(match, row);
+      await linkedFlows(ctx, row);
+      if (match.testResetAt !== undefined || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+    }
+    result.push({ interest: row, flow });
+  }
+  if (new Set(result.flatMap(r => r.interest.matchId ? [r.interest.matchId] : [])).size > 1) throw new Error("Linked match mismatch");
+  return result;
+}
+
+export async function recordPairApproval(ctx: MutationCtx, interest: Doc<"interests">, actorId: Id<"registrations">, approved: boolean) {
+  if (![interest.fromRegistrationId, interest.toRegistrationId].includes(actorId)) throw new Error("Unauthorized");
+  const rows = await pairFlows(ctx, interest);
+  const now = Date.now();
+  for (const { interest: row, flow } of rows) {
+    const requester = flow.fromRegistrationId === actorId;
+    const previous = requester ? flow.requesterFinalApproval : flow.recipientFinalApproval;
+    const decision = approved ? "approved" as const : "declined" as const;
+    if (previous !== "pending" && previous !== decision) throw new Error("Final approval has already been recorded for this interest");
+    if (previous === decision) continue;
+    await ctx.db.patch(flow._id, {
+      ...(requester ? { requesterFinalApproval: decision, requesterFinalApprovalAt: now } : { recipientFinalApproval: decision, recipientFinalApprovalAt: now }),
+      ...(!approved ? { flowStatus: "declined" as const } : flow.bioVisibleAt ? { flowStatus: "awaiting_final_approvals" as const } : {}), updatedAt: now,
+    });
+    await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: row._id, actor: "applicant", actorRegistrationId: actorId, eventType: approved ? "final_approval_given" : "final_approval_declined", createdAt: now });
+    if (!approved) await ctx.db.patch(row._id, { status: "declined", adminStatus: "declined", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: "declined" as const } } : {}), updatedAt: now });
+    else if (row.femaleWorkflow && actorId === row.toRegistrationId && !row.matchId) {
+      await ctx.db.patch(row._id, { femaleWorkflow: { ...row.femaleWorkflow, state: "awaiting_sister_confirmation", brotherAcceptedAt: now }, updatedAt: now });
+    }
+  }
+  if (!approved) return null;
+  return await joinApprovedPair(ctx, interest);
+}
+
+export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interests">) {
+  const rows = await pairFlows(ctx, interest);
+  const decisions = new Map<Id<"registrations">, number>();
+  for (const { flow } of rows) {
+    if (flow.requesterFinalApproval === "approved") decisions.set(flow.fromRegistrationId, flow.requesterFinalApprovalAt ?? flow.updatedAt);
+    if (flow.recipientFinalApproval === "approved") decisions.set(flow.toRegistrationId, flow.recipientFinalApprovalAt ?? flow.updatedAt);
+  }
+  if (!decisions.has(interest.fromRegistrationId) || !decisions.has(interest.toRegistrationId)) return null;
+  let matchId = rows.find(r => r.interest.matchId)?.interest.matchId;
+  const from = await ctx.db.get(interest.fromRegistrationId);
+  const to = await ctx.db.get(interest.toRegistrationId);
+  if (!from || !to) throw new Error("Applicants unavailable");
+  const maleId = from.gender === "male" ? from._id : to._id;
+  const femaleId = from.gender === "female" ? from._id : to._id;
+  await assertParticipantsAvailable(ctx, maleId, femaleId, matchId);
+  const now = Date.now();
+  if (!matchId) matchId = await ctx.db.insert("matches", { maleRegistrationId: maleId, femaleRegistrationId: femaleId, interestId: interest._id, interestType: "mutual_interest", status: "reviewing", contactGate: "pending_admin_approval", initiatedBy: "interest_signal", createdAt: now, updatedAt: now });
+  const match = (await ctx.db.get(matchId))!;
+  const releasedAt = match.adminReleasedAt ?? rows.find(r => r.flow.contactSharedAt !== undefined)?.flow.contactSharedAt;
+  const released = match.contactGate === "contacts_released" || (!match.contactGate && releasedAt !== undefined);
+  for (const { interest: row, flow } of rows) {
+    await ctx.db.patch(row._id, { matchId, status: "converted_to_match", adminStatus: "matched", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: released ? "contacts_released" as const : "pending_admin_approval" as const, brotherAcceptedAt: decisions.get(maleId), sisterConfirmedAt: decisions.get(femaleId), ...(released ? { adminReleasedAt: releasedAt } : {}) } } : {}), updatedAt: now });
+    await ctx.db.patch(flow._id, { requesterFinalApproval: "approved", recipientFinalApproval: "approved", requesterFinalApprovalAt: decisions.get(row.fromRegistrationId), recipientFinalApprovalAt: decisions.get(row.toRegistrationId), flowStatus: released ? "contact_shared" : "awaiting_final_approvals", bioVisibleAt: flow.bioVisibleAt ?? now, ...(released ? { contactSharedAt: flow.contactSharedAt ?? releasedAt } : {}), updatedAt: now });
+  }
+  if (!released) await queuePendingReview(ctx, matchId);
+  return matchId;
+}
+
+export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches">) {
+  if (match.testResetAt !== undefined || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+  const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
+  if (!interest) throw new Error("Active linked interest required");
+  assertMatchInterest(match, interest);
+  const flows = await linkedFlows(ctx, interest);
+  if (flows.some(f => f.requesterFinalApproval !== "approved" || f.recipientFinalApproval !== "approved")) throw new Error("Both applicants must give final approval before contacts can be shared");
+  const { male, female } = await assertParticipantsAvailable(ctx, match.maleRegistrationId, match.femaleRegistrationId, match._id);
+  if ([male, female].some(p => !p.email || !p.phone)) throw new Error("Both applicants must have contact details");
+  const alreadyReleased = match.contactGate === "contacts_released" || (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
+  const now = Date.now();
+  if (!alreadyReleased) {
+    await ctx.db.patch(match._id, { contactGate: "contacts_released", adminReleasedAt: now });
+    for (const flow of flows) {
+      await ctx.db.patch(flow._id, { flowStatus: "contact_shared", contactSharedAt: now, updatedAt: now });
+      const row = (await ctx.db.get(flow.interestId))!;
+      if (row.femaleWorkflow) await ctx.db.patch(row._id, { femaleWorkflow: { ...row.femaleWorkflow, state: "contacts_released", adminReleasedAt: now }, updatedAt: now });
+      await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: flow.interestId, actor: "system", eventType: "contacts_disclosed_in_portal", createdAt: now });
+    }
+    for (const person of [male, female]) await enqueueContactDelivery(ctx, interest._id, person._id, "contacts_ready");
+  }
+  await ctx.db.patch(match._id, { status: "contact_shared", updatedAt: now });
+  for (const person of [male, female]) await ctx.db.patch(person._id, { activeMatchId: match._id });
+}
+
+export async function setPairPaused(ctx: MutationCtx, match: Doc<"matches">, paused: boolean, actorId?: Id<"registrations">) {
+  if (match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) throw new Error("Match is not active");
+  if (actorId && ![match.maleRegistrationId, match.femaleRegistrationId].includes(actorId)) throw new Error("Unauthorized");
+  const primary = match.interestId ? await ctx.db.get(match.interestId) : null;
+  const flows = primary ? await linkedFlows(ctx, primary) : [];
+  if (match.interestId && !primary) throw new Error("Linked interest missing");
+  if (primary) assertMatchInterest(match, primary);
+  const male = await ctx.db.get(match.maleRegistrationId);
+  const female = await ctx.db.get(match.femaleRegistrationId);
+  if (!male || !female || male.gender !== "male" || female.gender !== "female" || male._id === female._id) throw new Error("Linked pair mismatch");
+  if (!paused) await assertParticipantsAvailable(ctx, male._id, female._id, match._id);
+  if ((match.status === "paused") === paused) return match._id;
+  const released = match.contactGate === "contacts_released" || (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
+  const status = paused ? "paused" : released ? "contact_shared" : "reviewing";
+  await ctx.db.patch(match._id, { status, updatedAt: Date.now() });
+  for (const person of [male, female]) {
+    if (paused && person.activeMatchId === match._id) await ctx.db.patch(person._id, { activeMatchId: undefined });
+    if (!paused && released) await ctx.db.patch(person._id, { activeMatchId: match._id });
+  }
+  for (const flow of flows) await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: flow.interestId, actor: actorId ? "applicant" : "system", ...(actorId ? { actorRegistrationId: actorId } : {}), eventType: paused ? "match_paused" : "match_resumed", createdAt: Date.now() });
+  return match._id;
 }
