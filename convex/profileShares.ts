@@ -33,6 +33,12 @@ async function resolvedInterest(ctx: QueryCtx, share: ShareScope): Promise<Doc<"
   return null;
 }
 async function available(ctx: QueryCtx, share: Doc<"profileShares">) {
+  // Historical decisions remain intact, but neither archived participant may
+  // retain a live bearer capability (including context-free declined shares).
+  const [owner, recipient] = await Promise.all([
+    ctx.db.get(share.ownerRegistrationId), ctx.db.get(share.recipientRegistrationId),
+  ]);
+  if (!owner || !recipient || owner.archivedAt !== undefined || recipient.archivedAt !== undefined) return false;
   return await capabilityAllowed(ctx, share.createdAt) && share.revokedAt === undefined && share.status !== "closed" && await resolvedInterest(ctx, share) !== false;
 }
 async function imagesAllowed(ctx: QueryCtx, share: ShareScope & { includeImages: boolean }, owner: Doc<"registrations"> | null) {
