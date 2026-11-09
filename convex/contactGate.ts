@@ -140,7 +140,7 @@ export async function recordPairApproval(ctx: MutationCtx, interest: Doc<"intere
     });
     await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: row._id, actor: "applicant", actorRegistrationId: actorId, eventType: approved ? "final_approval_given" : "final_approval_declined", createdAt: now });
     if (!approved) await ctx.db.patch(row._id, { status: "declined", adminStatus: "declined", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: "declined" as const } } : {}), updatedAt: now });
-    else if (row.femaleWorkflow && actorId === row.toRegistrationId && !row.matchId) {
+    else if (row.femaleWorkflow?.reviewTokenHash && row.femaleWorkflow.state !== "private_documented" && actorId === row.toRegistrationId && !row.matchId) {
       await ctx.db.patch(row._id, { femaleWorkflow: { ...row.femaleWorkflow, state: "awaiting_sister_confirmation", brotherAcceptedAt: now }, updatedAt: now });
     }
   }
@@ -169,7 +169,7 @@ export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interest
   const releasedAt = match.adminReleasedAt ?? rows.find(r => r.flow.contactSharedAt !== undefined)?.flow.contactSharedAt;
   const released = match.contactGate === "contacts_released" || (!match.contactGate && releasedAt !== undefined);
   for (const { interest: row, flow } of rows) {
-    await ctx.db.patch(row._id, { matchId, status: "converted_to_match", adminStatus: "matched", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: released ? "contacts_released" as const : "pending_admin_approval" as const, brotherAcceptedAt: decisions.get(maleId), sisterConfirmedAt: decisions.get(femaleId), ...(released ? { adminReleasedAt: releasedAt } : {}) } } : {}), updatedAt: now });
+    await ctx.db.patch(row._id, { matchId, status: "converted_to_match", adminStatus: "matched", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: row.femaleWorkflow.state === "private_documented" || !row.femaleWorkflow.reviewTokenHash ? "private_documented" as const : released ? "contacts_released" as const : "pending_admin_approval" as const, brotherAcceptedAt: decisions.get(maleId), sisterConfirmedAt: decisions.get(femaleId), ...(released ? { adminReleasedAt: releasedAt } : {}) } } : {}), updatedAt: now });
     await ctx.db.patch(flow._id, { requesterFinalApproval: "approved", recipientFinalApproval: "approved", requesterFinalApprovalAt: decisions.get(row.fromRegistrationId), recipientFinalApprovalAt: decisions.get(row.toRegistrationId), flowStatus: released ? "contact_shared" : "awaiting_final_approvals", bioVisibleAt: flow.bioVisibleAt ?? now, ...(released ? { contactSharedAt: flow.contactSharedAt ?? releasedAt } : {}), updatedAt: now });
   }
   if (!released) await queuePendingReview(ctx, matchId);
@@ -192,7 +192,7 @@ export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches"
     for (const flow of flows) {
       await ctx.db.patch(flow._id, { flowStatus: "contact_shared", contactSharedAt: now, updatedAt: now });
       const row = (await ctx.db.get(flow.interestId))!;
-      if (row.femaleWorkflow) await ctx.db.patch(row._id, { femaleWorkflow: { ...row.femaleWorkflow, state: "contacts_released", adminReleasedAt: now }, updatedAt: now });
+      if (row.femaleWorkflow) await ctx.db.patch(row._id, { femaleWorkflow: { ...row.femaleWorkflow, state: row.femaleWorkflow.state === "private_documented" || !row.femaleWorkflow.reviewTokenHash ? "private_documented" : "contacts_released", adminReleasedAt: now }, updatedAt: now });
       await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: flow.interestId, actor: "system", eventType: "contacts_disclosed_in_portal", createdAt: now });
     }
     for (const person of [male, female]) await enqueueContactDelivery(ctx, interest._id, person._id, "contacts_ready");

@@ -24,6 +24,7 @@ export function FemaleReviews() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const listRequest = useRef(0);
+  const [accessVersion, setAccessVersion] = useState(0);
   const [listError, setListError] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -47,7 +48,7 @@ export function FemaleReviews() {
     setSelected(params.get("femaleReview"));
     setToken(params.get("reviewToken") || undefined);
     void load();
-    const refresh = () => void load();
+    const refresh = () => { void load(); setAccessVersion(value => value + 1); };
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, [load]);
@@ -65,7 +66,7 @@ export function FemaleReviews() {
       if (!stopped) { setAccess(payload); setError(""); }
     }).catch(error => { if (!stopped) setError(error.message); }).finally(() => { if (!stopped) setReviewLoading(false); });
     return () => { stopped = true; };
-  }, [selected, token, row?.role, row?.state, row?.paused]);
+  }, [selected, token, row?.role, row?.state, row?.paused, accessVersion]);
   async function act(body: Record<string, unknown>) {
     if (busy) return;
     setBusy(true); setError(""); setMessage("");
@@ -75,6 +76,7 @@ export function FemaleReviews() {
       if (!response.ok) throw new Error(payload.error || "Unable to record your decision.");
       setMessage(body.action === "pause" ? "Connection paused." : body.action === "resume" ? "Connection resumed. New contact disclosure still requires final admin approval." : "Your decision is recorded. Contact details stay private until final admin approval.");
       setAccess(null);
+      setAccessVersion(value => value + 1);
       if (body.decision === "decline" || body.confirmed === false) { setSelected(null); setToken(undefined); }
       await load();
     } catch (error) { setError(error instanceof Error ? error.message : "Unable to record your decision."); }
@@ -82,7 +84,7 @@ export function FemaleReviews() {
   }
   const profile = access?.profile || access?.counterparty;
   return <section id="review-notifications" className="panel applicant-section">
-    <div className="panel-head"><div><h3>Profile reviews</h3><p>Review invitations and confirmations. Only you can respond from your account.</p></div><button type="button" className="btn" disabled={busy || loading} onClick={() => void load()}>Refresh</button></div>
+    <div className="panel-head"><div><h3>Profile reviews</h3><p>Review invitations and confirmations. Only you can respond from your account.</p></div><button type="button" className="btn" disabled={busy || loading} onClick={() => { void load(); setAccessVersion(value => value + 1); }}>Refresh</button></div>
     <div style={{ padding: 16, display: "grid", gap: 16 }}>
       {error && <p className="notice error" role="alert">{error} <a href="/login">Sign in</a> or refresh your portal.</p>}
       {message && <p className="notice success" role="status">{message}</p>}
@@ -92,10 +94,7 @@ export function FemaleReviews() {
         {item.paused && <p>Paused</p>}
         <h4>{item.state.replaceAll("_", " ")}</h4><p>{stateCopy[item.state]}</p>
         {!["private_documented", "revoked", "declined"].includes(item.state) && <a className="btn" href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>Review profile</a>}
-        {!item.paused && item.role === "sister" && item.state === "awaiting_sister_confirmation" && <div className="action-row">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: item.interestId, confirmed: true })}>Confirm mutual interest</button>
-          <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: item.interestId, confirmed: false })}>Decline</button>
-        </div>}
+
       </div>)}
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
       {selected && <section aria-label="Selected profile review" style={{ maxWidth: "70ch", display: "grid", gap: 16 }}>
@@ -109,6 +108,10 @@ export function FemaleReviews() {
           {!!profile.imageUrls?.length && <div className="photo-grid">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={320} height={320} unoptimized />)}</div>}
           {access?.state === "contacts_released" && <div className="contact-box"><h4>Contact details</h4><p>{profile.email}</p><p>{profile.phone}</p></div>}
         </>}
+        {!access?.paused && access?.role === "sister" && access.state === "awaiting_sister_confirmation" && <div className="action-row">
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm mutual interest</button>
+          <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>
+        </div>}
         {!access?.paused && access?.role === "brother" && access.state === "awaiting_brother_review" && <><p>Your acceptance asks the sister to confirm. It is not final admin approval.</p><div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "accept", ...(token ? { reviewToken: token } : {}) })}>Accept</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "decline", ...(token ? { reviewToken: token } : {}) })}>Decline</button>

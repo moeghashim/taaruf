@@ -245,3 +245,46 @@ test("test-reset submission cannot approve or pause through a stale applicant ac
   await expect(w.t.mutation(api.matches.setPausedForApplicant, { sessionHash: "session-1", interestId: id, paused: false })).rejects.toThrow("Unauthorized");
   expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
 });
+
+for (const source of sources) for (const releaseBeforeShare of [false, true]) test(`private sibling remains unpublished through ${source} approvals, released=${releaseBeforeShare}`, async () => {
+  const w = await publicWorld();
+  await w.t.run(async ctx => {
+    const image = await ctx.storage.store(new Blob(["synthetic-private-photo"], { type: "image/png" }));
+    await ctx.db.patch(w.people[1], { imageStorageIds: [image] });
+  });
+  const female = (await w.t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash: "session-1", expectedEventId: w.event, applicantNumber: 1, applicantName: "Brother", photoConsent: "yes" })).interestId;
+  const male = await w.submit(source);
+  async function privateReviewDenied() {
+    const rows = await w.t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "session-0", paginationOpts: { cursor: null, numItems: 50 } });
+    expect(rows.page.some(row => row.interestId === female)).toBe(false);
+    await expect(w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "session-0", interestId: female })).rejects.toThrow("Review unavailable");
+    const dashboard = await w.t.query(api.applicantInterests.getDashboard, { sessionHash: "session-0", connectionId: male });
+    expect(dashboard.outbound.find(row => row.interestId === male)?.counterparty?.imageUrls).toEqual([]);
+  }
+  await privateReviewDenied();
+  await w.open(male);
+  await privateReviewDenied();
+  const first = await w.approve(male, 0);
+  expect(first.matchId).toBeNull();
+  await privateReviewDenied();
+  const both = await w.approve(male, 1);
+  await privateReviewDenied();
+  if (releaseBeforeShare) {
+    await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: both.matchId!, status: "contact_shared" });
+    await privateReviewDenied();
+  }
+  expect((await w.t.run(ctx => ctx.db.get(female)))?.femaleWorkflow?.state).toBe("private_documented");
+  await w.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret: workflowAdmin, interestId: female, reviewTokenHash: reviewHash });
+  const access = await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "session-0", interestId: female });
+  expect(access.state).toBe(releaseBeforeShare ? "contacts_released" : "pending_admin_approval");
+  expect(access.profile.imageUrls).toHaveLength(1);
+  expect(access.profile.email).toBe(releaseBeforeShare ? "person1@example.invalid" : null);
+  expect(JSON.stringify(access)).not.toContain("Sister Private");
+  const discovery = await w.t.query(api.femaleInterestWorkflow.getDashboard, { sessionHash: "session-0" });
+  expect(discovery.some(row => row.interestId === female)).toBe(true);
+  await w.t.mutation(api.applicantInterests.revokeSenderPhotoConsent, { sessionHash: "session-1", interestId: female });
+  expect((await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "session-0", interestId: female })).profile.imageUrls).toEqual([]);
+  expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
+  const row = (await w.t.run(ctx => ctx.db.get(female)))!;
+  expect(row.source).toBe("platform_submission"); expect(row.eventId).toBe(w.event); expect(row.senderPhotoConsent).toBe("yes");
+});

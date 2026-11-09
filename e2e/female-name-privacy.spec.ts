@@ -141,3 +141,40 @@ for (const width of [1280, 390]) test(`older female discriminator suppresses gen
   await expect(card).toBeVisible();
   await expect(card.getByRole("button")).toHaveCount(0);
 });
+
+for (const width of [1280, 390]) for (const confirmed of [false, true]) test(`selected older sister review decision=${confirmed} at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  let state = "awaiting_sister_confirmation";
+  let paused = false;
+  const actions: string[] = [];
+  let paginated = false;
+  await page.route("**/api/applicant/**", route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON(); actions.push(body.action);
+      if (body.action === "confirm") { expect(body.confirmed).toBe(confirmed); state = confirmed ? "pending_admin_approval" : "declined"; }
+      else paused = body.action === "pause_connection";
+      return route.fulfill({ json: { success: true } });
+    }
+    if (url.searchParams.has("interestId")) {
+      if (state === "declined") return route.fulfill({ status: 409, json: { error: "Review unavailable" } });
+      return route.fulfill({ json: { state, role: "sister", paused, matchId: state === "pending_admin_approval" ? "older-match" : null, profile: { name: "Synthetic Brother", label: "Synthetic Brother", imageUrls: [] } } });
+    }
+    if (url.searchParams.has("cursor")) paginated = true;
+    return route.fulfill({ json: { page: Array.from({ length: 50 }, (_, n) => ({ interestId: `newer-history-${n}`, state: "declined", role: "sister" })), isDone: false, continueCursor: "remaining-ten-newer-rows" } });
+  });
+  await page.goto("/dashboard?femaleReview=older-selected");
+  const selected = page.getByRole("region", { name: "Selected profile review", exact: true });
+  await expect(selected.getByRole("heading", { name: "Synthetic Brother", exact: true })).toBeVisible();
+  await selected.getByRole("button", { name: confirmed ? "Confirm mutual interest" : "Decline", exact: true }).click();
+  if (confirmed) {
+    await selected.getByRole("button", { name: "Pause", exact: true }).click();
+    await selected.getByRole("button", { name: "Resume", exact: true }).click();
+    await expect(selected.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+    expect(actions).toEqual(["confirm", "pause_connection", "resume_connection"]);
+  } else {
+    await expect(selected).toHaveCount(0);
+    expect(actions).toEqual(["confirm"]);
+  }
+  expect(paginated).toBe(false);
+});

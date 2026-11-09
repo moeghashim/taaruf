@@ -6,16 +6,18 @@ import { api } from "../../../../../convex/_generated/api";
 import schema from "../../../../../convex/schema";
 import { modules } from "../../../../../convex/test.setup";
 import type { Doc } from "../../../../../convex/_generated/dataModel";
-const mocks = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn(), session: vi.fn() }));
+const mocks = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn(), session: vi.fn(), send: vi.fn() }));
 vi.mock("@/lib/convex", () => ({ getConvexClient: () => mocks }));
 vi.mock("@/lib/applicant-session", () => ({ getApplicantSessionHash: mocks.session }));
+vi.mock("resend", () => ({ Resend: class { emails = { send: mocks.send }; } }));
+import { POST as interestPOST } from "../interests/route";
 import { GET } from "./route";
-import { GET as reviewGET } from "../female-review/route";
+import { GET as reviewGET, POST as reviewPOST } from "../female-review/route";
 const secret = "synthetic-connection-admin";
-beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("ATTENDANCE_ADMIN_SECRET", secret); });
+beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("ATTENDANCE_ADMIN_SECRET", secret); vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://synthetic.invalid"); mocks.send.mockResolvedValue({ data: { id: "synthetic-only" }, error: null }); });
 afterEach(() => vi.unstubAllEnvs());
 
-async function fixture(source: Doc<"interests">["source"], female: boolean, olderHistory = true) {
+async function fixture(source: Doc<"interests">["source"], female: boolean, olderHistory = true, complete = true) {
   const t = convexTest(schema, modules);
   const { maleId, femaleId, eventId } = await t.run(async ctx => {
     const now = Date.now();
@@ -35,12 +37,12 @@ async function fixture(source: Doc<"interests">["source"], female: boolean, olde
   const id = source === "platform_submission"
     ? (await t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash: female ? "sister" : "brother", expectedEventId: eventId, applicantNumber: female ? 1 : 73, applicantName: "Synthetic", photoConsent: "no" })).interestId
     : await t.mutation(api.interests.create, { adminSecret: secret, eventId, fromRegistrationId: female ? femaleId : maleId, toRegistrationId: female ? maleId : femaleId, source });
-  if (female) {
+  if (complete && female) {
     await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret: secret, interestId: id, reviewTokenHash: "a".repeat(64) });
     await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId: id });
     await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: id, decision: "accept" });
     await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId: id, confirmed: true });
-  } else {
+  } else if (complete) {
     const discovered = await t.query(api.applicantInterests.getDashboard, { sessionHash: "sister", connectionId: id });
     expect(discovered.inbound.some(row => row.interestId === id)).toBe(true);
     await t.mutation(api.applicantInterests.respondToInbound, { sessionHash: "sister", interestId: id, decision: "accept" });
@@ -50,7 +52,7 @@ async function fixture(source: Doc<"interests">["source"], female: boolean, olde
   mocks.mutation.mockResolvedValue(true);
   mocks.session.mockResolvedValue("brother");
   const matchId = (await t.run(ctx => ctx.db.get(id)))!.matchId!;
-  return { t, id, matchId, maleId, femaleId };
+  return { t, id, matchId, maleId, femaleId, eventId };
 }
 
 for (const source of ["platform_submission", "admin_entered", "email", "whatsapp"] as const) for (const female of [false, true]) test(`${source} requested ${female ? "female" : "general"} pending/released connection survives 110 older closed rows`, async () => {
@@ -137,4 +139,61 @@ test("pending general access and malformed requested identifiers retain their bo
   mocks.query.mockClear();
   expect((await GET(new NextRequest("https://synthetic.invalid/api/applicant/me?connection="))).status).toBe(400);
   expect(mocks.query).not.toHaveBeenCalled();
+});
+
+test("both ordinary emitted notification URLs resolve their connection beyond 110 closed rows", async () => {
+  const { t, id: original, eventId } = await fixture("email", false, true, false);
+  await t.mutation(api.interests.updateStatus, { adminSecret: secret, id: original, status: "closed" });
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  const post = (body: object) => interestPOST(new NextRequest("https://synthetic.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify(body) }));
+  const submission = await post({ action: "submit_number", expectedEventId: eventId, applicantNumber: 73, applicantName: "Synthetic", photoConsent: "no" });
+  expect(submission.status).toBe(200);
+  const id = (await submission.json()).result.interestId;
+  expect(mocks.send).toHaveBeenCalledTimes(1);
+  async function land(index: number, sessionHash: string, expectedStatus: string) {
+    const message = mocks.send.mock.calls[index][0];
+    const url = new URL(/href="([^"]+)"/.exec(message.html)![1]);
+    expect(url.pathname).toBe("/me"); expect(url.searchParams.get("connection")).toBe(id);
+    expect(message.text).toContain(url.toString());
+    mocks.session.mockResolvedValue(sessionHash);
+    const response = await GET(new NextRequest(`https://synthetic.invalid/api/applicant/me${url.search}`));
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect([...payload.inbound, ...payload.outbound].find((row: { interestId: string }) => row.interestId === id)?.flowStatus).toBe(expectedStatus);
+    if (sessionHash === "brother") expect(JSON.stringify(message)).not.toContain("Synthetic Sister");
+  }
+  await land(0, "sister", "awaiting_inbound_response");
+  expect((await post({ action: "respond", interestId: id, decision: "accept" })).status).toBe(200);
+  expect((await post({ action: "final_approval", interestId: id, approved: true })).status).toBe(200);
+  expect(mocks.send).toHaveBeenCalledTimes(2);
+  await land(1, "brother", "awaiting_final_approvals");
+});
+
+for (const confirmed of [false, true]) test(`selected older female review supports decision=${confirmed} and pause/resume outside its first history page`, async () => {
+  const { t, id } = await fixture("email", true, false, false);
+  await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret: secret, interestId: id, reviewTokenHash: "a".repeat(64) });
+  await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: id, decision: "accept" });
+  await t.run(async ctx => {
+    const { _id, _creationTime, ...history } = (await ctx.db.get(id))!;
+    void _id; void _creationTime;
+    for (let n = 0; n < 60; n++) await ctx.db.insert("interests", { ...history, status: "closed", femaleWorkflow: { state: "declined" } });
+  });
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  mocks.session.mockResolvedValue("sister");
+  const firstPage = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "sister", paginationOpts: { cursor: null, numItems: 50 } });
+  expect(firstPage.page).toEqual([]); expect(firstPage.isDone).toBe(false);
+  const get = () => reviewGET(new NextRequest(`https://synthetic.invalid/api/applicant/female-review?interestId=${id}`));
+  expect((await (await get()).json()).state).toBe("awaiting_sister_confirmation");
+  const decide = () => reviewPOST(new NextRequest("https://synthetic.invalid/api/applicant/female-review", { method: "POST", headers: { origin: "https://synthetic.invalid", host: "synthetic.invalid" }, body: JSON.stringify({ action: "confirm", interestId: id, confirmed }) }));
+  mocks.session.mockResolvedValue("other"); expect((await decide()).status).toBe(401);
+  mocks.session.mockResolvedValue(null); expect((await decide()).status).toBe(401);
+  mocks.session.mockResolvedValue("sister"); expect((await decide()).status).toBe(200);
+  if (!confirmed) { expect((await get()).status).toBe(409); return; }
+  expect((await (await get()).json()).state).toBe("pending_admin_approval");
+  for (const paused of [true, false]) {
+    const action = paused ? "pause_connection" : "resume_connection";
+    expect((await interestPOST(new NextRequest("https://synthetic.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify({ action, interestId: id }) }))).status).toBe(200);
+    const response = await get(); expect(response.status).toBe(200);
+    expect((await response.json()).paused).toBe(paused);
+  }
 });

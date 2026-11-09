@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
         const emailResult = await sendInboundInterestReceivedEmail({
           name: recipient.name,
           email: recipient.email,
-          applicantPortalUrl: `${appUrl}/me`,
+          applicantPortalUrl: `${appUrl}/me?connection=${encodeURIComponent(result.interestId)}`,
         });
 
         if (!emailResult.success) {
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
         const emailResult = await sendFinalApprovalRequestedEmail({
           name: recipient.name,
           email: recipient.email,
-          applicantPortalUrl: `${appUrl}/me`,
+          applicantPortalUrl: `${appUrl}/me?connection=${encodeURIComponent(body.interestId)}`,
         });
 
         if (!emailResult.success) {
