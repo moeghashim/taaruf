@@ -141,6 +141,7 @@ async function safeCounterparty(
  {
   if (!counterparty) return null;
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
+  const showName = showProfile && !(viewer.gender === "male" && counterparty.gender === "female");
   const contactShared = await contactsVisible(ctx, interest, flow);
   const fullProfileVisible =
     showProfile &&
@@ -165,7 +166,7 @@ async function safeCounterparty(
   return {
     registrationId: showProfile ? counterparty._id : null,
     applicantNumber: counterpartyNumber ?? null,
-    name: showProfile ? counterparty.name : null,
+    ...(showName ? { name: counterparty.name } : {}),
     age: counterparty.age,
     gender: counterparty.gender,
     maritalStatus: fullProfileVisible ? counterparty.maritalStatus : null,
@@ -182,7 +183,7 @@ async function safeCounterparty(
     shareableBio: showProfile ? counterparty.shareableBio ?? null : null,
     email: contactShared ? counterparty.email : null,
     phone: contactShared ? counterparty.phone : null,
-    label: showProfile ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
+    label: showName ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
     fullProfileVisible,
     viewerGender: viewer.gender,
   };

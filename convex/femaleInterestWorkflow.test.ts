@@ -167,3 +167,61 @@ test("PR61 cutoff also denies female portal reads and actions for old sessions",
  await expect(t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId,confirmed:true})).rejects.toThrow("Unauthorized");
  expect((await t.run(ctx=>ctx.db.get(interestId)))?.femaleWorkflow?.state).toBe("awaiting_brother_review");
 });
+
+test("serialized brother review surfaces omit sister identity throughout approval and release", async () => {
+  const { t, interestId, sister, brother } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.patch(sister, { publicApplicantNumber: 73 });
+    await ctx.db.patch(interestId, { visibility: "admin_actionable" });
+    const now = Date.now();
+    await ctx.db.insert("interests", { fromRegistrationId: brother, toRegistrationId: sister, eventId: (await ctx.db.get(interestId))!.eventId, source: "admin_entered", status: "new", visibility: "admin_actionable", createdAt: now, updatedAt: now });
+  });
+  async function check(state: string) {
+    const review = await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId });
+    expect(review.state).toBe(state);
+    expect(review.profile).not.toHaveProperty("name");
+    expect(review.profile.label).toBe("Applicant #73");
+    expect(JSON.stringify(review)).not.toContain("Synthetic Sister");
+    const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash: "brother" });
+    for (const row of [...dashboard.inbound, ...dashboard.outbound]) {
+      expect(row.counterparty).not.toHaveProperty("name");
+      expect(row.counterparty?.label).toBe("Applicant #73");
+    }
+    expect(dashboard.inbound).toHaveLength(1);
+    expect(dashboard.outbound).toHaveLength(1);
+    expect(JSON.stringify(dashboard)).not.toContain("Synthetic Sister");
+    expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "sister" })).applicant.name).toBe("Synthetic Sister");
+    expect((await t.query(api.applicantProfile.getProfile, { sessionHash: "sister" })).registration.name).toBe("Synthetic Sister");
+    expect((await t.query(api.interests.getAll, { adminSecret })).find(row => row._id === interestId)?.fromRegistration?.name).toBe("Synthetic Sister");
+    expect((await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "sister", interestId })).profile.name).toBe("Synthetic Brother");
+    if (state !== "contacts_released") {
+      expect(review.profile.email).toBeNull();
+      expect(review.profile.phone).toBeNull();
+    }
+  }
+  await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
+  await check("awaiting_brother_review");
+  await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
+  await check("awaiting_sister_confirmation");
+  await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  await check("pending_admin_approval");
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated");
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com");
+  vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com");
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "test@example.com");
+  vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "synthetic-only");
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => new Response("{}", { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  await t.mutation(api.femaleInterestWorkflow.releaseContacts, { adminSecret, interestId });
+  await check("contacts_released");
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  const messages = fetchMock.mock.calls.map(call => JSON.parse(call[1]!.body as string));
+  expect(messages).toHaveLength(4);
+  for (const message of messages) {
+    expect(JSON.stringify(message)).not.toContain("Synthetic Sister");
+    expect(message.subject).toBeTruthy();
+    expect(message.text).toBeTruthy();
+    expect(message.text).not.toContain("5550100");
+  }
+});

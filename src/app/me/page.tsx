@@ -29,7 +29,7 @@ type DashboardInterest = {
   senderPhotoConsentRevokedAt: number | null;
   counterparty: {
     applicantNumber: number | null;
-    name: string | null;
+    name?: string;
     age: number;
     gender: string;
     maritalStatus: string | null;
