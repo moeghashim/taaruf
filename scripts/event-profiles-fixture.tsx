@@ -1,3 +1,4 @@
+export {};
 // Synthetic fetch boundary; production React admin transport remains unmocked.
 const profiles = [1, 2].map(n => ({ _id: "profile" + n, _creationTime: n, publicApplicantNumber: n, name: "Synthetic " + n, email: "synthetic" + n + "@example.invalid", age: 30, gender: "male", status: "pending", adminNotes: "Note " + n, imageUrls: [], maritalStatus: "single", education: "College", job: "Engineer" }));
 const event = { _id: "event1", title: "Synthetic event", eventCode: "test", status: "scheduled", startsAt: 1900000000000, endsAt: 1900000100000, maleCapacity: 1, femaleCapacity: 1, counts: { malePending: 1, maleApproved: 0, femalePending: 0, femaleApproved: 0, maleWaitlisted: 0, femaleWaitlisted: 0 }, location: "Test" };
