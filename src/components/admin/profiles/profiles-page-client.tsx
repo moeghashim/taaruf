@@ -15,7 +15,7 @@ import {
   type FilterStatus,
 } from "@/components/admin/hooks/use-registrations";
 
-import { useAdminQuery } from "@/components/admin/hooks/use-admin-transport";
+import { useProfileEventPages } from "@/components/admin/hooks/use-profile-event-pages";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { eventMembershipStatuses, filterEventMembers, profilePage } from "@/lib/profile-event-filter";
 
@@ -70,10 +70,11 @@ function ProfilesContent({
   subtitle,
 }: Props) {
   const data = useRegistrations();
-  const events = useAdminQuery("events.getAll");
+  const catalog = useProfileEventPages("events.profileFilterCatalog", {});
+  const events = catalog.rows;
   const [eventId, setEventId] = useState("all");
-  const event = useAdminQuery("events.getDetail", eventId === "all" ? "skip" : { eventId: eventId as Id<"events"> });
-  const membership = useMemo(() => eventMembershipStatuses(event?.registrations ?? []), [event]);
+  const event = useProfileEventPages("events.profileFilterMembership", eventId === "all" ? "skip" : { eventId: eventId as Id<"events"> });
+  const membership = useMemo(() => eventMembershipStatuses(event.rows ?? []), [event.rows]);
   const [pagination, setPagination] = useState({ key: "", page: 1 });
   const params = useSearchParams();
   const query = params.get("q") ?? "";
@@ -90,8 +91,10 @@ function ProfilesContent({
   );
 
   const filterKey = JSON.stringify([effectiveTab, gender, search, profileStatus, eventId]);
+  // Persist every filter transition so a round trip cannot resurrect an old page.
+  if (pagination.key !== filterKey) setPagination({ key: filterKey, page: 1 });
   const { page, pages, rows } = profilePage(filtered, pagination.key === filterKey ? pagination.page : 1);
-  const isLoading = data.isLoading || events === undefined || (eventId !== "all" && event === undefined);
+  const isLoading = data.isLoading || (eventId !== "all" && event.rows === undefined);
 
   useEffect(() => {
     setSearch(query);
@@ -189,6 +192,8 @@ function ProfilesContent({
             {events?.map((item) => <option key={item._id} value={item._id}>{item.title} · {new Date(item.startsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", year: "numeric", month: "short", day: "numeric" })}</option>)}
           </select>
         </div>
+        {(catalog.error || (eventId !== "all" && event.error)) && <div role="alert" className="filters"><p>{catalog.error ? "Unable to load the complete event catalog." : "Unable to load event registrations."} Retry to load current results.</p><button className="btn" onClick={() => { catalog.retry(); event.retry(); }}>Retry</button></div>}
+        {!events && !catalog.error && <p className="filters">Loading event catalog…</p>}
         {eventId !== "all" && <p className="filters">Includes all event registration statuses, regardless of check-in. Status tabs filter profile approval.</p>}
         <div className="filters">
           <div className="search-inline">
