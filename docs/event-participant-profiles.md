@@ -17,3 +17,8 @@ Admin → Events → select an event → click a participant name (also availabl
 No verified isolated hosted backend is available. Existing preview middleware blocks API access and the provider disables live Convex connections unless PREVIEW_BACKEND_ISOLATED=true. Keep those guards enabled. Preview is UI-review-only; do not submit real data. Admin sign-in requires the existing admin password; deployment protection may require Vercel team access. Hosted functional testing is blocked until a separate synthetic backend is configured. No production data, emails, merge, or Convex deployment is part of this change.
 
 Existing public Convex profile mutations rely on the application's admin shell gate rather than backend identity checks; this change reuses them without expanding their contract. Backend authorization hardening remains a pre-existing limitation, not a security guarantee from these UI tests.
+
+## Access-contract review
+The event drawer introduces no new backend endpoints, authentication bypass, public function, or mutation capability. It mounts the existing useRegistrations/ProfileDetail stack only inside the existing authenticated admin Events shell. Opening it subscribes to the same getAll/photo, waitlist, event-history and interest-history queries already used by Profiles; its actions call the same notes/status/delete/revoke operations. This expands where admins can use existing functionality, not who can access it. The inherited lack of identity enforcement on some public Convex functions remains a separate backend-hardening issue.
+
+Local unauthenticated /admin/events smoke test rendered the password form, zero profile action buttons and zero WebSocket connections. This verifies the UI gate, not authorization of direct Convex calls.

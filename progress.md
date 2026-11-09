@@ -603,3 +603,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-09
 - Added event participant profile drawer using shared profile actions, draft-note protection and explicit global approval scope; added synthetic browser/backend regression coverage.
+
+- Reviewed PR74 access contracts: no new backend endpoints or permissions; documented inherited direct-Convex authorization limitation and unauthenticated UI smoke evidence.
