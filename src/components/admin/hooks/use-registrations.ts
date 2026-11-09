@@ -5,8 +5,10 @@ import { useMemo } from "react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
+import { isArchivedProfile, matchesProfileListStatus, type ProfileListStatus } from "@/lib/profile-archive-filter";
+
 export type RegistrationDoc = NonNullable<ReturnType<typeof useAllRegistrations>>[number];
-export type FilterStatus = "all" | "approved" | "pending" | "rejected";
+export type FilterStatus = ProfileListStatus;
 export type FilterGender = "all" | "male" | "female";
 export type FilterProfileCompletionStatus = "all" | "completed" | "in_progress" | "not_started";
 
@@ -55,6 +57,7 @@ export function useRegistrations() {
   const counts = useMemo(
     () => ({
       total: registrations.length,
+      archived: registrations.filter(isArchivedProfile).length,
       approved: registrations.filter((r) => r.status === "approved").length,
       pending: registrations.filter((r) => r.status === "pending").length,
       rejected: registrations.filter((r) => r.status === "rejected").length,
@@ -71,7 +74,7 @@ export function useRegistrations() {
     profileCompletionStatus: FilterProfileCompletionStatus = "all"
   ) =>
     registrations.filter((reg) => {
-      if (status !== "all" && reg.status !== status) {
+      if (!matchesProfileListStatus(reg, status)) {
         return false;
       }
       if (gender !== "all" && reg.gender !== gender) return false;
