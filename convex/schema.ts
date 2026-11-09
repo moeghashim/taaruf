@@ -157,6 +157,9 @@ export default defineSchema({
     profileUrl: v.optional(v.string()),
   }).index("by_key", ["key"]),
   registrations: defineTable({
+    archivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.union(v.literal("participant"), v.literal("admin"))),
+    archivedByRegistrationId: v.optional(v.id("registrations")),
     // Legacy/internal identifier. Keep for compatibility, but human-facing
     // applicant references should use publicApplicantNumber.
     applicantNumber: v.optional(v.number()),

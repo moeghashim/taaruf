@@ -55,6 +55,15 @@ export async function getRegistrationOrThrow(ctx: ReadCtx, id: Id<"registrations
   return registration;
 }
 
+/** Archive is independent of search status and consent. */
+export function assertNotArchived(registration: Doc<"registrations">) {
+  if (registration.archivedAt !== undefined) throw new Error("Archived applicants cannot participate in matching");
+}
+
+export async function assertMatchingParticipants(ctx: ReadCtx, ...ids: Id<"registrations">[]) {
+  for (const id of ids) assertNotArchived(await getRegistrationOrThrow(ctx, id));
+}
+
 export function isProfileCompleted(registration: Doc<"registrations">) {
   return registration.profileCompletionStatus === "completed";
 }
@@ -143,6 +152,8 @@ export async function assertCanCreateInterest(
 
   const fromRegistration = await getRegistrationOrThrow(ctx, fromRegistrationId);
   const toRegistration = await getRegistrationOrThrow(ctx, toRegistrationId);
+  assertNotArchived(fromRegistration);
+  assertNotArchived(toRegistration);
   const visibility = deriveVisibility(fromRegistration.gender, toRegistration.gender);
 
   assertProfileCompleted(fromRegistration, "Requester");
@@ -188,6 +199,8 @@ export async function createMatchFromInterest(
 
   const fromRegistration = await getRegistrationOrThrow(ctx, interest.fromRegistrationId);
   const toRegistration = await getRegistrationOrThrow(ctx, interest.toRegistrationId);
+  assertNotArchived(fromRegistration);
+  assertNotArchived(toRegistration);
   deriveVisibility(fromRegistration.gender, toRegistration.gender);
 
   const maleRegistrationId =
@@ -236,6 +249,8 @@ async function createMutualInterestMatch(
 ) {
   const fromRegistration = await getRegistrationOrThrow(ctx, interest.fromRegistrationId);
   const toRegistration = await getRegistrationOrThrow(ctx, interest.toRegistrationId);
+  assertNotArchived(fromRegistration);
+  assertNotArchived(toRegistration);
   deriveVisibility(fromRegistration.gender, toRegistration.gender);
 
   const maleRegistrationId =
@@ -392,6 +407,7 @@ export async function activateInterestAndQueueCompetitors(
     throw new Error("Interest not found");
   }
 
+  await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
   const now = Date.now();
   const inboundCompetitors = await ctx.db
     .query("interests")
@@ -451,10 +467,15 @@ export async function promoteOldestQueuedForRegistration(
   ctx: MutationCtx,
   registrationId: Id<"registrations">
 ) {
-  const [oldestQueued] = await getQueuedInterestsForRegistration(ctx, registrationId);
-  if (!oldestQueued) return null;
-  await activateInterestAndQueueCompetitors(ctx, oldestQueued._id);
-  return oldestQueued._id;
+  const registration = await ctx.db.get(registrationId);
+  if (!registration || registration.archivedAt !== undefined) return null;
+  for (const queued of await getQueuedInterestsForRegistration(ctx, registrationId)) {
+    const pair = await Promise.all([ctx.db.get(queued.fromRegistrationId), ctx.db.get(queued.toRegistrationId)]);
+    if (pair.some(person => !person || person.archivedAt !== undefined)) continue;
+    await activateInterestAndQueueCompetitors(ctx, queued._id);
+    return queued._id;
+  }
+  return null;
 }
 
 export async function demoteOpenInterestsInvolvingRegistration(

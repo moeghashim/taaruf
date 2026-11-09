@@ -634,3 +634,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-08
 - Prepared centralized monotonic capability cutoff and authenticated recovery in convex auth/profile/share/settings paths; integrated explicit saved Yes/No editors, tests and release documentation. No production activation. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-09
+- Extracted archive-only lifecycle onto PR61 authenticated foundation, preserving existing consent/security; added cutoff-aware owner/admin archive, admission/matching/share/delivery guards, synthetic tests, and minimal PR71 Archived filter. No production changes or publication.

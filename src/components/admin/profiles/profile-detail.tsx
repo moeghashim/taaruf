@@ -1,6 +1,7 @@
 "use client";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
+import { ArchiveParticipant } from "@/components/archive-participant";
 import { useEffect, useState } from "react";
 import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -9,7 +10,7 @@ import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
 import type { RegistrationDoc } from "@/components/admin/hooks/use-registrations";
 
 type Props = {
-  profile: RegistrationDoc;
+  profile: RegistrationDoc & { archivedAt?: number };
   registrationNumber?: number;
   onUpdateNotes: (id: string, notes: string) => Promise<unknown>;
   onUpdateStatus: (id: string, status: "approved" | "rejected") => Promise<unknown>;
@@ -78,6 +79,8 @@ export function ProfileDetail({
   onDelete,
   onClose,
 }: Props) {
+  const [archivedId, setArchivedId] = useState<string | null>(null);
+  const archived = profile.archivedAt != null || archivedId === profile._id;
   const [actionError, setActionError] = useState<string | null>(null);
   const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
   const eventHistory = useQuery("events.getByRegistration", {
@@ -169,6 +172,7 @@ export function ProfileDetail({
 
   return (
     <div style={{ padding: 20 }}>
+      <ArchiveParticipant key={profile._id} archivedAt={profile.archivedAt} registrationId={profile._id} name={profile.name} onArchived={() => { setArchivedId(profile._id); refreshAdminData(); }} />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <StatusPill status={profile.status} />
         {profile.paymentStatus && <StatusPill status={profile.paymentStatus} />}
@@ -416,8 +420,8 @@ export function ProfileDetail({
         }}
       >
         {actionError && <p role="alert">{actionError}</p>}
-        {profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke approval"}</button>}
-        {profile.status === "pending" && (
+        {!archived && profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke approval"}</button>}
+        {!archived && profile.status === "pending" && (
           <>
             <button
               className="btn btn-primary"

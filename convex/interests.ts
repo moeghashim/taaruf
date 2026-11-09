@@ -1,4 +1,5 @@
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
+import { assertNotArchived, assertMatchingParticipants } from "./interestRules";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -87,6 +88,7 @@ export const updateAdminStatus = mutation({
       throw new Error("Interest not found");
     }
 
+    if (args.adminStatus !== "declined") await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     await ctx.db.patch(args.id, {
       adminStatus: args.adminStatus,
       status: args.adminStatus === "declined" ? "declined" : interest.status,
@@ -126,6 +128,8 @@ export const claimDeclineNotification = mutation({
       throw new Error("Interest registration not found");
     }
 
+    assertNotArchived(requester);
+    assertNotArchived(target);
     const targetNumber = target.publicApplicantNumber ?? null;
 
     await ctx.db.patch(args.id, {
@@ -201,6 +205,7 @@ export const updateStatus = mutation({
       throw new Error("Interest not found");
     }
 
+    if (!["closed", "declined", "withdrawn"].includes(args.status)) await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     await ctx.db.patch(args.id, {
       status: args.status,
       adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,
@@ -309,5 +314,17 @@ export const getByRegistration = query({
       outbound: await Promise.all(outbound.map(enrich)),
       inbound: await Promise.all(inbound.map(enrich)),
     };
+  },
+});
+
+/** Used by server routes to revalidate previously claimed notification work. */
+export const assertNotificationEligible = mutation({
+  args: { adminSecret: v.string(), id: v.id("interests") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const interest = await ctx.db.get(args.id);
+    if (!interest) throw new Error("Interest not found");
+    await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
+    return true;
   },
 });

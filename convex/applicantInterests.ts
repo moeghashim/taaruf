@@ -1,5 +1,6 @@
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
+import { assertNotArchived, assertMatchingParticipants } from "./interestRules";
 import { matchesInterestFirstName } from "./interestIdentity";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -42,12 +43,14 @@ async function getRegistrationForSession(ctx: ReadCtx, sessionHash: string) {
 }
 
 function requireApprovedForInterestAction(registration: Registration) {
+  assertNotArchived(registration);
   if (registration.status !== "approved") {
     throw new Error("Your registration must be approved before you can express or respond to interests.");
   }
 }
 
 function requirePendingOrApprovedForInterestSubmission(registration: Registration) {
+  assertNotArchived(registration);
   if (!["pending", "approved"].includes(registration.status)) {
     throw new Error("Your registration must be pending or approved before you can express interest.");
   }
@@ -240,7 +243,7 @@ export const getInterestEligibility = query({
     return {
       interestSubmissionEventId: event?._id ?? null,
       interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
-      canSubmitInterest: Boolean(event) && ["pending", "approved"].includes(registration.status) && registration.profileCompletionStatus === "completed",
+      canSubmitInterest: registration.archivedAt === undefined && Boolean(event) && ["pending", "approved"].includes(registration.status) && registration.profileCompletionStatus === "completed",
       interestSubmissionLimit: 3,
     };
   },
@@ -301,7 +304,7 @@ export const getDashboard = query({
       privateDocumented: await Promise.all(
         privateDocumented.map((interest) => serializeInterest(ctx, registration, interest, byId, "private"))
       ),
-      canSubmitInterest: Boolean(eligibleEvent) && ["pending", "approved"].includes(registration.status) && registration.profileCompletionStatus === "completed",
+      canSubmitInterest: registration.archivedAt === undefined && Boolean(eligibleEvent) && ["pending", "approved"].includes(registration.status) && registration.profileCompletionStatus === "completed",
       interestSubmissionLimit: 3,
     };
   },
@@ -325,7 +328,7 @@ export const submitInterestNumber = mutation({
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique()
       : null;
-    if (!target || !matchesInterestFirstName(target.name, args.applicantName) ||
+    if (!target || target.archivedAt !== undefined || !matchesInterestFirstName(target.name, args.applicantName) ||
         target._id === registration._id || target.gender === registration.gender || target.status !== "approved") {
       throw new Error("Applicant details could not be verified");
     }
@@ -420,6 +423,7 @@ export const respondToInbound = mutation({
       throw new Error("Interest is not available for this applicant");
     }
 
+    await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     const flow = await ensureFlow(ctx, interest);
     const now = Date.now();
 
@@ -592,6 +596,7 @@ export const giveFinalApproval = mutation({
       throw new Error("Interest is not available for this applicant");
     }
 
+    await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     const flow = await ensureFlow(ctx, interest);
     if (["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(flow.flowStatus)) {
       throw new Error("Interest is no longer active");

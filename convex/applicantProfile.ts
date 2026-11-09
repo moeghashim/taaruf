@@ -131,6 +131,7 @@ export const getProfile = query({
 
     return {
       registration: {
+        archivedAt: registration.archivedAt ?? null,
         name: registration.name,
         gender: registration.gender,
         email: registration.email,
@@ -174,6 +175,7 @@ export const updateProfile = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
 
     await assertImageOwnership(ctx, registration._id, args.imageStorageIds);
+    if (registration.archivedAt != null) throw new Error("Profile is archived");
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
