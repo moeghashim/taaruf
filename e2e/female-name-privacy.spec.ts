@@ -178,3 +178,58 @@ for (const width of [1280, 390]) for (const confirmed of [false, true]) test(`se
   }
   expect(paginated).toBe(false);
 });
+
+for (const width of [1280, 390]) for (const female of [false, true]) for (const released of [false, true]) test(`expired ${female ? "review" : "general"} ${released ? "released" : "pending"} login navigation at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const destination = female ? "/dashboard?femaleReview=older-selected" : "/me?connection=older-selected";
+  let signedIn = false;
+  let verifyUrl = "";
+  let forwarded = "";
+  const profile = { label: "Applicant #73", age: 30, gender: "female", imageUrls: [], email: released ? "sister@example.invalid" : null, phone: released ? "5550100" : null };
+  await page.route("**/api/**", route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/applicant/login") {
+      forwarded = route.request().postDataJSON().next;
+      verifyUrl = "/api/applicant/login/verify?" + new URLSearchParams({ token: "synthetic-login-token", next: forwarded });
+      return route.fulfill({ json: { success: true } });
+    }
+    if (url.pathname === "/api/applicant/login/verify") {
+      signedIn = true;
+      return route.fulfill({ status: 307, headers: { location: url.searchParams.get("next")! }, body: "" });
+    }
+    if (!signedIn) return route.fulfill({ status: 401, json: { error: "Please sign in to your applicant account." } });
+    if (url.pathname === "/api/applicant/female-review") return route.fulfill({ json: url.searchParams.has("interestId") ? { state: released ? "contacts_released" : "pending_admin_approval", role: "brother", profile } : { page: [], isDone: false, continueCursor: "sixty-newer-rows" } });
+    if (url.pathname === "/api/applicant/me") return route.fulfill({ json: { applicant: { name: "Synthetic Brother", status: "approved", gender: "male", applicantNumber: 1, profileCompletionStatus: "completed" }, inbound: [], outbound: [{ interestId: "older-selected", direction: "outbound", status: "converted_to_match", contactSharedAt: released ? 1 : null, flowStatus: released ? "contact_shared" : "awaiting_final_approvals", requesterFinalApproval: "approved", recipientFinalApproval: "approved", counterparty: { ...profile, fullProfileVisible: true } }], privateDocumented: [], interestSubmissions: [] } });
+    if (url.pathname === "/api/applicant/events") return route.fulfill({ json: { upcoming: [], history: [], eligibleInterestEvents: [] } });
+    return route.fulfill({ status: 400, json: { error: "Synthetic profile not loaded" } });
+  });
+  await page.goto(destination + (female ? "&reviewToken=never-forward-this-secret" : ""));
+  if (female) await page.getByRole("link", { name: "Sign in", exact: true }).first().click();
+  await expect(page).toHaveURL(new RegExp("/login\\?next="));
+  expect(new URL(page.url()).searchParams.get("next")).toBe(destination);
+  expect(page.url()).not.toContain("never-forward-this-secret");
+  await page.getByLabel("Email", { exact: true }).fill("brother@example.invalid");
+  await page.getByRole("button", { name: "Send Login Link", exact: true }).click();
+  await expect(page.getByText("If that email is approved, a secure login link has been sent.", { exact: true })).toBeVisible();
+  expect(forwarded).toBe(destination);
+  await page.goto(verifyUrl);
+  await expect(page).toHaveURL("http://127.0.0.1:3113" + destination);
+  await expect(page.getByRole("heading", { level: 3, name: "Applicant #73", exact: true })).toBeVisible();
+  expect(page.url()).not.toContain("token=");
+  if (released) await expect(page.locator(".contact-box")).toContainText("sister@example.invalid");
+  else await expect(page.getByText("sister@example.invalid", { exact: true })).toHaveCount(0);
+});
+
+for (const width of [1280, 390]) for (const endpoint of ["me", "profile", "events", "interest-eligibility"]) test(`401 from ${endpoint} retains destination at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === `/api/applicant/${endpoint}`) return route.fulfill({ status: 401, json: { error: "Unauthorized" } });
+    if (path === "/api/applicant/me") return route.fulfill({ json: { applicant: { name: "Synthetic", gender: "male", applicantNumber: 1, profileCompletionStatus: "completed" }, inbound: [], outbound: [], privateDocumented: [], interestSubmissions: [] } });
+    if (path === "/api/applicant/events") return route.fulfill({ json: { upcoming: [], history: [], eligibleInterestEvents: [] } });
+    return route.fulfill({ status: 400, json: { error: "Synthetic profile not loaded" } });
+  });
+  await page.goto("/me?connection=older-selected");
+  await expect(page).toHaveURL(/\/login\?next=/);
+  expect(new URL(page.url()).searchParams.get("next")).toBe("/me?connection=older-selected");
+});

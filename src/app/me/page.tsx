@@ -1,5 +1,6 @@
 "use client";
 
+import { applicantLoginHref } from "@/lib/applicant-destination";
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -632,13 +633,19 @@ export default function ApplicantDashboardPage() {
   const [sideOpen, setSideOpen] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(false);
 
+  const applicantFetch = useCallback(async (url: string, init?: RequestInit) => {
+    const loginHref = applicantLoginHref(window.location.pathname + window.location.search);
+    const response = await fetch(url, init);
+    if (response.status === 401) router.replace(loginHref);
+    return response;
+  }, [router]);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
       const requested = new URLSearchParams(window.location.search).get("connection");
-      const response = await fetch("/api/applicant/me" + (requested !== null ? "?connection=" + encodeURIComponent(requested) : ""), { cache: "no-store" });
+      const response = await applicantFetch("/api/applicant/me" + (requested !== null ? "?connection=" + encodeURIComponent(requested) : ""), { cache: "no-store" });
       if (response.status === 401) {
-        router.replace("/login");
         return;
       }
       const payload = await response.json();
@@ -649,7 +656,7 @@ export default function ApplicantDashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [router]);
+  }, [applicantFetch]);
 
   useEffect(() => {
     void load();
@@ -666,9 +673,9 @@ export default function ApplicantDashboardPage() {
       if (document.hidden) { timer = setTimeout(refresh, 3000); return; }
       active = new AbortController();
       try {
-        const response = await fetch("/api/applicant/interest-eligibility", { cache: "no-store", signal: active.signal });
+        const response = await applicantFetch("/api/applicant/interest-eligibility", { cache: "no-store", signal: active.signal });
         if (stopped) return;
-        if (response.status === 401) { router.replace("/login"); return; }
+        if (response.status === 401) return;
         if (!response.ok) throw new Error("Availability refresh failed");
         const eligibility = await response.json();
         if (stopped) return;
@@ -693,7 +700,7 @@ export default function ApplicantDashboardPage() {
       document.removeEventListener("visibilitychange", onFocus);
     };
     // Poll only eligibility; do not refetch the profile or write touchSession.
-  }, [hasDashboard, busy, router]);
+  }, [hasDashboard, busy, applicantFetch]);
 
   useEffect(() => {
     setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "", photoConsent: "" })));
@@ -702,9 +709,8 @@ export default function ApplicantDashboardPage() {
   const loadProfile = useCallback(async () => {
     setIsProfileLoading(true);
     try {
-      const response = await fetch("/api/applicant/profile", { cache: "no-store" });
+      const response = await applicantFetch("/api/applicant/profile", { cache: "no-store" });
       if (response.status === 401) {
-        router.replace("/login");
         return;
       }
       const payload = await response.json();
@@ -720,7 +726,7 @@ export default function ApplicantDashboardPage() {
     } finally {
       setIsProfileLoading(false);
     }
-  }, [router]);
+  }, [applicantFetch]);
 
   useEffect(() => {
     void loadProfile();
@@ -728,9 +734,8 @@ export default function ApplicantDashboardPage() {
 
   const loadEvents = useCallback(async () => {
     try {
-      const response = await fetch("/api/applicant/events", { cache: "no-store" });
+      const response = await applicantFetch("/api/applicant/events", { cache: "no-store" });
       if (response.status === 401) {
-        router.replace("/login");
         return;
       }
       const payload = await response.json();
@@ -739,7 +744,7 @@ export default function ApplicantDashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [router]);
+  }, [applicantFetch]);
 
   useEffect(() => {
     void loadEvents();
@@ -752,7 +757,7 @@ export default function ApplicantDashboardPage() {
     setMessage(null);
     setError(null);
     try {
-      const response = await fetch("/api/applicant/interests", {
+      const response = await applicantFetch("/api/applicant/interests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -787,7 +792,7 @@ export default function ApplicantDashboardPage() {
     setMessage(null);
     setError(null);
     try {
-      const response = await fetch("/api/applicant/events", {
+      const response = await applicantFetch("/api/applicant/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "register", eventId }),
@@ -812,7 +817,7 @@ export default function ApplicantDashboardPage() {
     setMessage(null);
     setError(null);
     try {
-      const response = await fetch("/api/applicant/events", {
+      const response = await applicantFetch("/api/applicant/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "confirm", eventRegistrationId }),
@@ -847,7 +852,7 @@ export default function ApplicantDashboardPage() {
 
       for (const file of chosenFiles) {
         const preparedFile = await prepareImageFileForUpload(file);
-        const result = await fetch("/api/photos/upload", {
+        const result = await applicantFetch("/api/photos/upload", {
           method: "POST",
           headers: {
             "Content-Type": preparedFile.type || "application/octet-stream",
@@ -901,7 +906,7 @@ export default function ApplicantDashboardPage() {
     }
 
     try {
-      const response = await fetch("/api/applicant/profile", {
+      const response = await applicantFetch("/api/applicant/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

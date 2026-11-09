@@ -1,4 +1,5 @@
 "use client";
+import { applicantLoginHref } from "@/lib/applicant-destination";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { FactList } from "@/components/admin/primitives/fact-list";
@@ -16,6 +17,7 @@ const stateCopy: Record<string, string> = {
   revoked: "The team revoked this review. Its link is no longer available.",
 };
 export function FemaleReviews() {
+  const [loginHref, setLoginHref] = useState("/login");
   const [rows, setRows] = useState<Review[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [token, setToken] = useState<string | undefined>();
@@ -44,6 +46,7 @@ export function FemaleReviews() {
     finally { if (requestId === listRequest.current) setLoading(false); }
   }, []);
   useEffect(() => {
+    setLoginHref(applicantLoginHref(window.location.pathname + window.location.search));
     const params = new URLSearchParams(window.location.search);
     setSelected(params.get("femaleReview"));
     setToken(params.get("reviewToken") || undefined);
@@ -86,9 +89,9 @@ export function FemaleReviews() {
   return <section id="review-notifications" className="panel applicant-section">
     <div className="panel-head"><div><h3>Profile reviews</h3><p>Review invitations and confirmations. Only you can respond from your account.</p></div><button type="button" className="btn" disabled={busy || loading} onClick={() => { void load(); setAccessVersion(value => value + 1); }}>Refresh</button></div>
     <div style={{ padding: 16, display: "grid", gap: 16 }}>
-      {error && <p className="notice error" role="alert">{error} <a href="/login">Sign in</a> or refresh your portal.</p>}
+      {error && <p className="notice error" role="alert">{error} <a href={loginHref}>Sign in</a> or refresh your portal.</p>}
       {message && <p className="notice success" role="status">{message}</p>}
-      {listError && <p className="notice error" role="alert">{listError} Use Refresh or try Load more again.</p>}
+      {listError && <p className="notice error" role="alert">{listError} <a href={loginHref}>Sign in</a>, use Refresh or try Load more again.</p>}
       {loading ? <p role="status">Loading reviews…</p> : !rows.length && <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>}
       {rows.map(item => <div key={item.interestId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 16 }}>
         {item.paused && <p>Paused</p>}

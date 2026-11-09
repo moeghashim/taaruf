@@ -8,14 +8,17 @@ import { modules } from "../../../../../convex/test.setup";
 import type { Doc } from "../../../../../convex/_generated/dataModel";
 const mocks = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn(), session: vi.fn(), send: vi.fn() }));
 vi.mock("@/lib/convex", () => ({ getConvexClient: () => mocks }));
-vi.mock("@/lib/applicant-session", () => ({ getApplicantSessionHash: mocks.session }));
+vi.mock("@/lib/applicant-session", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/applicant-session")>(), getApplicantSessionHash: mocks.session }));
 vi.mock("resend", () => ({ Resend: class { emails = { send: mocks.send }; } }));
+import { POST as loginPOST } from "../login/route";
+import { GET as verifyGET } from "../login/verify/route";
+import { applicantSessionCookie, hashToken } from "@/lib/applicant-session";
 import { POST as interestPOST } from "../interests/route";
 import { GET } from "./route";
 import { GET as reviewGET, POST as reviewPOST } from "../female-review/route";
 const secret = "synthetic-connection-admin";
 beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("ATTENDANCE_ADMIN_SECRET", secret); vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://synthetic.invalid"); mocks.send.mockResolvedValue({ data: { id: "synthetic-only" }, error: null }); });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 async function fixture(source: Doc<"interests">["source"], female: boolean, olderHistory = true, complete = true) {
   const t = convexTest(schema, modules);
@@ -196,4 +199,112 @@ for (const confirmed of [false, true]) test(`selected older female review suppor
     const response = await get(); expect(response.status).toBe(200);
     expect((await response.json()).paused).toBe(paused);
   }
+});
+
+async function requestMagicLink(email: string, next: string) {
+  const response = await loginPOST(new NextRequest("https://synthetic.invalid/api/applicant/login", { method: "POST", body: JSON.stringify({ email, next }) }));
+  expect(response.status).toBe(200);
+  const message = mocks.send.mock.calls.at(-1)![0];
+  return new URL(/href="([^"]+)"/.exec(message.html)![1]);
+}
+
+for (const source of ["platform_submission", "admin_entered", "email", "whatsapp"] as const) for (const female of [false, true]) for (const released of [false, true]) test(`expired-session ${source} ${female ? "female" : "general"} magic login returns to ${released ? "released" : "pending"} target`, async () => {
+  const { t, id, matchId } = await fixture(source, female);
+  if (released) await t.mutation(api.matches.updateStatus, { adminSecret: secret, id: matchId, status: "contact_shared" });
+  if (female) await t.run(async ctx => {
+    const { _id, _creationTime, ...history } = (await ctx.db.get(id))!;
+    void _id; void _creationTime;
+    for (let n = 0; n < 60; n++) await ctx.db.insert("interests", { ...history, matchId: undefined, status: "closed", femaleWorkflow: { state: "declined" } });
+  });
+  await t.run(async ctx => {
+    const session = await ctx.db.query("applicantSessions").withIndex("by_sessionHash", q => q.eq("sessionHash", "brother")).unique();
+    await ctx.db.patch(session!._id, { expiresAt: Date.now() - 1 });
+  });
+  const destination = female ? `/dashboard?femaleReview=${id}` : `/me?connection=${id}`;
+  const targetRequest = () => new NextRequest(female ? `https://synthetic.invalid/api/applicant/female-review?interestId=${id}` : `https://synthetic.invalid/api/applicant/me?connection=${id}`);
+  expect((await (female ? reviewGET(targetRequest()) : GET(targetRequest()))).status).toBe(401);
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  const link = await requestMagicLink("brother@example.invalid", destination + "&reviewToken=never-forward-this-secret");
+  expect(link.searchParams.get("next")).toBe(destination);
+  expect(link.toString()).not.toContain("never-forward-this-secret");
+  const verified = await verifyGET(new NextRequest(link));
+  expect(verified.status).toBe(307);
+  expect(verified.headers.get("location")).toBe("https://synthetic.invalid" + destination);
+  expect(verified.headers.get("referrer-policy")).toBe("no-referrer");
+  const cookie = verified.cookies.get(applicantSessionCookie)!;
+  expect(cookie.httpOnly).toBe(true); expect(cookie.sameSite).toBe("lax");
+  mocks.session.mockResolvedValue(hashToken(cookie.value));
+  const landed = await (female ? reviewGET(targetRequest()) : GET(targetRequest()));
+  expect(landed.status).toBe(200);
+  const payload = await landed.json();
+  const profile = female ? payload.profile : payload.outbound.find((row: { interestId: string }) => row.interestId === id)?.counterparty;
+  expect(profile.email).toBe(released ? "sister@example.invalid" : null);
+  expect(JSON.stringify(payload)).not.toContain("Synthetic Sister");
+  const replay = await verifyGET(new NextRequest(link));
+  const retry = new URL(replay.headers.get("location")!);
+  expect(retry.pathname).toBe("/login"); expect(retry.searchParams.get("next")).toBe(destination);
+  expect(retry.searchParams.get("error")).toBe("invalid"); expect(retry.searchParams.has("token")).toBe(false);
+});
+
+for (const destination of ["https://evil.invalid", "//evil.invalid", "/\\evil.invalid", "%2f%2fevil.invalid", "/me%3fconnection=target", "/me?connection=%2f%2fevil.invalid", "/me?connection=a&connection=b"]) test(`login and verify independently reject ${destination}`, async () => {
+  const { t } = await fixture("email", false, false, false);
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  const link = await requestMagicLink("brother@example.invalid", destination);
+  expect(link.searchParams.has("next")).toBe(false);
+  link.searchParams.set("next", destination);
+  const verified = await verifyGET(new NextRequest(link));
+  expect(verified.headers.get("location")).toBe("https://synthetic.invalid/me");
+});
+
+test("capability cutoff denies the magic link while retaining only a safe retry destination", async () => {
+  const { t, id } = await fixture("email", false);
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  const destination = `/me?connection=${id}`;
+  const link = await requestMagicLink("brother@example.invalid", destination);
+  vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+  await t.mutation(api.settings.set, { adminSecret: secret, key: "capabilitySecurityCutoffMs", value: String(Date.now()) });
+  const response = await verifyGET(new NextRequest(link));
+  const retry = new URL(response.headers.get("location")!);
+  expect(retry.searchParams.get("next")).toBe(destination); expect(retry.searchParams.get("error")).toBe("invalid");
+  expect(response.cookies.get(applicantSessionCookie)).toBeUndefined();
+});
+
+for (const female of [false, true]) test(`reauthentication grants no access to unrelated or closed ${female ? "review" : "general"} connections`, async () => {
+  const { t, id, matchId } = await fixture("email", female);
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  const destination = female ? `/dashboard?femaleReview=${id}` : `/me?connection=${id}`;
+  const land = () => female ? reviewGET(new NextRequest(`https://synthetic.invalid/api/applicant/female-review?interestId=${id}`)) : GET(new NextRequest(`https://synthetic.invalid/api/applicant/me?connection=${id}`));
+  const other = await verifyGET(new NextRequest(await requestMagicLink("other@example.invalid", destination)));
+  mocks.session.mockResolvedValue(hashToken(other.cookies.get(applicantSessionCookie)!.value));
+  expect((await land()).status).toBe(female ? 401 : 404);
+  await t.mutation(api.matches.updateStatus, { adminSecret: secret, id: matchId, status: "closed" });
+  const own = await verifyGET(new NextRequest(await requestMagicLink("brother@example.invalid", destination)));
+  mocks.session.mockResolvedValue(hashToken(own.cookies.get(applicantSessionCookie)!.value));
+  expect((await land()).status).toBe(female ? 409 : 404);
+});
+
+test("missing login tokens preserve a safe destination without disclosing incoming secrets", async () => {
+  const next = "/dashboard?femaleReview=older&reviewToken=private-secret";
+  const url = new URL("https://synthetic.invalid/api/applicant/login/verify"); url.searchParams.set("next", next);
+  const response = await verifyGET(new NextRequest(url));
+  const retry = new URL(response.headers.get("location")!);
+  expect(retry.searchParams.get("next")).toBe("/dashboard?femaleReview=older");
+  expect(retry.searchParams.get("error")).toBe("missing");
+  expect(retry.toString()).not.toContain("private-secret"); expect(mocks.mutation).not.toHaveBeenCalled();
+});
+
+test("unregistered login requests retain the generic response and send no mail", async () => {
+  const { t } = await fixture("email", false, false, false);
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  const response = await loginPOST(new NextRequest("https://synthetic.invalid/api/applicant/login", { method: "POST", body: JSON.stringify({ email: "absent@example.invalid", next: "/dashboard?femaleReview=private" }) }));
+  expect(await response.json()).toEqual({ success: true }); expect(mocks.send).not.toHaveBeenCalled();
+});
+
+test("a fresh magic login cannot revive a reset requested submission", async () => {
+  const { t, id } = await fixture("platform_submission", false, true, false);
+  await t.mutation(api.interestTestReset.reset, { adminSecret: secret, id, confirmTest: true, reason: "Synthetic reset before reauthentication" });
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  const verified = await verifyGET(new NextRequest(await requestMagicLink("brother@example.invalid", `/me?connection=${id}`)));
+  mocks.session.mockResolvedValue(hashToken(verified.cookies.get(applicantSessionCookie)!.value));
+  expect((await GET(new NextRequest(`https://synthetic.invalid/api/applicant/me?connection=${id}`))).status).toBe(404);
 });
