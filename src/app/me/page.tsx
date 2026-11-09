@@ -1100,11 +1100,7 @@ export default function ApplicantDashboardPage() {
                         {event.registration ? (
                           <>
                             <StatusBadge value={event.registration.registrationStatus} />
-                            {event.registration.confirmationStatus === "confirmed" ? (
-                              <StatusBadge value="confirmed" />
-                            ) : event.registration.confirmationStatus === "cancelled" ? (
-                              <StatusBadge value="cancelled" />
-                            ) : canConfirmEventRegistration(event.registration) ? (
+                            {canConfirmEventRegistration(event.registration) ? (
                               <button
                                 type="button"
                                 className="btn btn-primary"

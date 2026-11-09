@@ -634,3 +634,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-08
 - Prepared centralized monotonic capability cutoff and authenticated recovery in convex auth/profile/share/settings paths; integrated explicit saved Yes/No editors, tests and release documentation. No production activation. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-09
+- Issue #75: removed only own-profile Events confirmation-status badges in `src/app/me/page.tsx`; preserved registration badges, confirmation actions, eligibility and attendance history. Added synthetic desktop/mobile matrix coverage and updated waitlist badge expectation.
