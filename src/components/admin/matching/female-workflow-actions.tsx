@@ -29,7 +29,7 @@ export function FemaleWorkflowActions({ interestId, state, compact = false }: { 
   return <div style={{ display: "grid", gap: 8 }}>
     <span>{state.replaceAll("_", " ")}</span>
     <div className="action-row">
-      {state === "private_documented" && <button type="button" className={compact ? "btn btn-sm btn-primary" : "btn btn-primary"} disabled={busy} onClick={() => void act("create")}>{busy ? "Creating…" : "Share requester profile"}</button>}
+      {state === "private_documented" && <button type="button" className={compact ? "btn btn-sm btn-primary" : "btn btn-primary"} disabled={busy} onClick={() => void act("create")}>{busy ? "Creating…" : "Create review link"}</button>}
       {state === "awaiting_brother_review" && <button type="button" className="btn" disabled={busy} onClick={() => void act("create")}>Reissue review link</button>}
       {["awaiting_brother_review", "awaiting_sister_confirmation"].includes(state) && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void act("revoke")}>Revoke review</button>}
     </div>
