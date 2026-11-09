@@ -240,7 +240,7 @@ describe("interest rules", () => {
     });
   });
 
-  test("mutual interest creates a new match without setting activeMatchId", async () => {
+  test("reciprocal submissions do not create an official match or active pointers", async () => {
     const t = convexTest(schema, modules);
     const male = await createRegistration(t, "Mutual Male", "male");
     const female = await createRegistration(t, "Mutual Female", "female");
@@ -259,18 +259,12 @@ describe("interest rules", () => {
     const maleRegistration = await getRegistration(t, male);
     const femaleRegistration = await getRegistration(t, female);
 
-    expect(reciprocalInterest.status).toBe("converted_to_match");
-    expect(reciprocalInterest.matchId).toBeTruthy();
+    expect(reciprocalInterest.status).toBe("new");
+    expect(reciprocalInterest.matchId).toBeUndefined();
     expect(maleRegistration.activeMatchId).toBeUndefined();
     expect(femaleRegistration.activeMatchId).toBeUndefined();
 
-    const match = await t.query(api.matches.getById, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
-      id: reciprocalInterest.matchId as Id<"matches">,
-    });
-    expect(match).toMatchObject({
-      status: "new",
-      interestType: "mutual_interest",
-    });
+    expect(await t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
   });
 
   test("contact_shared sets activeMatchId, queues active interests, and close promotes FIFO", async () => {
@@ -285,9 +279,16 @@ describe("interest rules", () => {
       toRegistrationId: female,
       source: "admin_entered",
     });
-    const matchId = await t.mutation(api.interests.convertToMatch, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
-      interestId,
+    await expect(t.mutation(api.interests.convertToMatch, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, interestId })).rejects.toThrow("automatically");
+    await t.run(async ctx => {
+      const now = Date.now();
+      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interestId)).unique();
+      await ctx.db.patch(flow!._id, { bioVisibleAt: now });
+      for (const [registrationId, sessionHash] of [[male, "consent-m"], [female, "consent-f"]] as const) await ctx.db.insert("applicantSessions", { registrationId, sessionHash, createdAt: now, expiresAt: now + 100000 });
     });
+    await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "consent-m", interestId, approved: true });
+    const approved = await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "consent-f", interestId, approved: true });
+    const matchId = approved.matchId!;
 
     const activeAlternative = await createAdminInterest(t, {
       fromRegistrationId: male,

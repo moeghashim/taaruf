@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { profileSearchHref } from "@/lib/admin-profile-filters";
 import { Ico } from "@/components/admin/primitives/icons";
-import { NewMatchDialog } from "@/components/admin/matching/new-match-dialog";
 
 type Props = {
   /** Current page label shown after the "Taaruf › Admin ›" prefix. */
@@ -42,7 +41,6 @@ export function Topbar({ crumb, onMenu }: Props) {
           {Ico.bell}
           <span className="dot" />
         </button>
-        <NewMatchDialog />
       </div>
     </div>
   );

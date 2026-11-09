@@ -21,7 +21,7 @@ export function FemaleWorkflowActions({ interestId, state, compact = false }: { 
     try {
       const result = await request({ action, interestId });
       setUrl(result.reviewUrl || "");
-      setMessage(action === "create" ? "Review available in the brother’s portal. No email sent." : action === "release" ? "Contacts released. Portal notification emails queued for both applicants." : "Review revoked.");
+      setMessage(action === "create" ? "Requester profile shared in the brother’s authenticated portal." : action === "release" ? "Contacts released. Portal notification emails queued for both applicants." : "Review revoked.");
       refreshAdminData();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update review."); }
     finally { setBusy(false); }
@@ -29,9 +29,8 @@ export function FemaleWorkflowActions({ interestId, state, compact = false }: { 
   return <div style={{ display: "grid", gap: 8 }}>
     <span>{state.replaceAll("_", " ")}</span>
     <div className="action-row">
-      {state === "private_documented" && <button type="button" className={compact ? "btn btn-sm btn-primary" : "btn btn-primary"} disabled={busy} onClick={() => void act("create")}>{busy ? "Creating…" : "CREATE REVIEW LINK"}</button>}
+      {state === "private_documented" && <button type="button" className={compact ? "btn btn-sm btn-primary" : "btn btn-primary"} disabled={busy} onClick={() => void act("create")}>{busy ? "Creating…" : "Share requester profile"}</button>}
       {state === "awaiting_brother_review" && <button type="button" className="btn" disabled={busy} onClick={() => void act("create")}>Reissue review link</button>}
-      {state === "pending_admin_approval" && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act("release")}>{busy ? "Approving…" : "FINAL ADMIN APPROVAL"}</button>}
       {["awaiting_brother_review", "awaiting_sister_confirmation"].includes(state) && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void act("revoke")}>Revoke review</button>}
     </div>
     {url && <label className="field">Recipient-specific review link<input aria-label="Recipient-specific review link" readOnly value={typeof window === "undefined" ? url : window.location.origin + url} onFocus={event => event.target.select()} /><span>Only the intended brother can open this link after signing in.</span></label>}

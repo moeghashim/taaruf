@@ -49,7 +49,8 @@ export async function queuePendingReview(ctx: MutationCtx, matchId: Id<"matches"
   const interest = await ctx.db.get(match.interestId);
   if (!interest) throw new Error("Linked interest missing");
   assertMatchInterest(match, interest);
-  await linkedFlows(ctx, interest);
+  const flows = await linkedFlows(ctx, interest);
+  if (flows.some(f => f.requesterFinalApproval !== "approved" || f.recipientFinalApproval !== "approved")) throw new Error("Both applicants must give final approval");
   if (match.status === "contact_shared" || match.contactGate === "contacts_released") return;
   await ctx.db.patch(matchId, { status: "reviewing", contactGate: "pending_admin_approval", updatedAt: Date.now() });
   for (const id of [match.maleRegistrationId, match.femaleRegistrationId]) await enqueueContactDelivery(ctx, match.interestId, id, "pending_review");
@@ -65,6 +66,8 @@ export async function deliveryParticipants(ctx: ReadCtx, interestId: Id<"interes
   if (!interest || interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Unavailable");
   const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
   if (!match || match.testResetAt || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Unavailable");
+  assertMatchInterest(match, interest);
+  await linkedFlows(ctx, interest);
   const sister = await ctx.db.get(match.femaleRegistrationId);
   const brother = await ctx.db.get(match.maleRegistrationId);
   if (!sister || !brother || sister.status !== "approved" || brother.status !== "approved") throw new Error("Unavailable");

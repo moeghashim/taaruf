@@ -678,6 +678,17 @@ export const giveFinalApproval = mutation({
     const notificationRecipient = shouldNotifyOtherApplicant
       ? await ctx.db.get(notificationRecipientId)
       : null;
+    await ctx.db.patch(flow._id, {
+      flowStatus: "awaiting_final_approvals",
+      requesterFinalApproval,
+      recipientFinalApproval,
+      requesterFinalApprovalAt: interest.fromRegistrationId === registration._id ? now : flow.requesterFinalApprovalAt,
+      recipientFinalApprovalAt: interest.toRegistrationId === registration._id ? now : flow.recipientFinalApprovalAt,
+      contactSharedAt: flow.contactSharedAt,
+      finalApprovalNotificationSentAt: shouldNotifyOtherApplicant ? now : flow.finalApprovalNotificationSentAt,
+      finalApprovalNotificationError: shouldNotifyOtherApplicant ? undefined : flow.finalApprovalNotificationError,
+      updatedAt: now,
+    });
     let matchId = interest.matchId;
     if (bothApproved && !matchId) {
       matchId = await createMatchFromInterest(ctx, interest);
@@ -692,17 +703,6 @@ export const giveFinalApproval = mutation({
     }
     if (bothApproved && matchId) await queuePendingReview(ctx, matchId);
 
-    await ctx.db.patch(flow._id, {
-      flowStatus: "awaiting_final_approvals",
-      requesterFinalApproval,
-      recipientFinalApproval,
-      requesterFinalApprovalAt: interest.fromRegistrationId === registration._id ? now : flow.requesterFinalApprovalAt,
-      recipientFinalApprovalAt: interest.toRegistrationId === registration._id ? now : flow.recipientFinalApprovalAt,
-      contactSharedAt: flow.contactSharedAt,
-      finalApprovalNotificationSentAt: shouldNotifyOtherApplicant ? now : flow.finalApprovalNotificationSentAt,
-      finalApprovalNotificationError: shouldNotifyOtherApplicant ? undefined : flow.finalApprovalNotificationError,
-      updatedAt: now,
-    });
     await appendEvent(ctx, flow, bothApproved ? "pending_admin_approval" : "final_approval_given", registration._id);
 
     return {

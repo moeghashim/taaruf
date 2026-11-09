@@ -51,6 +51,11 @@ export const create = mutation({
     for await (const match of ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", male._id))) {
       if (match.femaleRegistrationId === female._id && !["closed", "declined"].includes(match.status)) throw new ConvexError("An open match already exists for this pair. Open it in the workbench.");
     }
+    for (const [from, to] of [[male._id, female._id], [female._id, male._id]]) {
+      for await (const interest of ctx.db.query("interests").withIndex("by_fromRegistrationId", q => q.eq("fromRegistrationId", from))) {
+        if (interest.toRegistrationId === to && !interest.testReset && !["closed", "declined", "withdrawn"].includes(interest.status)) throw new ConvexError("Use participant final approvals for an interest-backed pair; manual creation cannot substitute consent.");
+      }
+    }
     const now = Date.now();
     return await ctx.db.insert("matches", { maleRegistrationId: male._id, femaleRegistrationId: female._id, status: "new", interestType: "admin_suggested", initiatedBy: "admin_recommendation", adminNotes: args.adminNotes?.trim() || undefined, createdAt: now, updatedAt: now });
   },

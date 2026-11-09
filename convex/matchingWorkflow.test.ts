@@ -234,3 +234,44 @@ for (const legacy of [false, true]) test("first disclosure survives status chang
     expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toEqual(firstDeliveries);
   }
 });
+
+for (const reverse of [false, true]) test("unmatched consent creates exactly once, order=" + reverse, async () => {
+  const { t, interest, flow, match } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.delete(match);
+    await ctx.db.patch(interest, { matchId: undefined, status: "active" });
+    await ctx.db.patch(flow, { bioVisibleAt: Date.now(), requesterFinalApproval: "pending", recipientFinalApproval: "pending" });
+  });
+  const actors = reverse ? ["female-session", "male-session"] : ["male-session", "female-session"];
+  await expect(t.mutation(api.interests.convertToMatch, { adminSecret: "test-only-secret", interestId: interest })).rejects.toThrow("automatically");
+  const first = await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: actors[0], interestId: interest, approved: true });
+  expect(first.matchId).toBeNull();
+  expect(await t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
+  const second = await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: actors[1], interestId: interest, approved: true });
+  expect(await t.run(ctx => ctx.db.get(second.matchId!))).toMatchObject({ status: "reviewing", contactGate: "pending_admin_approval" });
+  for (const sessionHash of actors) await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash, interestId: interest, approved: true });
+  expect(await t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
+  expect((await t.run(ctx => ctx.db.get(flow)))?.contactSharedAt).toBeUndefined();
+});
+
+test("manual match cannot bypass an interest-backed pair", async () => {
+  const { t, male, female, interest, match } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.delete(match);
+    await ctx.db.patch(interest, { matchId: undefined, status: "new" });
+    for (const id of [male, female]) await ctx.db.patch(id, { profileCompletionStatus: "completed" });
+  });
+  await expect(t.mutation(api.matches.create, { adminSecret: "test-only-secret", maleRegistrationId: male, femaleRegistrationId: female })).rejects.toThrow("cannot substitute consent");
+});
+
+test("active connection prevents final-approval auto-creation transaction", async () => {
+  const { t, male, interest, flow, match } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.patch(interest, { matchId: undefined, status: "active" });
+    await ctx.db.patch(flow, { bioVisibleAt: 1, requesterFinalApproval: "pending", recipientFinalApproval: "approved" });
+    await ctx.db.patch(male, { activeMatchId: match });
+  });
+  await expect(t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "male-session", interestId: interest, approved: true })).rejects.toThrow("active match");
+  expect((await t.run(ctx => ctx.db.get(flow)))?.requesterFinalApproval).toBe("pending");
+  expect(await t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
+});

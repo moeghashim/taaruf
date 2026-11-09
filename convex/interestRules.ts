@@ -158,24 +158,6 @@ export async function assertCanCreateInterest(
   };
 }
 
-async function findReciprocalOpenInterest(
-  ctx: ReadCtx,
-  fromRegistrationId: Id<"registrations">,
-  toRegistrationId: Id<"registrations">,
-  eventId: Id<"events">
-) {
-  const reciprocalInterests = ctx.db
-    .query("interests")
-    .withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", (q) =>
-      q.eq("fromRegistrationId", fromRegistrationId).eq("toRegistrationId", toRegistrationId).eq("eventId", eventId)
-    );
-
-  for await (const interest of reciprocalInterests) {
-    if (openInterestStatusSet.has(interest.status)) return interest;
-  }
-  return null;
-}
-
 export async function createMatchFromInterest(
   ctx: MutationCtx,
   interest: Doc<"interests">,
@@ -187,6 +169,9 @@ export async function createMatchFromInterest(
     throw new Error("Interest already linked to a match");
   }
 
+  if (["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
+  const consent = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
+  if (!consent || consent.fromRegistrationId !== interest.fromRegistrationId || consent.toRegistrationId !== interest.toRegistrationId || ["closed", "declined"].includes(consent.flowStatus) || consent.requesterFinalApproval !== "approved" || consent.recipientFinalApproval !== "approved") throw new Error("Both applicants must give final approval before match creation");
   const fromRegistration = await getRegistrationOrThrow(ctx, interest.fromRegistrationId);
   const toRegistration = await getRegistrationOrThrow(ctx, interest.toRegistrationId);
   deriveVisibility(fromRegistration.gender, toRegistration.gender);
@@ -195,13 +180,21 @@ export async function createMatchFromInterest(
     fromRegistration.gender === "male" ? interest.fromRegistrationId : interest.toRegistrationId;
   const femaleRegistrationId =
     fromRegistration.gender === "female" ? interest.fromRegistrationId : interest.toRegistrationId;
+  for (const person of [fromRegistration, toRegistration]) {
+    if (person.status !== "approved") throw new Error("Both applicants must be approved");
+    if (person.activeMatchId) throw new Error("Applicant already has an active match");
+  }
+  for await (const existing of ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", maleRegistrationId))) {
+    if (existing.femaleRegistrationId === femaleRegistrationId && existing.testResetAt === undefined && !["closed", "declined"].includes(existing.status)) throw new Error("Pair already has an open match");
+  }
   const now = Date.now();
 
   const matchId = await ctx.db.insert("matches", {
     maleRegistrationId,
     femaleRegistrationId,
     interestType: deriveInterestType(fromRegistration.gender),
-    status: "new",
+    status: "reviewing",
+    contactGate: "pending_admin_approval",
     adminNotes: adminNotes ?? interest.notes,
     interestId: interest._id,
     initiatedBy: "interest_signal",
@@ -225,57 +218,6 @@ export async function createMatchFromInterest(
       bioVisibleAt: flow.bioVisibleAt ?? now,
       updatedAt: now,
     });
-  }
-
-  return matchId;
-}
-
-async function createMutualInterestMatch(
-  ctx: MutationCtx,
-  interest: Doc<"interests">,
-  reciprocalInterest: Doc<"interests">
-) {
-  const fromRegistration = await getRegistrationOrThrow(ctx, interest.fromRegistrationId);
-  const toRegistration = await getRegistrationOrThrow(ctx, interest.toRegistrationId);
-  deriveVisibility(fromRegistration.gender, toRegistration.gender);
-
-  const maleRegistrationId =
-    fromRegistration.gender === "male" ? interest.fromRegistrationId : interest.toRegistrationId;
-  const femaleRegistrationId =
-    fromRegistration.gender === "female" ? interest.fromRegistrationId : interest.toRegistrationId;
-  const now = Date.now();
-  const notes = [interest.notes, reciprocalInterest.notes].filter(Boolean).join("\n\n") || undefined;
-
-  const matchId = await ctx.db.insert("matches", {
-    maleRegistrationId,
-    femaleRegistrationId,
-    interestType: "mutual_interest",
-    status: "new",
-    adminNotes: notes,
-    interestId: interest._id,
-    initiatedBy: "interest_signal",
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  for (const matchedInterest of [interest, reciprocalInterest]) {
-    await ctx.db.patch(matchedInterest._id, {
-      matchId,
-      status: "converted_to_match",
-      adminStatus: "matched",
-      updatedAt: now,
-    });
-    const flow = await ctx.db
-      .query("interestFlows")
-      .withIndex("by_interestId", (q) => q.eq("interestId", matchedInterest._id))
-      .unique();
-    if (flow) {
-      await ctx.db.patch(flow._id, {
-        flowStatus: "bio_review",
-        bioVisibleAt: flow.bioVisibleAt ?? now,
-        updatedAt: now,
-      });
-    }
   }
 
   return matchId;
@@ -334,18 +276,8 @@ export async function createInterestWithRules(
     return { interestId, matchId: null };
   }
 
-  const reciprocalInterest = await findReciprocalOpenInterest(
-    ctx,
-    args.toRegistrationId,
-    args.fromRegistrationId,
-    args.eventId
-  );
-  if (interest.femaleWorkflow || reciprocalInterest?.femaleWorkflow || (reciprocalInterest?.source === "platform_submission" && reciprocalInterest.visibility === "internal_only") || !reciprocalInterest || reciprocalInterest.status === "queued") {
-    return { interestId, matchId: null };
-  }
-
-  const matchId = await createMutualInterestMatch(ctx, interest, reciprocalInterest);
-  return { interestId, matchId };
+  // Reciprocal submissions are signals, never explicit final consent.
+  return { interestId, matchId: null };
 }
 
 export async function createApplicantInterestWithRules(

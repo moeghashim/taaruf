@@ -1,5 +1,5 @@
 import { sessionAllowed } from "./capabilitySecurity";
-import { enqueueContactDelivery, deliveryParticipants } from "./contactGate";
+import { enqueueContactDelivery, deliveryParticipants, linkedFlows } from "./contactGate";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
@@ -112,6 +112,7 @@ export const confirm = mutation({ args: { ...applicantArgs, confirmed: v.boolean
   for (const applicant of [sister, brother]) if (applicant.activeMatchId) throw new Error("Applicant already has an active match");
   const matches = await ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", brother._id)).take(1001);
   if (matches.length > 1000 || matches.some(m => m.femaleRegistrationId === sister._id && !["closed", "declined"].includes(m.status))) throw new Error("Pair already has an open match");
+  if (!flow) throw new Error("Linked flow missing; explicit consent required");
   const now = Date.now();
   const matchId = await ctx.db.insert("matches", { maleRegistrationId: brother._id, femaleRegistrationId: sister._id, interestId: interest._id, interestType: "mutual_interest", status: "reviewing", contactGate: "pending_admin_approval", initiatedBy: "interest_signal", createdAt: now, updatedAt: now });
   await ctx.db.patch(interest._id, { matchId, status: "converted_to_match", adminStatus: "matched", femaleWorkflow: { ...workflow, state: "pending_admin_approval", sisterConfirmedAt: now }, updatedAt: now });
@@ -122,6 +123,9 @@ export const confirm = mutation({ args: { ...applicantArgs, confirmed: v.boolean
 export const releaseContacts = mutation({ args: adminArgs, handler: async (ctx, args) => {
   requireAdmin(args.adminSecret);
   const { interest, workflow, sister, brother, flow, match } = await active(ctx, args.interestId);
+  if (!match) throw new Error("Valid match required");
+  const linked = await linkedFlows(ctx, interest);
+  if (linked.some(f => f.requesterFinalApproval !== "approved" || f.recipientFinalApproval !== "approved")) throw new Error("Explicit bilateral consent required");
   if (workflow.state === "contacts_released") return { state: workflow.state, matchId: interest.matchId! };
   if (workflow.state !== "pending_admin_approval" || !workflow.brotherAcceptedAt || !workflow.sisterConfirmedAt || !match) throw new Error("Explicit bilateral consent required");
   for (const person of [sister, brother]) if (!person.email || !person.phone || (person.activeMatchId && person.activeMatchId !== match._id)) throw new Error("Applicant unavailable or active match conflict");
