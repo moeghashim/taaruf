@@ -642,3 +642,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Reconciled event participant profile drawer onto source-hash-verified production 9987fcc; preserved live API bridges/capacity behavior, fixed clean-editor remote-note synchronization, and added synthetic regression tests/provenance documentation. Production held for composition review.
 
 - Locally integrated exact PR61/65 provenance with live PR78 drawer; retained authenticated admin transport and PR65 interest presentation. New conflict resolution requires independent review and certification; no publication. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Adapted PR78 synthetic regression fixture to exercise the unchanged authenticated admin transport, added unauthenticated backend denial assertions, and validated drawer interactions at desktop/mobile widths. <!-- project: github.com/moeghashim/clawscrewskill -->

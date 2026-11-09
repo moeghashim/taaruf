@@ -6,11 +6,11 @@ const esbuild = require('esbuild');
 const { chromium, expect } = require('@playwright/test');
 const assert = require('node:assert/strict');
 (async () => {
- const dir = path.resolve('.event-profile-test'); fs.mkdirSync(dir,{recursive:true});
- const result = await esbuild.build({ stdin: { contents: 'import React from "react"; import {createRoot} from "react-dom/client"; import {EventsPageClient} from "./src/components/admin/events/events-page-client"; createRoot(document.getElementById("root")).render(<EventsPageClient/>);', resolveDir: process.cwd(), loader:'tsx' }, bundle:true, write:false, jsx:'automatic', define:{'process.env.NODE_ENV':'"development"'}, alias:{'convex/react':path.resolve('scripts/event-profiles-fixture.tsx')}, tsconfig:'tsconfig.json' });
+ const dir = path.resolve(process.env.EVIDENCE_DIR || '/tmp/pr61-pr65-pr78-browser'); fs.mkdirSync(dir,{recursive:true});
+ const result = await esbuild.build({ stdin: { contents: 'import "./scripts/event-profiles-fixture"; import React from "react"; import {createRoot} from "react-dom/client"; import {EventsPageClient} from "./src/components/admin/events/events-page-client"; createRoot(document.getElementById("root")).render(<EventsPageClient/>);', resolveDir: process.cwd(), loader:'tsx' }, bundle:true, write:false, jsx:'automatic', define:{'process.env.NODE_ENV':'"development"'}, tsconfig:'tsconfig.json' });
  const browser = await chromium.launch({channel:'chrome',headless:true});
  try {
- const page = await browser.newPage({viewport:{width:1440,height:1000}});
+ const page = await browser.newPage({viewport:{width:Number(process.env.TEST_WIDTH || 1440),height:1000}});
  page.setDefaultTimeout(10000); page.on('pageerror', e => console.error('Synthetic page error:', e.message));
  let external = 0; await page.route('**/*', route => {external++; return route.abort();});
  await page.setContent('<div data-admin><div id="root"></div></div>');
@@ -38,7 +38,7 @@ const assert = require('node:assert/strict');
  await expect(dialog.getByLabel('Admin notes')).toHaveValue('Synthetic saved note');
  await page.evaluate(() => {window.fixture.failNotes=true;});
  await dialog.getByLabel('Admin notes').fill('Draft survives'); await dialog.getByRole('button',{name:'Save notes'}).click();
- await expect(dialog.getByRole('alert')).toContainText('Synthetic save failed'); await expect(dialog.getByLabel('Admin notes')).toHaveValue('Draft survives');
+ await expect(dialog.getByRole('alert')).toContainText('Admin request failed. Refresh and try again.'); await expect(dialog.getByLabel('Admin notes')).toHaveValue('Draft survives');
  await page.evaluate(() => {window.fixture.failNotes=false;}); await dialog.getByRole('button',{name:'Save notes'}).click();
  await dialog.getByRole('button',{name:'Approve profile',exact:true}).click(); await expect(dialog.getByRole('button',{name:'Revoke profile approval'})).toBeVisible();
  await page.screenshot({path:path.join(dir,'desktop.png')});

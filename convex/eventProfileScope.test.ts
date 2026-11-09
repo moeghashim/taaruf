@@ -19,13 +19,15 @@ test("profile notes and approval target the member without accepting an event or
   const roster = await ctx.db.insert("eventRegistrations", { ...row, registrationId: second, registrationStatus: "waitlisted" });
   return { first, second, roster, eventId };
  });
- await t.mutation(api.registrations.updateAdminNotes, { id: second, adminNotes: "Synthetic private note" });
- await t.mutation(api.registrations.updateStatus, { id: second, status: "approved" });
- expect(await t.query(api.registrations.getById, { id: second })).toMatchObject({ adminNotes: "Synthetic private note", status: "approved" });
- expect(await t.query(api.registrations.getById, { id: first })).toMatchObject({ status: "pending" });
+ await expect(t.mutation(api.registrations.updateAdminNotes, { id: second, adminNotes: "Unauthorized" })).rejects.toThrow("Unauthorized");
+ await expect(t.mutation(api.registrations.updateStatus, { id: second, status: "approved" })).rejects.toThrow("Unauthorized");
+ await t.mutation(api.registrations.updateAdminNotes, { adminSecret: "synthetic-test-secret", id: second, adminNotes: "Synthetic private note" });
+ await t.mutation(api.registrations.updateStatus, { adminSecret: "synthetic-test-secret", id: second, status: "approved" });
+ expect(await t.query(api.registrations.getById, { adminSecret: "synthetic-test-secret", id: second })).toMatchObject({ adminNotes: "Synthetic private note", status: "approved" });
+ expect(await t.query(api.registrations.getById, { adminSecret: "synthetic-test-secret", id: first })).toMatchObject({ status: "pending" });
  await expect(t.mutation(api.events.updateRegistrationStatus, { adminSecret: "synthetic-test-secret", eventRegistrationId: roster, registrationStatus: "approved" })).rejects.toThrow("Only Pending registrations may be approved");
  await t.mutation(api.events.updateRegistrationStatus, { adminSecret: "synthetic-test-secret", eventRegistrationId: roster, registrationStatus: "pending" });
- await t.mutation(api.registrations.updateStatus, { id: second, status: "rejected" });
+ await t.mutation(api.registrations.updateStatus, { adminSecret: "synthetic-test-secret", id: second, status: "rejected" });
  await t.run(async ctx => {
   expect(await ctx.db.get(roster)).toMatchObject({ eventId, registrationId: second, registrationStatus: "waitlisted", confirmationStatus: "not_confirmed", attendanceStatus: "not_checked_in" });
   expect((await ctx.db.get(first))?.adminNotes).toBeUndefined();
