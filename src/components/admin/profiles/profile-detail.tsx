@@ -15,6 +15,7 @@ type Props = {
   onUpdateStatus: (id: string, status: "approved" | "rejected") => Promise<unknown>;
   onDelete: (id: string) => Promise<unknown>;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 function formatDate(timestamp?: number) {
@@ -70,13 +71,18 @@ function summarizeInterestStatuses(interests: Array<{ adminStatus?: string; stat
  * profile facts + applicant long-form text + an editable admin notes
  * field + the action bar (approve/reject/delete).
  */
-export function ProfileDetail({
+export function ProfileDetail(props: Props) {
+  return <ProfileDetailBody key={props.profile._id} {...props} />;
+}
+
+function ProfileDetailBody({
   profile,
   registrationNumber,
   onUpdateNotes,
   onUpdateStatus,
   onDelete,
   onClose,
+  onDirtyChange,
 }: Props) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
@@ -96,13 +102,33 @@ export function ProfileDetail({
   const outboundSummary = summarizeInterestStatuses(outboundInterests);
   const inboundSummary = summarizeInterestStatuses(inboundInterests);
 
-  // Reset notes whenever the visible profile changes.
+  const [savedNotes, setSavedNotes] = useState(profile.adminNotes ?? "");
+  const dirty = notes !== savedNotes;
+  // Follow subscriptions while clean; never replace an unsaved local draft.
   useEffect(() => {
-    setNotes(profile.adminNotes ?? "");
-  }, [profile._id, profile.adminNotes]);
+    if (dirty || savingNotes) return;
+    const incoming = profile.adminNotes ?? "";
+    setNotes(incoming);
+    setSavedNotes(incoming);
+  }, [profile.adminNotes, dirty, savingNotes]);
+  useEffect(() => { onDirtyChange?.(dirty || savingNotes || busyAction !== null); }, [dirty, savingNotes, busyAction, onDirtyChange]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
 
   const facts: Fact[] = [
     { label: "Applicant #", value: registrationNumber ?? "—" },
+    { label: "Age", value: profile.age },
+    { label: "Gender", value: profile.gender },
+    { label: "Ethnicity", value: profile.ethnicity || "—" },
+    { label: "Prayer commitment", value: profile.prayerCommitment?.replace(/_/g, " ") || "—" },
+    { label: "Hijab", value: profile.hijabResponse?.replace(/_/g, " ") || "—" },
+    { label: "Photo sharing permission", value: profile.photoSharingPermission?.replace(/_/g, " ") || "—" },
+    { label: "Profile completion", value: profile.profileCompletionStatus?.replace(/_/g, " ") || "not started" },
     { label: "Marital status", value: profile.maritalStatus || "—" },
     { label: "Education", value: profile.education || "—" },
     { label: "Occupation", value: profile.job || "—" },
@@ -113,8 +139,12 @@ export function ProfileDetail({
 
   const saveNotes = async () => {
     setSavingNotes(true);
+    setActionError(null);
     try {
       await onUpdateNotes(profile._id, notes);
+      setSavedNotes(notes);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Unable to save notes. Your draft is preserved; try again.");
     } finally {
       setSavingNotes(false);
     }
@@ -124,6 +154,7 @@ export function ProfileDetail({
     setBusyAction(status === "approved" ? "approve" : "reject");
     try {
       await onUpdateStatus(profile._id, status);
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to update profile approval");
     } finally {
       setBusyAction(null);
     }
@@ -146,6 +177,7 @@ export function ProfileDetail({
     try {
       await onDelete(profile._id);
       onClose();
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to delete profile");
     } finally {
       setBusyAction(null);
     }
@@ -378,8 +410,10 @@ export function ProfileDetail({
         )}
       </div>
 
+      {profile.applicantNotesToAdmin && <><h4>Applicant notes to admin</h4><p style={{ whiteSpace: "pre-wrap" }}>{profile.applicantNotesToAdmin}</p></>}
       {sectionHeading("Admin notes")}
       <textarea
+        aria-label="Admin notes"
         rows={5}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
@@ -399,12 +433,15 @@ export function ProfileDetail({
         <button
           className="btn btn-sm"
           onClick={saveNotes}
-          disabled={savingNotes || notes === (profile.adminNotes ?? "")}
+          disabled={savingNotes || !dirty}
         >
           {savingNotes ? "Saving…" : "Save notes"}
         </button>
       </div>
 
+      <p role="status">{dirty ? "Unsaved notes" : "Notes saved"}</p>
+      <h4>Global profile approval</h4>
+      <p>These actions affect the member profile, not event registration or capacity. Manage event acceptance in the roster.</p>
       <div
         style={{
           display: "flex",
@@ -415,7 +452,7 @@ export function ProfileDetail({
         }}
       >
         {actionError && <p role="alert">{actionError}</p>}
-        {profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke approval"}</button>}
+        {profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke profile approval"}</button>}
         {profile.status === "pending" && (
           <>
             <button
@@ -423,7 +460,7 @@ export function ProfileDetail({
               onClick={() => handleStatus("approved")}
               disabled={busyAction !== null}
             >
-              {busyAction === "approve" ? "Approving…" : "Approve"}
+              {busyAction === "approve" ? "Approving…" : "Approve profile"}
             </button>
             <button
               className="btn"
@@ -431,7 +468,7 @@ export function ProfileDetail({
               disabled={busyAction !== null}
               style={{ color: "var(--rose)" }}
             >
-              {busyAction === "reject" ? "Rejecting…" : "Reject"}
+              {busyAction === "reject" ? "Rejecting…" : "Reject profile"}
             </button>
           </>
         )}
@@ -441,7 +478,7 @@ export function ProfileDetail({
           disabled={busyAction !== null}
           style={{ color: "var(--rose)", marginLeft: "auto" }}
         >
-          {busyAction === "delete" ? "Deleting…" : "Delete"}
+          {busyAction === "delete" ? "Deleting…" : "Delete profile"}
         </button>
       </div>
     </div>

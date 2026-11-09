@@ -1,0 +1,11 @@
+# PR74 production-baseline reconciliation
+
+Production observed 2026-11-09: dpl_4yiXhjKsGYfdr6LfHsGmSTN32DYs, READY, www.1plus1match.com, source metadata 9987fcca5a40a647b5469485f84e6b7e5b469cd8, gitDirty=1.
+
+Authenticated Vercel GET /v6/deployments/dpl_4yiXhjKsGYfdr6LfHsGmSTN32DYs/files returns uploaded source inventory under src/. All 214 uploaded source-file SHA1 UIDs match the existing reset-feedback checkout bytes. Of these, 213 match git-show bytes from exact commit 9987fcc; only tsconfig.tsbuildinfo is untracked, and it too matches the local uploaded-byte hash. This generated TypeScript incremental cache is not application source. Thus the dirty flag does not indicate an uncommitted application delta in this artifact. Build logs report 215 downloaded deployment files; the exposed source subtree contains 214 files. The provider inventory, rather than that aggregate log count, is the byte-comparison evidence. Raw inventory and comparison evidence remain in ../event-participant-profiles/deploy-live-files.json and deploy-source-comparison.json.
+
+This branch starts at 9987fcc, not stale main. The only application delta is event participant drawer wiring and shared profile-detail improvements, including clean-editor remote notes synchronization and dirty-draft preservation. Existing authenticated event-registration bridge, FIFO capacity/approval restrictions, receipt/email behavior, reset/match routes, and orphan messaging remain intact. No backend production functions/schema/config changed; convex addition is synthetic test only.
+
+Publish a review-only preview and PR against fix/reset-feedback to make the scoped difference explicit. Do not merge PR74 into main: main remains behind the serving application lineage. Do not merge this replacement or deploy production until coordinator reviews composition and chooses the release integration path. Existing deploy guards are unchanged. No Convex deployment is required for this feature.
+
+Preview API and direct Convex guards remain enabled. Hosted preview is UI-review-only, not a functional isolated backend. Synthetic tests alone do not establish live authenticated E2E. Existing direct-Convex profile authorization limitations remain unchanged.
