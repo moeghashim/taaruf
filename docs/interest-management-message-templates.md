@@ -5,11 +5,10 @@ These templates define the applicant and management messages needed for the inte
 ## Template Rules
 
 - Do not include photos in email bodies.
-- Do not include contact info until the contact-share step is complete.
-- Use applicant portal links for applicants: `/me/interests/<interestId>`.
+- Contact-release notification content follows the [workflow delivery contract](female-website-interest-flow.md#delivery-and-operational-gates).
+- Use the [applicant notification destinations](female-website-interest-flow.md#applicant-notification-destinations).
 - Use protected admin links for management: `/admin/workbench?interest=<interestId>&step=<step>` or `/admin/workbench?match=<matchId>&step=<step>`.
-- Use applicant numbers or safe labels before bio review opens.
-- Use names only after bio review opens.
+- Use identities allowed by the [workflow privacy policy](female-website-interest-flow.md#pause-resume-and-privacy).
 - Record send timestamp and failure reason in Convex.
 
 ## Shared Placeholders
@@ -21,9 +20,6 @@ These templates define the applicant and management messages needed for the inte
 - `{{managementReviewUrl}}`
 - `{{keepOpenExpiresAt}}`
 - `{{matchStatus}}`
-- `{{contactName}}`
-- `{{contactEmail}}`
-- `{{contactPhone}}`
 - `{{supportEmail}}`
 
 ## 1. Initial Interest
@@ -111,7 +107,7 @@ Subject: `Private interest documented`
 Body:
 
 ```text
-A female participant documented a private interest by submitting an applicant/event number. This is visible only to her and management before a match is in place.
+A female participant documented a private interest by submitting an applicant/event number. Private review sharing follows the workflow guide; recording an interest does not notify the brother.
 
 Open management review:
 {{managementReviewUrl}}
@@ -214,7 +210,7 @@ Assalamu Alaikum {{recipientName}},
 
 This match flow has been closed after final review.
 
-No contact information or photos have been shared.
+This update does not grant access to contact information or photos.
 
 View your status:
 {{applicantPortalUrl}}
@@ -289,29 +285,7 @@ Bader & Danielle
 
 ### Contact Info Shared
 
-Subject: `Contact information is now available`
-
-Body:
-
-```text
-Assalamu Alaikum {{recipientName}},
-
-Both participants have completed final approval. Contact information is now available in your applicant portal.
-
-Contact details:
-Name: {{contactName}}
-Email: {{contactEmail}}
-Phone: {{contactPhone}}
-
-Please continue communication respectfully and reach out to the 1 Plus 1 team if you need support.
-
-View match:
-{{applicantPortalUrl}}
-
-Warmly,
-Bader & Danielle
-1 Plus 1 Leads
-```
+Pending-review and contacts-ready subjects, portal-only content, recipient deduplication and immutable retry payloads are owned by the [workflow delivery implementation](../convex/femaleWorkflowDelivery.ts) and described in the [workflow guide](female-website-interest-flow.md#delivery-and-operational-gates). Do not embed contact fields in these notifications.
 
 ### Management Contact Shared Notice
 
@@ -320,7 +294,7 @@ Subject: `Contact shared for a 1 Plus 1 match`
 Body:
 
 ```text
-Contact information has been shared automatically after both participants gave final approval.
+Final admin contact release is complete. Contact information is available in the authenticated portals.
 
 Open match:
 {{managementReviewUrl}}

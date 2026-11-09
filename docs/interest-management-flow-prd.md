@@ -68,9 +68,9 @@ Do not accept `registrationId`, email, or user ID from the browser as proof of i
 ### Routes
 
 - `/login`: applicant requests a magic link by email.
-- `/login/verify?token=...`: verifies token and creates applicant session.
+- `/api/applicant/login/verify?token=...`: verifies token and creates applicant session.
 - `/me`: applicant dashboard with Inbound Interests and Outbound Interests.
-- `/me/interests/[interestId]`: detail page for one interest or match flow.
+- Applicant notification destinations follow the [workflow guide](female-website-interest-flow.md#applicant-notification-destinations).
 
 ### Dashboard Sections
 
@@ -88,7 +88,7 @@ Outbound Interests:
 - Shows current status: sent, waiting for recipient response, bio available, final approval needed, photo requested, photo approved, contact shared, declined, closed, or kept open.
 - The only way any applicant expresses interest is by submitting the applicant/event number of the person they are interested in.
 - Visible outbound interests are sent by male applicants to female applicants after the male applicant submits the female applicant's number.
-- Female applicants can document private interest signals by submitting a male applicant's number; these are visible to themselves and admins only until a match is in place.
+- Female applicants can document private interest signals by submitting a male applicant's number; private sharing follows the [current workflow guide](female-website-interest-flow.md).
 - Female dashboards must include a note explaining that documented interests are private and help management understand preferences.
 
 ## Inbound Interest Flow
@@ -125,7 +125,7 @@ Bio Review:
 - Both candidates can view each other's shareable bio.
 - Each candidate can give final approval or decline.
 - If either declines, close the flow and notify the other candidate with non-sensitive wording.
-- If both give final approval, the flow moves to the photo-request step.
+- Final approvals, official match creation and admin contact release follow the [current workflow guide](female-website-interest-flow.md).
 
 Photo Request:
 
@@ -135,9 +135,7 @@ Photo Request:
 
 Contact Sharing:
 
-- Contact info is shared to both candidates only after final approval is complete.
-- Contact sharing should happen automatically after both applicants give final approval.
-- Management does not need to manually approve contact sharing.
+Final approvals, official match creation and admin contact release follow the [current workflow guide](female-website-interest-flow.md).
 
 ## Outbound Interest Flow
 
@@ -149,8 +147,8 @@ Eligibility:
 - Existing opposite-gender and completed-profile rules remain.
 - Male outbound initiation must avoid exposing full female profiles before bio review opens.
 - Female applicants can document interests only by submitting the male applicant's number.
-- Female-documented interests are visible only to the female applicant and admins before a match is in place.
-- Female-documented interests should use the existing `internal_only` privacy model and must not notify the male applicant.
+- Private review sharing and brother-facing identity follow the [current workflow guide](female-website-interest-flow.md).
+- Female-documented interests use `internal_only`; explicit admin sharing follows the [current workflow guide](female-website-interest-flow.md).
 - Female-documented interests can help admins understand preferences and identify mutuality.
 
 Interest Sent:
@@ -166,7 +164,7 @@ Recipient Approves:
 - Both candidates move to the next step.
 - Either candidate can request a picture.
 - If a picture request is approved by the other candidate, both candidates can see each other's pictures.
-- Once final approval is made, contact info is shared to both.
+- Final approvals, official match creation and admin contact release follow the [current workflow guide](female-website-interest-flow.md).
 
 Recipient Declines:
 
@@ -186,8 +184,8 @@ The existing admin password cookie should continue to protect these routes. If m
 Management actions:
 
 - Approve or reject a pair moving from interest to bio review.
-- Override stuck or inconsistent applicant decisions.
-- Approve contact-sharing if the team wants manual control before contact release.
+- Resolve stuck flows without substituting admin actions for participant consent; see the [workflow guide](female-website-interest-flow.md).
+- Use the final contact-release action described in the [current workflow guide](female-website-interest-flow.md).
 - View full applicant profiles and internal notes.
 - See email notification status and retry failures.
 
@@ -223,7 +221,7 @@ Management emails:
 All emails should:
 
 - Avoid exposing photos or contact info in email body.
-- Link applicants to `/me` or the specific `/me/interests/[interestId]` detail page.
+- Applicant notification destinations follow the [workflow guide](female-website-interest-flow.md#applicant-notification-destinations).
 - Link management to the admin workbench URL above.
 - Record sent/error timestamps in Convex for retry visibility.
 - Use the template catalog in `docs/interest-management-message-templates.md`.
@@ -277,28 +275,26 @@ Keep existing `interests.status` values for queueing and admin compatibility. Ma
 - Applicants can only read interests where they are `fromRegistrationId` or `toRegistrationId`.
 - Applicants can only mutate actions available to their role in the current flow state.
 - Bios are hidden until `bioVisibleAt` is set.
-- Candidate names are hidden until the bio-review state opens.
+- Brother-facing identity follows the [current workflow guide](female-website-interest-flow.md).
 - Photo visibility follows [current recipient consent](issue58-photo-consent.md#behavior).
 - Contact info is hidden until `contactSharedAt` is set.
 - Female-submitted interests that are currently `internal_only` must remain protected according to existing privacy rules unless management explicitly exposes them.
-- Female-documented interests are visible only to the female applicant and admins before a match is in place.
-- Female-documented interests must not notify the male applicant, reveal the female applicant's interest to him, or open bio review by themselves before a match is in place.
-- Once a match is in place, normal match visibility rules can show that mutual interest exists.
+- Private review sharing and brother-facing identity follow the [current workflow guide](female-website-interest-flow.md).
+- Pair approval does not override the private sharing boundary; see the [current workflow guide](female-website-interest-flow.md).
 - Admin-only notes never appear in applicant views.
 
 ## Confirmed Product Decisions
 
-- Contact sharing is automatic after both applicants give final approval.
+- Final approvals, official match creation and admin contact release follow the [current workflow guide](female-website-interest-flow.md).
 - Photo decline does not block contact sharing.
-- Applicant names become visible once bio review opens.
+- Brother-facing identity follows the [current workflow guide](female-website-interest-flow.md).
 - Keep Open decisions should expire after a fixed number of days.
 - Candidates are limited to one active bio-review flow at a time, matching the current active-match queue behavior.
 - Visible outbound interests are male-initiated.
 - Women may receive and review multiple pending inbound interests.
 - Men and women express interest only by submitting the other person's applicant/event number.
 - Men submitting a woman's number creates a visible outbound interest that the woman can review.
-- Women submitting a man's number creates a private documented interest visible only to the woman and admins before a match is in place.
-- Female-documented private interests do not notify men and do not open bio review by themselves before a match is in place.
+- Female submission and explicit admin sharing follow the [current workflow guide](female-website-interest-flow.md).
 - No applicant browsing is used to express interest.
 
 ## Success Metrics
@@ -321,7 +317,7 @@ Keep existing `interests.status` values for queueing and admin compatibility. Ma
 - Declining inbound interest closes the flow and triggers the existing-style decline notification.
 - Keeping inbound interest open preserves the interest without revealing bios.
 - Male number submission creates a visible inbound interest for the female recipient.
-- Female number submission creates an internal-only documented interest and does not notify the male applicant before a match is in place.
+- Female number submission and private review access obey the [current workflow guide](female-website-interest-flow.md).
 - Male outbound initiation does not open bio visibility until the female recipient accepts.
 - Both candidates can give final approval after bios are visible.
 - Either candidate can request a picture after final approval.

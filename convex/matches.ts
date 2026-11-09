@@ -1,5 +1,5 @@
 import { sessionAllowed } from "./capabilitySecurity";
-import { assertMatchInterest, linkedFlows, releasePairContacts, setPairPaused, assertParticipantsAvailable } from "./contactGate";
+import { assertMatchInterest, releasePairContacts, setPairPaused, assertParticipantsAvailable } from "./contactGate";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
