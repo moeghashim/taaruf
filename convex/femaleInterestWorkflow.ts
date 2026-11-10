@@ -50,13 +50,16 @@ export const createReview = mutation({ args: { ...adminArgs, reviewTokenHash: v.
     await ctx.db.patch(existing._id, { femaleWorkflow: { state: "private_documented" } });
   }
   if (existing) await createInitialInterestFlow(ctx, existing);
-  const { interest, workflow, flow, match } = await active(ctx, args.interestId);
+  const { interest, workflow, flow, match, brother } = await active(ctx, args.interestId);
   if (!["private_documented", "awaiting_brother_review"].includes(workflow.state)) throw new Error("Review already decided");
   if (match && (!flow || flow.requesterFinalApproval !== "approved" || flow.recipientFinalApproval !== "approved")) throw new Error("Explicit bilateral consent required");
   const releasedAt = match?.adminReleasedAt ?? flow?.contactSharedAt;
   const released = match?.contactGate === "contacts_released" || (!!match && !match.contactGate && flow?.contactSharedAt !== undefined);
   const state = match ? released ? "contacts_released" as const : "pending_admin_approval" as const : "awaiting_brother_review" as const;
   await ctx.db.patch(interest._id, { femaleWorkflow: { ...workflow, state, ...(released ? { adminReleasedAt: releasedAt } : {}), reviewTokenHash: args.reviewTokenHash, reviewExpiresAt: Date.now() + 7 * 86400000 }, updatedAt: Date.now() });
+  // One durable invitation per interest/recipient, including token reissues.
+  // Only an explicit admin share can enqueue, never dashboard reads.
+  if (state === "awaiting_brother_review") await enqueue(ctx, interest, brother._id, "brother_review");
   return { interestId: interest._id, state };
 }});
 function dashboardRows(ctx: ReadCtx, person: Doc<"registrations">) {

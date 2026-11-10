@@ -652,3 +652,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Ported issue67 event-registration filter onto verified PR84 live ancestry; preserved ethnicity/photo/reset protections. Added authenticated paginated event catalog/membership, deduplication, combined filters, retry states and tests. No live deployment.
+
+## 2026-11-10
+- Added prominent applicant review invitations and a deduplicated brother-review email stage in the existing outbox, with synthetic provider/browser regressions; preview-only, no live deployment or email.

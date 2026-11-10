@@ -25,7 +25,7 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
     if (row.firstAttemptAt !== undefined && now - row.firstAttemptAt >= 23 * 3600000) { await ctx.db.patch(row._id, { status: "failed", error: "Idempotency window expired; manual reconciliation required" }); continue; }
     try {
       const { workflow, sister, brother } = await participants(ctx, row.interestId);
-      if (![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
+      if ((row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) || ![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
       const recipient = row.recipientId === sister._id ? sister : brother;
       const attempts = row.attempts + 1;
       await ctx.db.patch(row._id, { status: "sending", attempts, leaseUntil: now + 120000, nextAttemptAt: now + 120000 });
@@ -48,7 +48,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   let review = false;
   try {
     const { workflow, sister, brother } = await participants(ctx, row.interestId);
-    if (![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
+    if ((row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) || ![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
     email = row.recipientId === sister._id ? sister.email : brother.email;
     review = Boolean((await ctx.db.get(row.interestId))?.femaleWorkflow);
   } catch { await ctx.db.patch(row._id, { status: "cancelled", error: "Workflow no longer available" }); return false; }
@@ -57,7 +57,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   if (row.firstAttemptAt !== undefined && !row.providerPayload) {
     await ctx.db.patch(row._id, { status: "failed", leaseUntil: undefined, error: "Prior attempt has no immutable payload; manual reconciliation required" }); return false;
   }
-  const subject = row.kind === "sister_confirmation" ? "Please confirm your interest on the website" : row.kind === "pending_review" ? "Mutual match pending admin approval" : "Your contacts are ready in the portal";
+  const subject = row.kind === "brother_review" ? "A profile is ready for your review" : row.kind === "sister_confirmation" ? "Please confirm your interest on the website" : row.kind === "pending_review" ? "Mutual match pending admin approval" : "Your contacts are ready in the portal";
   const portal = new URL(config.portal);
   portal.pathname = review ? "/dashboard" : "/me";
   portal.searchParams.set(review ? "femaleReview" : "connection", row.interestId);
