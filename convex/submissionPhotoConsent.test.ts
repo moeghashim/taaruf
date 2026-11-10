@@ -129,7 +129,7 @@ test("stale event and invalid, expired, revoked sessions cannot write consent", 
 });
 
 test("yes with no stored photos returns no URLs and does not fabricate images", async () => {
-  const f = await fixture("male", "no", false);
+  const f = await fixture("male", "yes", false);
   await f.submit();
   expect((await f.dashboard()).inbound[0].counterparty?.imageUrls).toEqual([]);
   expect((await f.dashboard(0)).applicant.hasPhotos).toBe(false);
