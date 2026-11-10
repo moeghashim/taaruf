@@ -97,7 +97,7 @@ function ProfileDetailBody({
     { label: "Applicant #", value: registrationNumber ?? "—" },
     { label: "Age", value: profile.age },
     { label: "Gender", value: profile.gender },
-    { label: "Ethnicity", value: profile.ethnicity || "—" },
+    { label: "Ethnicity", value: profile.ethnicity?.trim() ? profile.ethnicity : "Not provided" },
     { label: "Prayer commitment", value: profile.prayerCommitment?.replace(/_/g, " ") || "—" },
     { label: "Hijab", value: profile.hijabResponse?.replace(/_/g, " ") || "—" },
     { label: "Photo sharing permission", value: profile.photoSharingPermission?.replace(/_/g, " ") || "—" },
