@@ -273,3 +273,50 @@ test("closed_history never opts a fresh private target into broader history",asy
   const f=await fixture();
   await expect(f.t.query(internal.singleInterestTestReset.preflight,{...f.scope,mode:"closed_history"})).rejects.toThrow();
 });
+
+test("large opaque legacy audits stay intact; repeated resets grow linearly, not recursively", async () => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    for (let i = 0; i < 4; i++) await ctx.db.insert("pairTestResetAudits", {
+      operationKey: "large-legacy-" + i, request: JSON.stringify({opaque: String.fromCharCode(34, 92).repeat(60000)}),
+      snapshot: JSON.stringify({nested: "legacy".repeat(20000)}), createdAt: 1,
+    });
+  });
+  const legacy = await f.t.run(ctx => ctx.db.query("pairTestResetAudits").collect());
+  for (let iteration = 0; iteration < 6; iteration++) {
+    const pre = await f.t.query(internal.singleInterestTestReset.preflight, f.scope);
+    expect(new TextEncoder().encode(pre.fingerprint).length).toBeLessThan(100000);
+    for (const reference of pre.state.audits) {
+      expect(reference.sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(await f.t.run(ctx => ctx.db.get(reference._id))).not.toBeNull();
+    }
+    const args = {...f.args, expectedFingerprint: pre.fingerprint, operationKey: "repeat-operation-" + iteration};
+    const result = await f.t.mutation(internal.singleInterestTestReset.reset, args);
+    const audit = await f.t.run(ctx => ctx.db.get(result.auditId));
+    expect(new TextEncoder().encode(JSON.stringify(audit)).length).toBeLessThan(300000);
+    expect(audit!.snapshot).toBe(pre.fingerprint);
+    expect(JSON.parse(audit!.request)).toEqual({helper: "singleInterestTestReset/v1", ...args});
+    expect(await f.t.mutation(internal.singleInterestTestReset.reset, args)).toEqual({...result, alreadyReset: true});
+    expect(await f.t.run(ctx => Promise.all(legacy.map(row => ctx.db.get(row._id))))).toEqual(legacy);
+    // Synthetic fresh submission: never reopen/reset the previously archived row.
+    await f.t.run(async ctx => {
+      const {_id, _creationTime, ...interest} = pre.state.target;
+      const {_id: flowId, _creationTime: flowTime, ...flow} = pre.state.targetFlow;
+      void _id; void _creationTime; void flowId; void flowTime;
+      f.scope.interestId = await ctx.db.insert("interests", interest);
+      f.args.interestId = f.scope.interestId;
+      f.flowId = await ctx.db.insert("interestFlows", {...flow, interestId: f.scope.interestId});
+      await ctx.db.insert("interestFlowEvents", {interestId: f.scope.interestId, interestFlowId: f.flowId, actor: "system", eventType: "flow_created", createdAt: 1});
+    });
+  }
+});
+for (const field of ["request", "snapshot", "operationKey", "createdAt"] as const) test("audit manifest guards every historical field: " + field, async () => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    const audit = await ctx.db.query("pairTestResetAudits").first();
+    await ctx.db.patch(audit!._id, {[field]: field === "createdAt" ? 99 : "changed opaque history"});
+  });
+  const before = await all(f.t);
+  await expect(f.t.mutation(internal.singleInterestTestReset.reset, f.args)).rejects.toThrow("drift");
+  expect(await all(f.t)).toEqual(before);
+});

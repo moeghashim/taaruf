@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAdminMutation as useMutation, useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import { PageHead } from "@/components/admin/layout/page-head";
+import { ResetTestPair } from "./reset-test-pair";
 import { Pill } from "@/components/admin/primitives/status-pill";
 
 type FixResult =
@@ -112,6 +113,7 @@ export function SettingsPageClient() {
       />
 
       <div style={{ display: "grid", gap: 20 }}>
+        <ResetTestPair />
         {/* Display name */}
         <div className="panel">
           <div className="panel-head">
