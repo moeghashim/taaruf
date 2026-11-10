@@ -644,3 +644,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Locally integrated exact PR61/65 provenance with live PR78 drawer; retained authenticated admin transport and PR65 interest presentation. New conflict resolution requires independent review and certification; no publication. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Adapted PR78 synthetic regression fixture to exercise the unchanged authenticated admin transport, added unauthenticated backend denial assertions, and validated drawer interactions at desktop/mobile widths. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Extracted PR #77 display-only confirmation badge removal and synthetic browser regression tests from aa7caabb553bfdf72d0d6e92e2ed9c243475a2a5 onto verified live 26accc9ef8d39ad7120b7347fe412e86eb144d3c. Preserves live PR61/65, drawer, reset helper and all backend behavior; no production deployment.
