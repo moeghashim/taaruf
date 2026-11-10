@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
 import { v, type Infer } from "convex/values";
+import { hash } from "fast-sha256";
 
 const scope = {
   mode: v.optional(v.literal("closed_history")),
@@ -14,6 +15,9 @@ function canonical(value: unknown): string {
   if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
   if (value && typeof value === "object") return "{" + Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => JSON.stringify(k) + ":" + canonical(v)).join(",") + "}";
   return JSON.stringify(value);
+}
+function digest(value: unknown): string {
+  return Array.from(hash(new TextEncoder().encode(canonical(value))), b => b.toString(16).padStart(2, "0")).join("");
 }
 async function snapshot(ctx: QueryCtx, args: Scope) {
   const pair = new Set([args.fromRegistrationId, args.toRegistrationId]);
@@ -87,9 +91,14 @@ async function snapshot(ctx: QueryCtx, args: Scope) {
   if (interests.some(i => !events.some(e => e._id === i.eventId))) throw new Error("Missing event reference");
   const eventRegistrations = (await bounded("eventRegistrations")).filter(r => pair.has(r.registrationId));
   const attendees = (await bounded("eventAttendees")).filter(r => pair.has(r.registrationId));
-  // Audit schema has opaque request/snapshot strings: retain ALL bounded audits
-  // rather than guessing relevance or omitting malformed/legacy audit records.
-  const audits = await bounded("pairTestResetAudits");
+  // Preserve every original audit in place, including opaque legacy payloads.
+  // Hash the COMPLETE row instead of recursively copying its snapshots.
+  // All audit edits/additions/removals still invalidate preflight.
+  const audits = (await bounded("pairTestResetAudits")).map(audit => ({
+    _id: audit._id, _creationTime: audit._creationTime,
+    operationKey: audit.operationKey, createdAt: audit.createdAt,
+    sha256: digest(audit),
+  }));
   const state = { target, targetFlow, registrations, interests, flows, orphanFlows, history, matches, shares, events, eventRegistrations, attendees, audits };
   return { state, fingerprint: canonical(closedHistory ? { mode: args.mode, state } : state) };
 }
