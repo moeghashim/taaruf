@@ -6,6 +6,7 @@ import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-tr
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { Ico } from "@/components/admin/primitives/icons";
+import { EventParticipantProfile } from "./event-participant-profile";
 import { Pill } from "@/components/admin/primitives/status-pill";
 
 import { InterestSubmissionsToggle } from "./interest-submissions-toggle";
@@ -81,6 +82,7 @@ async function eventAdmin(action: string, args: Record<string, unknown>) {
   return result.result;
 }
 export function EventsPageClient() {
+  const [profileId, setProfileId] = useState<string | null>(null);
   const events = useQuery("events.getAll");
   const createEvent = (args: Record<string, unknown>) => eventAdmin("create", args);
   const updateEvent = (args: Record<string, unknown>) => eventAdmin("update", args);
@@ -747,7 +749,7 @@ export function EventsPageClient() {
                 {detail.waitlistEntries.map((entry) => (
                   <div key={entry._id} className="interest-row">
                     <div className="interest-row-main">
-                      <h4>{entry.registration?.name ?? "Orphan — linked profile missing (decision pending)"}</h4>
+                      <h4>{entry.registration ? <button type="button" className="btn btn-sm" onClick={() => setProfileId(entry.registration!._id)}>{entry.registration.name} · View profile</button> : "Orphan — linked profile missing (decision pending)"}</h4>
                       <p>
                         {entry.registration?.publicApplicantNumber ? `#${entry.registration.publicApplicantNumber} · ` : ""}
                         {titleize(entry.gender)} · Added {formatDateTime(entry.createdAt)} · Record {entry._id} · Profile {entry.registrationId}
@@ -888,7 +890,7 @@ export function EventsPageClient() {
                     {row.registration?.publicApplicantNumber ? (
                       <span className="mono">#{row.registration.publicApplicantNumber} · </span>
                     ) : null}
-                    {row.registration?.name ?? "Unknown applicant"}
+                    {row.registration ? <button type="button" className="btn btn-sm" onClick={() => setProfileId(row.registration!._id)} aria-label={`View profile for ${row.registration.name}`}>{row.registration.name} · View profile</button> : "Profile unavailable"}
                   </h4>
                   <p>
                     {titleize(row.gender)} · Registered {formatDateTime(row.createdAt)} · {row.registration?.email ?? "-"}
@@ -976,6 +978,7 @@ export function EventsPageClient() {
           </div>
         </section>
       )}
+      {profileId && <EventParticipantProfile registrationId={profileId} eventTitle={detail?.title ?? "Event"} onClose={() => setProfileId(null)} />}
     </>
   );
 }

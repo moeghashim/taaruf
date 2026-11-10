@@ -638,3 +638,9 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-08
 - Extended issue #64 final contact approval to male and reciprocal flows with shared durable outbox, authenticated admin release, reciprocal consent synchronization, truthful UI, and synthetic coverage; no live operations.
 - Prepared centralized monotonic capability cutoff and authenticated recovery in convex auth/profile/share/settings paths; integrated explicit saved Yes/No editors, tests and release documentation. No production activation. <!-- project: github.com/moeghashim/clawscrewskill -->
+## 2026-11-09
+- Reconciled event participant profile drawer onto source-hash-verified production 9987fcc; preserved live API bridges/capacity behavior, fixed clean-editor remote-note synchronization, and added synthetic regression tests/provenance documentation. Production held for composition review.
+
+- Locally integrated exact PR61/65 provenance with live PR78 drawer; retained authenticated admin transport and PR65 interest presentation. New conflict resolution requires independent review and certification; no publication. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Adapted PR78 synthetic regression fixture to exercise the unchanged authenticated admin transport, added unauthenticated backend denial assertions, and validated drawer interactions at desktop/mobile widths. <!-- project: github.com/moeghashim/clawscrewskill -->
