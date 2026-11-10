@@ -19,11 +19,11 @@ function applicantInterestErrorResponse(error: unknown) {
     if (message.includes(safeMessage)) return NextResponse.json({ error: safeMessage }, { status: 400 });
   }
 
-  if (message.includes("Applicant must have attended an event within the active interest window")) {
+  if (message.includes("Interest submissions are closed")) {
     return NextResponse.json(
       {
         error:
-          "Interest submissions are open only for applicants who attended a recent event. Please contact the team if this looks wrong.",
+          "Interest submissions are closed or you are not approved and checked in for the selected event. Please contact the team if this looks wrong.",
       },
       { status: 400 }
     );

@@ -1090,7 +1090,7 @@ export default function ApplicantDashboardPage() {
                   <h3>Submit Interest</h3>
                   <p>{data.canSubmitInterest
                     ? "Enter the applicant's number and first name. Maximum 3 interests per event."
-                    : "You'll be able to submit interests after attending our next event."}</p>
+                    : "Interests are available when the team enables submissions for an event you are approved and checked in for."}</p>
                 </div>
               </div>
               {data.canSubmitInterest && [0, 1, 2].map(index => {
