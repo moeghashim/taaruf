@@ -630,3 +630,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-09
 - Reconciled event participant profile drawer onto source-hash-verified production 9987fcc; preserved live API bridges/capacity behavior, fixed clean-editor remote-note synchronization, and added synthetic regression tests/provenance documentation. Production held for composition review.
+
+## 2026-11-09
+- Added ARCHIVE-RELEASE-AUDIT.md: fresh frontend/backend provenance and archive release blocker; no application or production changes.
