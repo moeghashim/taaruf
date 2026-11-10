@@ -6,7 +6,7 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 
 type Gender = "male" | "female";
-async function fixture(gender: Gender = "male", preference?: "yes" | "no" | "ask_me_first", photos = true) {
+async function fixture(gender: Gender = "male", preference: "yes" | "no" | "ask_me_first" | undefined = "yes", photos = true) {
   const t = convexTest(schema, modules);
   const ids = await t.run(async ctx => {
     const now = Date.now();
@@ -22,8 +22,8 @@ async function fixture(gender: Gender = "male", preference?: "yes" | "no" | "ask
     }
     return { event, people, image };
   });
-  const args = { expectedEventId: ids.event, sessionHash: "photo-session0", applicantNumber: 2, applicantName: "Person", photoConsent: "yes" as const };
-  const submit = (photoConsent: "yes" | "no" = "yes") => t.mutation(api.applicantInterests.submitInterestNumber, { ...args, photoConsent });
+  const args = { expectedEventId: ids.event, sessionHash: "photo-session0", applicantNumber: 2, applicantName: "Person" };
+  const submit = (photoConsent?: "yes" | "no") => t.mutation(api.applicantInterests.submitInterestNumber, { ...args, photoConsent });
   const dashboard = (i = 1) => t.query(api.applicantInterests.getDashboard, { sessionHash: "photo-session" + i });
   const snapshot = () => t.run(async ctx => ({ interests: await ctx.db.query("interests").collect(), flows: await ctx.db.query("interestFlows").collect(), events: await ctx.db.query("interestFlowEvents").collect(), registrations: await ctx.db.query("registrations").collect() }));
   return { t, ...ids, args, submit, dashboard, snapshot };
@@ -31,8 +31,9 @@ async function fixture(gender: Gender = "male", preference?: "yes" | "no" | "ask
 
 for (const gender of ["male", "female"] as const) {
   for (const preference of [undefined, "ask_me_first", "no", "yes"] as const) {
-    test(`explicit yes with legacy ${preference}, sender ${gender}; visibility remains independent`, async () => {
+    test(`profile snapshot with preference ${preference}, sender ${gender}; visibility remains independent`, async () => {
       const f = await fixture(gender, preference);
+      if (preference === undefined) await f.t.run(ctx => ctx.db.patch(f.people[0], { photoSharingPermission: undefined }));
       const result = await f.submit();
       expect((await f.t.run(ctx => ctx.db.get(f.people[0])))?.photoSharingPermission).toBe(preference);
       if (gender === "female") {
@@ -46,11 +47,11 @@ for (const gender of ["male", "female"] as const) {
         });
       }
       const urls = (await f.dashboard()).inbound[0].counterparty?.imageUrls;
-      expect(urls).toHaveLength(1);
-      expect(urls?.[0]).toEqual(expect.any(String));
+      expect(urls).toHaveLength(preference === "yes" ? 1 : 0);
+      if (preference === "yes") expect(urls?.[0]).toEqual(expect.any(String));
       const unrelated = await f.dashboard(2);
       expect(unrelated.inbound).toEqual([]);
-      expect(JSON.stringify(unrelated)).not.toContain(urls![0]);
+      if (urls?.length) expect(JSON.stringify(unrelated)).not.toContain(urls[0]);
     });
   }
 
@@ -71,7 +72,7 @@ for (const gender of ["male", "female"] as const) {
     const before = await f.snapshot();
     expect(await f.submit()).toMatchObject({ interestId: result.interestId, inboundInterestNotification: null });
     expect(await f.snapshot()).toEqual(before);
-    await expect(f.submit("no")).rejects.toThrow("already submitted");
+    expect(await f.submit("no")).toMatchObject({ interestId: result.interestId });
     expect(await f.snapshot()).toEqual(before);
     for (const sessionHash of ["photo-session1", "photo-session2", "forged"]) {
       await expect(f.t.mutation(api.applicantInterests.revokeSenderPhotoConsent, { sessionHash, interestId: result.interestId })).rejects.toThrow("Unauthorized");
@@ -98,12 +99,10 @@ for (const status of ["closed", "declined", "withdrawn"] as const) test(`closed 
   expect(await f.snapshot()).toEqual(before);
 });
 
-test("missing and malformed choices fail validation atomically", async () => {
+test("malformed compatibility choices fail validation atomically", async () => {
   const f = await fixture();
   const before = await f.snapshot();
-  const { photoConsent, ...withoutChoice } = f.args;
-  void photoConsent;
-  for (const input of [withoutChoice, ...[null, true, "", "ask_me_first", "YES", 1].map(photoConsent => ({ ...f.args, photoConsent }))]) {
+  for (const input of [null, true, "", "ask_me_first", "YES", 1].map(photoConsent => ({ ...f.args, photoConsent }))) {
     await expect(f.t.mutation(api.applicantInterests.submitInterestNumber, input as FunctionArgs<typeof api.applicantInterests.submitInterestNumber>)).rejects.toThrow();
     expect(await f.snapshot()).toEqual(before);
   }
@@ -130,7 +129,7 @@ test("stale event and invalid, expired, revoked sessions cannot write consent", 
 });
 
 test("yes with no stored photos returns no URLs and does not fabricate images", async () => {
-  const f = await fixture("male", "no", false);
+  const f = await fixture("male", "yes", false);
   await f.submit();
   expect((await f.dashboard()).inbound[0].counterparty?.imageUrls).toEqual([]);
   expect((await f.dashboard(0)).applicant.hasPhotos).toBe(false);
@@ -140,4 +139,39 @@ test("recipient gender is not implicit consent to expose their photos to sender"
   const f = await fixture("male", "yes");
   await f.submit();
   expect((await f.dashboard(0)).outbound[0].counterparty?.imageUrls).toEqual([]);
+});
+
+for (const preference of [undefined, "no", "ask_me_first"] as const) test(
+  "legacy client yes cannot override profile " + preference, async () => {
+    const f = await fixture("male", "no");
+    await f.t.run(ctx => ctx.db.patch(f.people[0], { photoSharingPermission: preference }));
+    const result = await f.submit("yes");
+    expect((await f.t.run(ctx => ctx.db.get(result.interestId)))?.senderPhotoConsent).toBe("no");
+    expect((await f.dashboard()).inbound[0].counterparty?.imageUrls).toEqual([]);
+  });
+
+for (const historicalChoice of [undefined, "no", "yes"] as const) test("retry never rewrites historical choice " + historicalChoice, async () => {
+  const f = await fixture();
+  const result = await f.submit();
+  await f.t.run(ctx => ctx.db.patch(result.interestId, { senderPhotoConsent: historicalChoice, senderPhotoConsentRevokedAt: historicalChoice === "yes" ? Date.now() : undefined }));
+  const before = await f.snapshot();
+  await f.submit();
+  expect(await f.snapshot()).toEqual(before);
+  if (historicalChoice !== undefined) expect((await f.dashboard()).inbound[0].counterparty?.imageUrls).toEqual([]);
+});
+
+test("profile preference changes apply to new recipients, not existing snapshots", async () => {
+  const f = await fixture("male", "no");
+  const first = await f.submit();
+  await f.t.run(ctx => ctx.db.patch(f.people[0], { photoSharingPermission: "yes" }));
+  await f.submit();
+  expect((await f.dashboard()).inbound[0].counterparty?.imageUrls).toEqual([]);
+  const second = await f.t.mutation(api.applicantInterests.submitInterestNumber, { ...f.args, applicantNumber: 3 });
+  expect((await f.dashboard(2)).inbound[0].counterparty?.imageUrls).toHaveLength(1);
+  await f.t.run(ctx => ctx.db.patch(f.people[0], { photoSharingPermission: "no" }));
+  expect((await f.t.run(ctx => ctx.db.get(first.interestId)))?.senderPhotoConsent).toBe("no");
+  expect((await f.t.run(ctx => ctx.db.get(second.interestId)))?.senderPhotoConsent).toBe("yes");
+  await f.t.mutation(api.applicantInterests.revokeSenderPhotoConsent, { sessionHash: f.args.sessionHash, interestId: second.interestId });
+  await f.t.run(ctx => ctx.db.patch(f.people[0], { photoSharingPermission: "yes" }));
+  expect((await f.dashboard(2)).inbound[0].counterparty?.imageUrls).toEqual([]);
 });

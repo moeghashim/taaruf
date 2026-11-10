@@ -438,7 +438,7 @@ function ProfileSideCard({
 
       {interest.senderPhotoConsent && <div className="profile-review-box">
         <h4>Your photo sharing for this interest</h4>
-        <p>{interest.senderPhotoConsentRevokedAt ? "Revoked" : interest.senderPhotoConsent === "yes" ? "You chose to share with this recipient when this interest is visible to them." : "Your photos are private for this interest."}</p>
+        <p>{interest.senderPhotoConsentRevokedAt ? "Revoked" : interest.senderPhotoConsent === "yes" ? "Photo sharing is allowed with this recipient when this interest is visible to them." : "Your photos are private for this interest."}</p>
         {interest.senderPhotoConsent === "yes" && !interest.senderPhotoConsentRevokedAt && <button type="button" className="btn" disabled={busy} onClick={() => onAction({ action: "revoke_photos", interestId: interest.interestId })}>Revoke photo sharing</button>}
         <p>Previously obtained photos or links cannot be recalled.</p>
       </div>}
@@ -620,7 +620,7 @@ export default function ApplicantDashboardPage() {
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
-  const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "", photoConsent: "" })));
+  const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -703,7 +703,7 @@ export default function ApplicantDashboardPage() {
   }, [hasDashboard, busy, applicantFetch]);
 
   useEffect(() => {
-    setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "", photoConsent: "" })));
+    setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "" })));
   }, [data?.interestSubmissionEventId]);
 
   const loadProfile = useCallback(async () => {
@@ -781,9 +781,8 @@ export default function ApplicantDashboardPage() {
     event.preventDefault();
     if (busy || eligibilityError || !data?.canSubmitInterest || !data.interestSubmissionEventId) return;
     const row = interestRows[index];
-    if (!["yes", "no"].includes(row.photoConsent)) return;
-    if (await runAction({ action: "submit_number", expectedEventId: data.interestSubmissionEventId, applicantNumber: Number(row.number), applicantName: row.name, photoConsent: row.photoConsent })) {
-      setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "", photoConsent: "" })));
+    if (await runAction({ action: "submit_number", expectedEventId: data.interestSubmissionEventId, applicantNumber: Number(row.number), applicantName: row.name })) {
+      setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "" })));
     }
   }
 
@@ -1184,24 +1183,15 @@ export default function ApplicantDashboardPage() {
                     <label htmlFor={`interest-number-${index}`}>Interest {index + 1} · Applicant #</label>
                     <input id={`interest-number-${index}`} type="number" min="1" step="1" inputMode="numeric" required disabled={busy || Boolean(eligibilityError) || Boolean(submitted)}
                       placeholder={submitted ? "Submitted" : "Applicant #"} value={submitted ? "" : interestRows[index].number}
-                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, number: event.target.value, photoConsent: "" } : row))} />
+                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, number: event.target.value } : row))} />
                   </div>
                   <div className="field">
                     <label htmlFor={`interest-name-${index}`}>First name</label>
                     <input id={`interest-name-${index}`} required maxLength={200} disabled={busy || Boolean(eligibilityError) || Boolean(submitted)} placeholder="First name"
                       value={submitted ? "" : interestRows[index].name}
-                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, name: event.target.value, photoConsent: "" } : row))} />
+                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, name: event.target.value } : row))} />
                   </div>
-                  {!submitted && <fieldset className="interest-photo-choice" disabled={busy || Boolean(eligibilityError)}>
-                    <legend>Share my photos with {interestRows[index].name.trim() || "this applicant"}{interestRows[index].number ? ` (Applicant #${interestRows[index].number})` : ""}?</legend>
-                    <p>This choice applies only to this recipient for this interest. Your profile-wide preference will not change.</p>
-                    {!data.applicant.hasPhotos && <p>You have no photos uploaded. Choosing Yes allows photos you upload later to be shared for this interest.</p>}
-                    <label><input type="radio" name={`photo-consent-${index}`} value="yes" required checked={interestRows[index].photoConsent === "yes"} onChange={() => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, photoConsent: "yes" } : row))} /> Yes, share my photos with this recipient</label>
-                    <label><input type="radio" name={`photo-consent-${index}`} value="no" required checked={interestRows[index].photoConsent === "no"} onChange={() => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, photoConsent: "no" } : row))} /> No, keep my photos private for this interest</label>
-                    <p>{data.applicant.gender === "female" ? "Your interest stays private with the team until they make it visible. Photo consent does not notify or reveal it to the recipient. " : ""}You can revoke this choice from the interest. Previously obtained photos or links cannot be recalled.</p>
-                    <button type="button" className="btn" onClick={() => setInterestRows(rows => rows.map((row, i) => i === index ? { number: "", name: "", photoConsent: "" } : row))}>Clear choice</button>
-                  </fieldset>}
-                  <button type="submit" className="btn btn-primary" disabled={busy || Boolean(eligibilityError) || Boolean(submitted) || !interestRows[index].photoConsent}>
+                  <button type="submit" className="btn btn-primary" disabled={busy || Boolean(eligibilityError) || Boolean(submitted)}>
                     {submitted ? "Submitted" : "Submit interest"}
                   </button>
                 </form>;

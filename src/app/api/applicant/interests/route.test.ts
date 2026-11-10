@@ -19,10 +19,10 @@ for (const photoConsent of [null, true, "", "ask_me_first", "YES", 1]) test("rej
   expect((await POST(request("displayed-event", photoConsent))).status).toBe(400);
   expect(mutation).not.toHaveBeenCalled();
 });
-test("rejects missing photo choice instead of defaulting", async () => {
+test("accepts submission without a new photo choice", async () => {
   const request = new NextRequest("https://test.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify({ action: "submit_number", expectedEventId: "event", applicantNumber: 42, applicantName: "First" }) });
-  expect((await POST(request)).status).toBe(400);
-  expect(mutation).not.toHaveBeenCalled();
+  expect((await POST(request)).status).toBe(200);
+  expect(mutation.mock.calls[0][1]).not.toHaveProperty("photoConsent");
 });
 test("revocation forwards only session-bound owner authorization", async () => {
   const request = new NextRequest("https://test.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify({ action: "revoke_photos", interestId: "interest", sessionHash: "forged", ownerRegistrationId: "forged" }) });

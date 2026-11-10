@@ -250,9 +250,11 @@ for (const source of sources) for (const releaseBeforeShare of [false, true]) te
   const w = await publicWorld();
   await w.t.run(async ctx => {
     const image = await ctx.storage.store(new Blob(["synthetic-private-photo"], { type: "image/png" }));
-    await ctx.db.patch(w.people[1], { imageStorageIds: [image] });
+    await ctx.db.patch(w.people[1], { imageStorageIds: [image], photoSharingPermission: "yes" });
   });
   const female = (await w.t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash: "session-1", expectedEventId: w.event, applicantNumber: 1, applicantName: "Brother", photoConsent: "yes" })).interestId;
+  // The new interest snapshots Yes; later profile changes must not expand other contexts.
+  await w.t.run(ctx => ctx.db.patch(w.people[1], { photoSharingPermission: "no" }));
   const male = await w.submit(source);
   async function privateReviewDenied() {
     const rows = await w.t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "session-0", paginationOpts: { cursor: null, numItems: 50 } });

@@ -647,3 +647,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Extracted PR #77 display-only confirmation badge removal and synthetic browser regression tests from aa7caabb553bfdf72d0d6e92e2ed9c243475a2a5 onto verified live 26accc9ef8d39ad7120b7347fe412e86eb144d3c. Preserves live PR61/65, drawer, reset helper and all backend behavior; no production deployment.
+
+- Omar2865/2870: remove repeated photo question, snapshot saved profile permission only for new interests, preserve historical recipient grants/denials/revocations, and extend synthetic tests. Production/recovery remain held. <!-- project: github.com/moeghashim/clawscrewskill -->
