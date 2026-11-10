@@ -68,7 +68,7 @@ for (const gender of ["male", "female"]) test(`requested waitlist confirmation s
     await page.goto("/me");
     const row = page.locator(".interest-row").filter({ hasText: "Synthetic waitlist" });
     await row.getByRole("button", { name: "Confirm", exact: true }).click();
-    await expect(row).toContainText("Confirmed");
+    await expect(row.locator(".pill")).toHaveText(["Waitlisted"]);
     await expect(row).toContainText("Waitlisted");
     await expect(row.getByRole("button")).toHaveCount(0);
     for (const state of [{ requested: false, expired: false }, { requested: true, expired: true }]) {
