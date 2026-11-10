@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "submit_number") {
-      if (!["yes", "no"].includes(body.photoConsent)) return NextResponse.json({ error: "Choose whether to share your photos with this recipient" }, { status: 400 });
+      if (body.photoConsent !== undefined && !["yes", "no"].includes(body.photoConsent)) return NextResponse.json({ error: "Invalid legacy photo choice" }, { status: 400 });
       if (!Number.isInteger(body.applicantNumber) || body.applicantNumber <= 0) {
         return NextResponse.json({ error: "A valid applicant number is required" }, { status: 400 });
       }
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       }
       const result = await convex.mutation(api.applicantInterests.submitInterestNumber, {
         expectedEventId: body.expectedEventId,
-        photoConsent: body.photoConsent,
+        ...(body.photoConsent !== undefined ? { photoConsent: body.photoConsent } : {}),
         sessionHash,
         applicantNumber: body.applicantNumber,
         applicantName: body.applicantName,

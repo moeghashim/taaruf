@@ -332,7 +332,8 @@ export const submitInterestNumber = mutation({
     applicantNumber: v.number(),
     applicantName: v.string(),
     expectedEventId: v.id("events"),
-    photoConsent: v.union(v.literal("yes"), v.literal("no")),
+    // Compatibility only: an old client may still send a denial. It can never grant access.
+    photoConsent: v.optional(v.union(v.literal("yes"), v.literal("no"))),
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
@@ -353,7 +354,7 @@ export const submitInterestNumber = mutation({
       .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3);
     const retry = previous.find(row => row.toRegistrationId === target._id);
     if (retry) {
-      if (retry.senderPhotoConsent !== args.photoConsent || !isVisibleInApplicantDashboard(retry)) throw new Error("Interest already submitted for this event");
+      if (!isVisibleInApplicantDashboard(retry)) throw new Error("Interest already submitted for this event");
       return { interestId: retry._id, matchId: retry.matchId ?? null, private: retry.visibility === "internal_only", inboundInterestNotification: null };
     }
 
@@ -370,7 +371,9 @@ export const submitInterestNumber = mutation({
 
     const interest = await ctx.db.get(result.interestId);
     if (!interest) throw new Error("Interest not found after creation");
-    await ctx.db.patch(interest._id, { senderPhotoConsent: args.photoConsent, ...(registration.gender === "female" ? { femaleWorkflow: { state: "private_documented" as const } } : {}) });
+    // Snapshot only this newly created recipient grant. Never recompute historical choices
+    // on retries or preference edits; revocation remains recipient-specific.
+    await ctx.db.patch(interest._id, { senderPhotoConsent: registration.photoSharingPermission === "yes" && args.photoConsent !== "no" ? "yes" : "no", ...(registration.gender === "female" ? { femaleWorkflow: { state: "private_documented" as const } } : {}) });
     const flow = await ensureFlow(ctx, interest);
     await appendEvent(ctx, flow, "interest_number_submitted", registration._id);
 
