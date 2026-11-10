@@ -767,7 +767,9 @@ export default function ApplicantDashboardPage() {
         if (response.status === 409) await load();
         throw new Error(payload.error || "Action failed");
       }
-      setMessage(typeof payload.message === "string" ? payload.message : "Updated.");
+      setMessage(body.action === "submit_number" && data?.applicant.gender === "female"
+        ? "Your interest has been submitted for admin review. An admin will review it before sharing it with the brother."
+        : typeof payload.message === "string" ? payload.message : "Updated.");
       await Promise.all([load(), loadEvents()]);
       return true;
     } catch (err) {
@@ -1198,7 +1200,9 @@ export default function ApplicantDashboardPage() {
               })}
             </div>
 
-            {message && <p className="notice success">{message}</p>}
+            <div role="status" aria-live="polite" aria-atomic="true">
+              {message && <p className="notice success">{message}</p>}
+            </div>
             {error && <p className="notice error">{error}</p>}
 
             <div className="applicant-sections">

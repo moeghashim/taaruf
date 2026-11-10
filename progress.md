@@ -656,3 +656,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Replace recursive audit copies with complete-row SHA256 references in singleInterestTestReset; retain original history and drift/idempotency guards. Add size/repeated-reset regressions; 705 tests, typecheck, lint and isolated real-backend rollback proof pass. No production deploy. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Added fixed-ID admin-only #219↔#220 reset with confirmation, atomic audited preview, access retirement and pair-only quota restoration. 708 tests, build/typecheck/lint and isolated runtime repeated normal submissions in both directions plus mobile/desktop endpoint proof pass. No production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Clarified sister initial interest success with exact user3021 admin-review copy; preserved all other action outcomes and added polite atomic status. Added 24 mocked browser regressions (1440/390/320px); 708 unit tests, typecheck, build and independent review pass. No backend/workflow or production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
