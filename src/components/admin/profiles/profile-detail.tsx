@@ -1,4 +1,5 @@
 "use client";
+import { interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useEffect, useState } from "react";
@@ -230,8 +231,8 @@ function ProfileDetailBody({
             <Pill tone="plain">{outboundInterests.length}</Pill>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Pill tone="plain">Historical requested {outboundInterests.filter(interest => interest.adminStatus === "requested").length}</Pill>
-            <Pill tone="plain">Historical matched {outboundInterests.filter(interest => interest.adminStatus === "matched").length}</Pill>
+            <Pill tone="plain">Pending review {outboundInterests.filter(interest => !isArchivedInterest(interest)).length}</Pill>
+            <Pill tone="plain">Released / closed {outboundInterests.filter(isArchivedInterest).length}</Pill>
           </div>
         </div>
         <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12, background: "var(--bg-tint)" }}>
@@ -240,8 +241,8 @@ function ProfileDetailBody({
             <Pill tone="plain">{inboundInterests.length}</Pill>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Pill tone="plain">Historical requested {inboundInterests.filter(interest => interest.adminStatus === "requested").length}</Pill>
-            <Pill tone="plain">Historical matched {inboundInterests.filter(interest => interest.adminStatus === "matched").length}</Pill>
+            <Pill tone="plain">Pending review {inboundInterests.filter(interest => !isArchivedInterest(interest)).length}</Pill>
+            <Pill tone="plain">Released / closed {inboundInterests.filter(isArchivedInterest).length}</Pill>
           </div>
         </div>
       </div>
@@ -339,7 +340,7 @@ function ProfileDetailBody({
               <strong style={{ fontSize: 13 }}>{interest.toRegistration?.name ?? "Unknown"}</strong>
               <div style={{ color: "var(--mute)", fontSize: 12 }}>{interest.toRegistration?.email ?? "—"}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Pill tone="plain">{interest.status.replaceAll("_", " ")}</Pill>
+                <Pill tone="plain">{interestLifecycle(interest)}</Pill>
                 {interest.rank ? <Pill tone="plain">Rank {interest.rank}</Pill> : null}
                 <Pill tone="plain">{interest.source.replace(/_/g, " ")}</Pill>
                 {interest.matchId ? <Pill tone="green">Linked to match</Pill> : null}
@@ -364,7 +365,7 @@ function ProfileDetailBody({
               <strong style={{ fontSize: 13 }}>{interest.fromRegistration?.name ?? "Unknown"}</strong>
               <div style={{ color: "var(--mute)", fontSize: 12 }}>{interest.fromRegistration?.email ?? "—"}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Pill tone="plain">{interest.status.replaceAll("_", " ")}</Pill>
+                <Pill tone="plain">{interestLifecycle(interest)}</Pill>
                 {interest.rank ? <Pill tone="plain">Their rank {interest.rank}</Pill> : null}
                 <Pill tone="plain">{interest.visibility.replace(/_/g, " ")}</Pill>
                 {interest.matchId ? <Pill tone="green">Linked to match</Pill> : null}

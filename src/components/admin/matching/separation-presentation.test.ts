@@ -14,15 +14,16 @@ vi.mock("@/components/admin/hooks/use-admin-transport", () => ({
 }));
 import { Topbar } from "../layout/topbar";
 import { InterestsPageClient } from "./matching-page-client";
-test("compatibility header retains the safe admin-only suggestion launcher", () => {
+test("issue66 header removes the global manual suggestion launcher", () => {
   const html = renderToStaticMarkup(createElement(Topbar, { crumb: "Interests", onMenu: vi.fn() }));
-  expect(html).toContain('aria-label="New match"');
+  expect(html).not.toContain('aria-label="New match"');
 });
-test("compatibility interest row exposes historical priority without consent-changing controls", () => {
+test("issue66 derives lifecycle and removes historical priority without losing safe actions", () => {
   const html = renderToStaticMarkup(createElement(InterestsPageClient));
-  expect(html).toContain("Historical tracker: ");
-  expect(html).toContain("Match creation is automatic after both applicant approvals");
-  expect(html).toContain("Queued");
+  expect(html).not.toContain("Historical tracker: ");
+  expect(html).not.toContain("Match creation is automatic after both applicant approvals");
+  expect(html).not.toContain("Queued");
+  expect(html).toContain("Awaiting applicant approvals");
   expect(html).toContain("Decline interest");
   expect(html).toContain("Close interest");
   expect(html).toContain("Interest notes...");
