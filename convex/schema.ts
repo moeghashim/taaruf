@@ -232,7 +232,7 @@ export default defineSchema({
 
   femaleWorkflowDeliveries: defineTable({
     interestId: v.id("interests"), recipientId: v.id("registrations"),
-    kind: v.union(v.literal("sister_confirmation"), v.literal("pending_review"), v.literal("contacts_ready")),
+    kind: v.union(v.literal("brother_review"), v.literal("sister_confirmation"), v.literal("pending_review"), v.literal("contacts_ready")),
     key: v.string(), status: v.union(v.literal("pending"), v.literal("sending"), v.literal("sent"), v.literal("failed"), v.literal("cancelled")),
     attempts: v.number(), nextAttemptAt: v.number(), leaseUntil: v.optional(v.number()),
     providerCooldownUntil: v.optional(v.number()),

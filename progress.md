@@ -658,3 +658,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Added fixed-ID admin-only #219↔#220 reset with confirmation, atomic audited preview, access retirement and pair-only quota restoration. 708 tests, build/typecheck/lint and isolated runtime repeated normal submissions in both directions plus mobile/desktop endpoint proof pass. No production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Clarified sister initial interest success with exact user3021 admin-review copy; preserved all other action outcomes and added polite atomic status. Added 24 mocked browser regressions (1440/390/320px); 708 unit tests, typecheck, build and independent review pass. No backend/workflow or production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Added prominent applicant review invitations and a deduplicated brother-review email stage in the existing outbox, with synthetic provider/browser regressions; preview-only, no live deployment or email.

@@ -1185,3 +1185,18 @@
 [data-admin] .interest-photo-choice p { max-width: 70ch; margin: 8px 0 14px; font-size: 13px; line-height: 1.5; }
 [data-admin] .interest-photo-choice label { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
 [data-admin] .interest-photo-choice input[type="radio"] { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* Applicant review invitation: prominent action, no identity disclosure. */
+[data-admin] .interest-invitation { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding: 32px; background: var(--bg-tint); border-bottom: 1px solid var(--line); }
+[data-admin] .interest-invitation-copy { max-width: 65ch; }
+[data-admin] .interest-invitation h2 { font-family: var(--font-admin-serif), Georgia, serif; font-size: 32px; line-height: 1.15; margin-bottom: 12px; }
+[data-admin] .interest-invitation p { font-size: 16px; line-height: 1.6; color: var(--ink-2); }
+[data-admin] .interest-invitation .interest-invitation-privacy { margin-top: 12px; font-size: 14px; }
+[data-admin] .interest-invitation-actions { display: grid; gap: 16px; padding: 0; margin: 0; list-style: none; flex-shrink: 0; }
+[data-admin] .interest-invitation-actions li { display: grid; gap: 6px; }
+[data-admin] .interest-invitation-actions .btn { min-height: 48px; padding: 12px 24px; font-size: 16px; justify-content: center; }
+[data-admin] .interest-invitation-actions a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+@media (max-width: 700px) {
+  [data-admin] .interest-invitation { flex-direction: column; align-items: stretch; padding: 24px; gap: 24px; }
+  [data-admin] .interest-invitation h2 { font-size: 28px; }
+}

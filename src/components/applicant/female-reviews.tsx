@@ -16,6 +16,16 @@ const stateCopy: Record<string, string> = {
   declined: "This review was declined. No further response is needed.",
   revoked: "The team revoked this review. Its link is no longer available.",
 };
+const stateLabels: Record<string, string> = {
+  private_documented: "With the matchmaking team",
+  awaiting_brother_review: "Waiting for a response",
+  awaiting_sister_confirmation: "Waiting for confirmation",
+  pending_admin_approval: "Waiting for the team’s approval",
+  contacts_released: "Contact details available",
+  declined: "Review declined", revoked: "Review withdrawn", closed: "Review closed",
+};
+const reviewExpired = (item: Review) => item.state === "awaiting_brother_review" && item.reviewExpiresAt !== undefined && item.reviewExpiresAt <= Date.now();
+const needsBrotherReview = (item: Review) => item.role === "brother" && item.state === "awaiting_brother_review" && !item.paused && !reviewExpired(item);
 export function FemaleReviews() {
   const [loginHref, setLoginHref] = useState("/login");
   const [rows, setRows] = useState<Review[]>([]);
@@ -86,17 +96,32 @@ export function FemaleReviews() {
     finally { setBusy(false); }
   }
   const profile = access?.profile || access?.counterparty;
-  return <section id="review-notifications" className="panel applicant-section">
+  const invitations = rows.filter(needsBrotherReview);
+  const history = rows.filter(item => !needsBrotherReview(item));
+  return <section id="review-notifications" aria-label="Profile reviews" className="panel applicant-section">
+    {!!invitations.length && !selected && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
+      <div className="interest-invitation-copy">
+        <h2 id="interest-invitation-heading">Someone is interested in you</h2>
+        <p>{invitations.length === 1 ? "A profile is ready for you to review. Take a look and decide whether you’re interested." : "You have multiple profiles to review. Take a look and respond to each invitation."}</p>
+        <p className="interest-invitation-privacy">Accepting does not share contact details. Both of you must agree before the team can approve sharing them.</p>
+      </div>
+      <ul className="interest-invitation-actions">
+        {invitations.map((item, index) => <li key={item.interestId}>
+          {invitations.length > 1 && <span>Invitation {index + 1}</span>}
+          <a className="btn btn-primary" aria-label={invitations.length > 1 ? "Review profile for invitation " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>Review profile</a>
+        </li>)}
+      </ul>
+    </section>}
     <div className="panel-head"><div><h3>Profile reviews</h3><p>Review invitations and confirmations. Only you can respond from your account.</p></div><button type="button" className="btn" disabled={busy || loading} onClick={() => { void load(); setAccessVersion(value => value + 1); }}>Refresh</button></div>
     <div style={{ padding: 16, display: "grid", gap: 16 }}>
       {error && <p className="notice error" role="alert">{error} <a href={loginHref}>Sign in</a> or refresh your portal.</p>}
       {message && <p className="notice success" role="status">{message}</p>}
       {listError && <p className="notice error" role="alert">{listError} <a href={loginHref}>Sign in</a>, use Refresh or try Load more again.</p>}
       {loading ? <p role="status">Loading reviews…</p> : !rows.length && <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>}
-      {rows.map(item => <div key={item.interestId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 16 }}>
+      {(selected ? rows : history).map(item => <div key={item.interestId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 16 }}>
         {item.paused && <p>Paused</p>}
-        <h4>{item.state.replaceAll("_", " ")}</h4><p>{stateCopy[item.state]}</p>
-        {!["private_documented", "revoked", "declined"].includes(item.state) && <a className="btn" href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>Review profile</a>}
+        <h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p>
+        {!reviewExpired(item) && !["private_documented", "revoked", "declined", "closed"].includes(item.state) && <a className="btn" href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>{needsBrotherReview(item) ? "Review profile" : "View review"}</a>}
 
       </div>)}
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
