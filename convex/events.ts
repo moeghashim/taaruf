@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { requireEventAdmin, confirmationExpired, reservesCapacity, countCapacityUsed, registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
@@ -1140,5 +1141,26 @@ export const verifyEventBackfill = query({
         interests.every((interest) => Boolean(interest.eventId)) &&
         approvedMissingAprilAttendance === 0,
     };
+  },
+});
+
+/** Profiles discovery never counts or loads event rosters. */
+export const profileFilterCatalog = query({
+  args: { adminSecret: v.optional(v.string()), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const result = await ctx.db.query("events").withIndex("by_startsAt").order("desc")
+      .paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
+    return { ...result, page: result.page.map(({ _id, title, startsAt }) => ({ _id, title, startsAt })) };
+  },
+});
+/** All persisted relationships; no profile PII, attendance predicate or legacy waitlist. */
+export const profileFilterMembership = query({
+  args: { adminSecret: v.optional(v.string()), eventId: v.id("events"), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const result = await ctx.db.query("eventRegistrations").withIndex("by_eventId", q => q.eq("eventId", args.eventId))
+      .paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
+    return { ...result, page: result.page.map(({ registrationId, registrationStatus }) => ({ registrationId, registrationStatus })) };
   },
 });

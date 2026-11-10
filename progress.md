@@ -649,3 +649,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Extracted PR #77 display-only confirmation badge removal and synthetic browser regression tests from aa7caabb553bfdf72d0d6e92e2ed9c243475a2a5 onto verified live 26accc9ef8d39ad7120b7347fe412e86eb144d3c. Preserves live PR61/65, drawer, reset helper and all backend behavior; no production deployment.
 
 - Omar2865/2870: remove repeated photo question, snapshot saved profile permission only for new interests, preserve historical recipient grants/denials/revocations, and extend synthetic tests. Production/recovery remain held. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Ported issue67 event-registration filter onto verified PR84 live ancestry; preserved ethnicity/photo/reset protections. Added authenticated paginated event catalog/membership, deduplication, combined filters, retry states and tests. No live deployment.

@@ -6,6 +6,8 @@ export const adminQueries = {
  'matches.getAll': api.matches.getAll,
  'profileShares.getAll': api.profileShares.getAll,
  'settings.get': api.settings.get,
+ 'events.profileFilterCatalog': api.events.profileFilterCatalog,
+ 'events.profileFilterMembership': api.events.profileFilterMembership,
  'events.getAll': api.events.getAll,
  'events.getDetail': api.events.getDetail,
  'events.getByRegistration': api.events.getByRegistration,

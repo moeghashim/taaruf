@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Component, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
@@ -14,6 +14,10 @@ import {
   type FilterProfileCompletionStatus,
   type FilterStatus,
 } from "@/components/admin/hooks/use-registrations";
+
+import { useProfileEventPages } from "@/components/admin/hooks/use-profile-event-pages";
+import type { Id } from "../../../../convex/_generated/dataModel";
+import { eventMembershipStatuses, filterEventMembers, profilePage } from "@/lib/profile-event-filter";
 
 type Props = {
   /** "all" lets the tabs choose; "pending" locks the surface to pending review. */
@@ -48,7 +52,15 @@ const PROFILE_STATUS_DEFS: Array<{ id: FilterProfileCompletionStatus; label: str
 ];
 
 export function ProfilesPageClient(props: Props) {
-  return <Suspense fallback={<p>Loading profiles…</p>}><ProfilesContent {...props} /></Suspense>;
+  return <ProfilesErrorBoundary><Suspense fallback={<p>Loading profiles…</p>}><ProfilesContent {...props} /></Suspense></ProfilesErrorBoundary>;
+}
+
+class ProfilesErrorBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    return this.state.failed ? <div role="alert" className="panel"><div className="filters"><p>Unable to load profiles or event registrations. Refresh to try again, or sign in again if your session expired.</p><button className="btn" onClick={() => window.location.reload()}>Refresh</button></div></div> : this.props.children;
+  }
 }
 
 function ProfilesContent({
@@ -58,6 +70,12 @@ function ProfilesContent({
   subtitle,
 }: Props) {
   const data = useRegistrations();
+  const catalog = useProfileEventPages("events.profileFilterCatalog", {});
+  const events = catalog.rows;
+  const [eventId, setEventId] = useState("all");
+  const event = useProfileEventPages("events.profileFilterMembership", eventId === "all" ? "skip" : { eventId: eventId as Id<"events"> });
+  const membership = useMemo(() => eventMembershipStatuses(event.rows ?? []), [event.rows]);
+  const [pagination, setPagination] = useState({ key: "", page: 1 });
   const params = useSearchParams();
   const query = params.get("q") ?? "";
   const [tab, setTab] = useState<FilterStatus>(initialStatus);
@@ -68,14 +86,21 @@ function ProfilesContent({
 
   const effectiveTab = lockStatus ? initialStatus : tab;
   const filtered = useMemo(
-    () => data.filterRegistrations(effectiveTab, gender, search, profileStatus),
-    [data, effectiveTab, gender, profileStatus, search]
+    () => filterEventMembers(data.filterRegistrations(effectiveTab, gender, search, profileStatus), eventId === "all" ? null : membership),
+    [data, effectiveTab, gender, profileStatus, search, eventId, membership]
   );
+
+  const filterKey = JSON.stringify([effectiveTab, gender, search, profileStatus, eventId]);
+  // Persist every filter transition so a round trip cannot resurrect an old page.
+  if (pagination.key !== filterKey) setPagination({ key: filterKey, page: 1 });
+  const { page, pages, rows } = profilePage(filtered, pagination.key === filterKey ? pagination.page : 1);
+  const isLoading = data.isLoading || (eventId !== "all" && event.rows === undefined);
 
   useEffect(() => {
     setSearch(query);
     const requestedStatus = params.get("status");
     setTab(TAB_DEFS.find(item => item.id === requestedStatus)?.id ?? initialStatus);
+    setEventId("all");
     setGender("all");
     setProfileStatus("all");
     setOpenProfileId(params.get("profile"));
@@ -136,7 +161,7 @@ function ProfilesContent({
         subtitle={subtitle ?? `${data.counts.total} total · ${data.counts.approved} approved · ${data.counts.pending} pending`}
         actions={
           <>
-            <button className="btn" onClick={exportCsv}>Export CSV</button>
+            <button className="btn" disabled={isLoading} onClick={exportCsv}>Export CSV</button>
           </>
         }
       />
@@ -160,6 +185,16 @@ function ProfilesContent({
           </div>
         )}
 
+        <div className="filters">
+          <label htmlFor="profile-event">Event registration</label>
+          <select id="profile-event" className="filt" style={{ maxWidth: "100%", minHeight: 36 }} value={eventId} disabled={events === undefined} onChange={(e) => setEventId(e.target.value)}>
+            <option value="all">All events</option>
+            {events?.map((item) => <option key={item._id} value={item._id}>{item.title} · {new Date(item.startsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago", year: "numeric", month: "short", day: "numeric" })}</option>)}
+          </select>
+        </div>
+        {(catalog.error || (eventId !== "all" && event.error)) && <div role="alert" className="filters"><p>{catalog.error ? "Unable to load the complete event catalog." : "Unable to load event registrations."} Retry to load current results.</p><button className="btn" onClick={() => { catalog.retry(); event.retry(); }}>Retry</button></div>}
+        {!events && !catalog.error && <p className="filters">Loading event catalog…</p>}
+        {eventId !== "all" && <p className="filters">Includes all event registration statuses, regardless of check-in. Status tabs filter profile approval.</p>}
         <div className="filters">
           <div className="search-inline">
             <span className="glass">{Ico.search}</span>
@@ -202,11 +237,11 @@ function ProfilesContent({
             </button>
           ))}
           <div style={{ marginLeft: "auto", fontSize: 11, color: "var(--mute)" }} className="mono">
-            {filtered.length} shown
+            {isLoading ? "Loading…" : `${filtered.length} shown`}
           </div>
         </div>
 
-        {data.isLoading ? (
+        {isLoading ? (
           <div className="coming-soon" style={{ padding: "60px 20px" }}>
             <p>Loading…</p>
           </div>
@@ -224,13 +259,14 @@ function ProfilesContent({
                 <th>Age</th>
                 <th scope="col">Ethnicity</th>
                 <th>Background</th>
-                <th>Status</th>
+                <th>Profile status</th>
+                {eventId !== "all" && <th>Event registration</th>}
                 <th>Payment</th>
                 <th>Joined</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {rows.map((r) => (
                 <tr key={r._id} className="row-click" onClick={() => setOpenProfileId(r._id)}>
                   <td className="mono" style={{ color: "var(--mute)" }}>
                     {data.registrationNumbers.get(r._id)}
@@ -257,6 +293,7 @@ function ProfilesContent({
                       <StatusPill status={r.status} />
                     </div>
                   </td>
+                  {eventId !== "all" && <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{membership.get(r._id)?.map(status => <StatusPill key={status} status={status} />)}</div></td>}
                   <td>
                     {r.paymentStatus ? (
                       <StatusPill status={r.paymentStatus} />
@@ -272,6 +309,7 @@ function ProfilesContent({
             </tbody>
           </table>
         )}
+        {!isLoading && filtered.length > 0 && <nav className="filters" aria-label="Profiles pagination"><button className="btn" disabled={page === 1} onClick={() => setPagination({ key: filterKey, page: page - 1 })}>Previous</button><span aria-live="polite">Page {page} of {pages}</span><button className="btn" disabled={page === pages} onClick={() => setPagination({ key: filterKey, page: page + 1 })}>Next</button></nav>}
       </div>
 
       <DetailPane
