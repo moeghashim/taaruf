@@ -1173,7 +1173,7 @@ export default function ApplicantDashboardPage() {
                   <h3>Submit Interest</h3>
                   <p aria-live="polite">{data.canSubmitInterest
                     ? "Enter the applicant's number and first name. Maximum 3 interests per event."
-                    : "Interest submissions are closed. Your event must have submissions turned ON, and you must be approved, confirmed, and checked in."}</p>
+                    : "Interest submissions will open after being approved and checked in for the next event"}</p>
                 </div>
               </div>
               {eligibilityError && <p role="status" className="notice error">{eligibilityError}</p>}
