@@ -31,24 +31,24 @@ test("private -> authenticated read only review -> explicit accept -> one pendin
   expect(await t.query(api.femaleInterestWorkflow.getDashboard, { sessionHash: "brother" })).toHaveLength(1);
   const read = await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId, reviewTokenHash: hash });
   expect(read.profile.email).toBeNull(); expect(read.profile.imageUrls).toEqual([]);
-  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toEqual([]);
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toMatchObject([{ kind: "brother_review", status: "pending" }]);
   expect((await t.run(ctx => ctx.db.get(interestId)))?.femaleWorkflow?.state).toBe("awaiting_brother_review");
   await expect(t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true })).rejects.toThrow("Brother acceptance");
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
-  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(1);
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(2);
   const first = await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
   const second = await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
   expect(first.matchId).toBe(second.matchId);
   expect(await t.run(ctx => ctx.db.query("matches").take(100))).toHaveLength(1);
   expect(await t.run(ctx => ctx.db.get(first.matchId!))).toMatchObject({ interestType: "mutual_interest", status: "reviewing" });
-  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(3);
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(4);
   await expect(t.mutation(api.matches.updateStatus, { adminSecret: "wrong", id: first.matchId!, status: "contact_shared" })).rejects.toThrow("Unauthorized");
   await expect(t.mutation(api.femaleInterestWorkflow.releaseContacts, { interestId })).rejects.toThrow("Unauthorized");
   expect((await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "sister", interestId })).profile.email).toBeNull();
   await t.mutation(api.femaleInterestWorkflow.releaseContacts, { adminSecret, interestId });
   await t.mutation(api.femaleInterestWorkflow.releaseContacts, { adminSecret, interestId });
-  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(5);
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(6);
   expect((await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "sister", interestId })).profile.email).toBe("brother@example.com");
 });
 test("recipient, hash, rotation, expired, revoked, reset and closed are enforced", async () => {
@@ -93,18 +93,18 @@ test("disabled email fails closed; per-recipient retry and provider idempotency"
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "disabled");
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   expect(fetchMock).not.toHaveBeenCalled();
-  let rows = await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId });
+  let rows = (await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId })).filter(row => row.kind !== "brother_review");
   expect(rows[0].status).toBe("failed");
   await t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: rows[0]._id });
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com"); vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "test@example.com"); vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "synthetic-only");
   fetchMock.mockResolvedValueOnce(new Response("", { status: 500 })).mockResolvedValue(new Response("{}", { status: 200 }));
   await t.action(internal.femaleWorkflowDelivery.drain, {});
-  rows = await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId }); expect(rows[0].status).toBe("pending");
+  rows = (await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId })).filter(row => row.kind !== "brother_review"); expect(rows[0].status).toBe("pending");
   await t.run(ctx => ctx.db.patch(rows[0]._id, { nextAttemptAt: Date.now() - 1 }));
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   expect(fetchMock.mock.calls[0][1].headers["Idempotency-Key"]).toBe(fetchMock.mock.calls[1][1].headers["Idempotency-Key"]);
   expect(fetchMock.mock.calls[1][1].body).not.toContain("5550100");
-  expect((await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId }))[0].status).toBe("sent");
+  expect((await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId })).find(row => row.kind === "sister_confirmation")!.status).toBe("sent");
   await t.action(internal.femaleWorkflowDelivery.drain, {}); expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
@@ -114,7 +114,7 @@ test("one recipient failure never resends successful sibling; abandoned lease re
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com"); vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "test@example.com"); vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "synthetic-only");
   const fetchMock = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 200 })).mockResolvedValueOnce(new Response("", { status: 500 })).mockResolvedValue(new Response("{}", { status: 200 })); vi.stubGlobal("fetch", fetchMock);
   await t.action(internal.femaleWorkflowDelivery.drain, {});
-  let rows = await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId });
+  let rows = (await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId })).filter(row => row.kind !== "brother_review");
   expect(rows.filter(r => r.status === "sent")).toHaveLength(1);
   const retry = rows.find(r => r.status === "pending")!;
   await t.run(ctx => ctx.db.patch(retry._id, { nextAttemptAt: Date.now() - 1 }));
@@ -123,7 +123,7 @@ test("one recipient failure never resends successful sibling; abandoned lease re
   expect(await t.mutation(internal.femaleWorkflowDelivery.claim, {})).toHaveLength(0);
   await t.run(ctx => ctx.db.patch(retry._id, { nextAttemptAt: Date.now() - 1 }));
   await t.action(internal.femaleWorkflowDelivery.drain, {});
-  rows = await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId });
+  rows = (await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId })).filter(row => row.kind !== "brother_review");
   expect(rows.filter(r => r.status === "sent")).toHaveLength(2);
   expect(fetchMock).toHaveBeenCalledTimes(3);
   expect(fetchMock.mock.calls[1][1].headers["Idempotency-Key"]).toBe(fetchMock.mock.calls[2][1].headers["Idempotency-Key"]);
