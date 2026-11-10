@@ -31,7 +31,7 @@ test("private -> authenticated read only review -> explicit accept -> one pendin
   expect(await t.query(api.femaleInterestWorkflow.getDashboard, { sessionHash: "brother" })).toHaveLength(1);
   const read = await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId, reviewTokenHash: hash });
   expect(read.profile.email).toBeNull(); expect(read.profile.imageUrls).toEqual([]);
-  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toMatchObject([{ kind: "brother_review", status: "pending" }]);
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toMatchObject([{ kind: "brother_review", status: "failed" }]);
   expect((await t.run(ctx => ctx.db.get(interestId)))?.femaleWorkflow?.state).toBe("awaiting_brother_review");
   await expect(t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true })).rejects.toThrow("Brother acceptance");
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
@@ -81,7 +81,7 @@ test("declines never create matches; reset cancels outbox", async () => {
   await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: false });
   expect(await t.run(ctx => ctx.db.query("matches").take(100))).toEqual([]);
   expect(await t.mutation(internal.femaleWorkflowDelivery.claim, {})).toEqual([]);
-  expect((await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").first()))?.status).toBe("cancelled");
+  expect((await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").withIndex("by_kind_and_status_and_nextAttemptAt", q => q.eq("kind", "sister_confirmation")).first()))?.status).toBe("cancelled");
   const f = await accepted();
   await f.t.run(ctx => ctx.db.patch(f.interestId, { testReset: { at: Date.now(), reason: "synthetic", actor: "admin" } }));
   await expect(f.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId: f.interestId, confirmed: true })).rejects.toThrow("unavailable");

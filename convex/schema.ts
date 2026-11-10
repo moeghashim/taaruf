@@ -235,10 +235,11 @@ export default defineSchema({
     kind: v.union(v.literal("brother_review"), v.literal("sister_confirmation"), v.literal("pending_review"), v.literal("contacts_ready")),
     key: v.string(), status: v.union(v.literal("pending"), v.literal("sending"), v.literal("sent"), v.literal("failed"), v.literal("cancelled")),
     attempts: v.number(), nextAttemptAt: v.number(), leaseUntil: v.optional(v.number()),
+    reviewActivationAt: v.optional(v.number()),
     providerCooldownUntil: v.optional(v.number()),
     providerPayload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string() })),
     firstAttemptAt: v.optional(v.number()), sentAt: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(),
-  }).index("by_key", ["key"]).index("by_interestId", ["interestId"]).index("by_interestId_and_status", ["interestId", "status"]).index("by_status_and_nextAttemptAt", ["status", "nextAttemptAt"]).index("by_providerCooldownUntil", ["providerCooldownUntil"]),
+  }).index("by_kind_and_status_and_nextAttemptAt", ["kind", "status", "nextAttemptAt"]).index("by_key", ["key"]).index("by_interestId", ["interestId"]).index("by_interestId_and_status", ["interestId", "status"]).index("by_status_and_nextAttemptAt", ["status", "nextAttemptAt"]).index("by_providerCooldownUntil", ["providerCooldownUntil"]),
   interests: defineTable({
     femaleWorkflow: v.optional(v.object({
       state: v.union(v.literal("private_documented"), v.literal("awaiting_brother_review"), v.literal("awaiting_sister_confirmation"), v.literal("pending_admin_approval"), v.literal("contacts_released"), v.literal("declined"), v.literal("revoked")),

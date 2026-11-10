@@ -98,3 +98,85 @@ for (const invalid of ["revoked", "closed"]) test("failed invitation cannot retr
   await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: row._id })).rejects.toThrow("unavailable");
   await t.action(internal.femaleWorkflowDelivery.drain, {}); expect(provider).toHaveBeenCalledTimes(1);
 });
+
+function production() {
+  isolated();
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "brother-review-production");
+  vi.stubEnv("FEMALE_WORKFLOW_PRODUCTION_APPROVED", "true");
+  vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://www.1plus1match.com");
+}
+async function activate(t: Awaited<ReturnType<typeof fixture>>["t"]) {
+  production();
+  const at = Number(await t.mutation(internal.femaleWorkflowDelivery.activateBrotherReview, {}));
+  vi.spyOn(Date, "now").mockReturnValue(at + 1);
+  return at;
+}
+for (const status of ["pending", "failed", "sending"] as const) test("production excludes historical " + status + " including config failures and retries", async () => {
+  const { t, interestId } = await shared();
+  const old = (await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").first()))!;
+  await t.run(ctx => ctx.db.patch(old._id, { status, nextAttemptAt: 0, leaseUntil: 0, error: "configuration missing" }));
+  await activate(t);
+  const provider = vi.fn(); vi.stubGlobal("fetch", provider);
+  await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: old._id })).rejects.toThrow("activation");
+  expect(provider).not.toHaveBeenCalled();
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(10))).toHaveLength(1);
+});
+test("production fails closed before activation/configuration; cannot backfill a failed share", async () => {
+  const { t, interestId } = await fixture(); production();
+  await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
+  const old = (await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").first()))!;
+  expect(old).toMatchObject({ status: "failed", attempts: 0 });
+  vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "");
+  await expect(t.mutation(internal.femaleWorkflowDelivery.activateBrotherReview, {})).rejects.toThrow("configuration");
+  await activate(t);
+  await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: old._id })).rejects.toThrow("activation");
+});
+test("future invitation once only; immutable boundary survives repeated activation and mode toggles", async () => {
+  const { t, interestId } = await fixture(); const at = await activate(t);
+  await expect(t.mutation(api.settings.set, { adminSecret, key: "brotherReviewEmailActivatedAt", value: String(at - 1) })).rejects.toThrow("immutable");
+  expect(await t.mutation(internal.femaleWorkflowDelivery.activateBrotherReview, {})).toBe(String(at));
+  const provider = vi.fn().mockResolvedValue(new Response("{}", { status: 200 })); vi.stubGlobal("fetch", provider);
+  for (let n = 0; n < 2; n++) {
+    await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
+    await t.action(internal.femaleWorkflowDelivery.drain, {});
+  }
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "disabled"); production();
+  expect(await t.mutation(internal.femaleWorkflowDelivery.activateBrotherReview, {})).toBe(String(at));
+  expect(provider).toHaveBeenCalledTimes(1);
+});
+for (const invalid of ["revoked", "expired", "config"] as const) test("future production rechecks " + invalid + " before attempt", async () => {
+  const { t, interestId } = await fixture(); await activate(t);
+  await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
+  const [row] = await t.mutation(internal.femaleWorkflowDelivery.claim, {});
+  if (invalid === "revoked") await t.mutation(api.femaleInterestWorkflow.revokeReview, { adminSecret, interestId });
+  if (invalid === "expired") await t.run(async ctx => { const i = (await ctx.db.get(interestId))!; await ctx.db.patch(interestId, { femaleWorkflow: { ...i.femaleWorkflow!, reviewExpiresAt: Date.now() - 1 } }); });
+  if (invalid === "config") vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "");
+  expect(await t.mutation(internal.femaleWorkflowDelivery.markAttempt, { id: row._id, attempt: row.attempts })).toBe(false);
+});
+test("dedicated activation leaves all other kinds untouched even beyond batch size; rejects their manual retry", async () => {
+  const { t, interestId, sister } = await fixture(); await activate(t);
+  const ids = await t.run(async ctx => {
+    const ids = [];
+    for (let n = 0; n < 30; n++) for (const kind of ["sister_confirmation", "pending_review", "contacts_ready"] as const) ids.push(await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId: sister, kind, key: kind + n, status: n === 0 ? "failed" : "pending", attempts: 0, nextAttemptAt: 0, createdAt: 1 }));
+    return ids;
+  });
+  const before = await t.run(ctx => Promise.all(ids.map(id => ctx.db.get(id))));
+  const provider = vi.fn().mockResolvedValue(new Response("{}", { status: 200 })); vi.stubGlobal("fetch", provider);
+  await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  expect(provider).toHaveBeenCalledTimes(1);
+  for (const id of ids.slice(0, 3)) await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: id })).rejects.toThrow("kind");
+  expect(await t.run(ctx => Promise.all(ids.map(id => ctx.db.get(id))))).toEqual(before);
+});
+
+test("future failed production invitation cannot manually retry after expiry", async () => {
+  const { t, interestId } = await fixture(); await activate(t);
+  await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 400 })));
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  const row = (await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").first()))!;
+  await t.run(async ctx => { const i = (await ctx.db.get(interestId))!; await ctx.db.patch(interestId, { femaleWorkflow: { ...i.femaleWorkflow!, reviewExpiresAt: Date.now() - 1 } }); });
+  await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: row._id })).rejects.toThrow("unavailable");
+});
