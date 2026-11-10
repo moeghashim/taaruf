@@ -148,7 +148,7 @@ export function ContactRelease({ match, femaleInterestId, onMessage }: { match: 
     catch (error) { onMessage(error instanceof Error ? error.message : "Contact release failed. Refresh and try again."); }
     finally { setBusy(false); }
   }
-  return <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void release()}>{busy ? "Sharing…" : "Final admin approval"}</button>;
+  return <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void release()}>{busy ? "Sharing…" : "Share contacts"}</button>;
 }
 
 type MatchingData = ReturnType<typeof useMatchingData>;
@@ -636,9 +636,7 @@ function InterestRow({
       </td>
       <td>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-          <Pill tone="plain">{titleize(interest.status)}</Pill>
-          <Pill tone="plain">Historical tracker: {titleize(interest.adminStatus ?? "pending")}</Pill>
-          <span>Match creation is automatic after both applicant approvals; administrative priority does not grant consent.</span>
+          <Pill tone="plain">{interestLifecycle(interest)}</Pill>
           <Pill tone={interest.visibility === "internal_only" ? "blue" : "plain"}>
             {titleize(interest.visibility)}
           </Pill>

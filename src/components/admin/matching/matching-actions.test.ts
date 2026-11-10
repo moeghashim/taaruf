@@ -18,15 +18,15 @@ function buttons(node: unknown): ReactElement<{ children?: unknown; onClick?: ()
 }
 test("female requester action uses authenticated review creation, never prioritization", async () => {
   const tree = FemaleWorkflowActions({ interestId: "interest", state: "private_documented" });
-  const button = buttons(tree).find(b => b.props.children === "Create review link")!;
+  const button = buttons(tree).find(b => b.props.children === "Share requester profile")!;
   expect(button).toBeDefined(); await button.props.onClick!();
   expect(fetchMock).toHaveBeenCalledWith("/api/admin/female-review", expect.objectContaining({ body: JSON.stringify({ action: "create", interestId: "interest" }) }));
 });
 test("contact release renders only for an approved official match", () => {
   for (const invalid of [null, { ...match, interestId: undefined }, { ...match, contactGate: undefined }, { ...match, status: "closed" }, { ...match, status: "contact_shared" }, { ...match, testResetAt: 1 }]) {
-    expect(renderToStaticMarkup(createElement(ContactRelease, { match: invalid as Doc<"matches"> | null, onMessage: vi.fn() }))).not.toContain("Final admin approval");
+    expect(renderToStaticMarkup(createElement(ContactRelease, { match: invalid as Doc<"matches"> | null, onMessage: vi.fn() }))).not.toContain("Share contacts");
   }
-  expect(renderToStaticMarkup(createElement(ContactRelease, { match, onMessage: vi.fn() }))).toContain("Final admin approval");
+  expect(renderToStaticMarkup(createElement(ContactRelease, { match, onMessage: vi.fn() }))).toContain("Share contacts");
 });
 for (const femaleInterestId of [undefined, "interest"]) test("release confirms and calls correct audited route: " + femaleInterestId, async () => {
   const button = ContactRelease({ match, femaleInterestId, onMessage: vi.fn() })!;
