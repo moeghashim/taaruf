@@ -781,3 +781,11 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-11
 - Added shared inline workflow reviews under Inbound Interests for both roles, exact-ID history navigation and delayed focus, preserving authorized detail/actions. 1308 unit tests and 20 synthetic browser regressions passed; no backend/deployment changes.
 - Omar3689: changed only generic outbound notice heading to exact "You Have Sent an Interest" in the shared portal projection; retained lifecycle/workflow precedence, received wording, body and CTAs. Added 18-unit suite and four read-only desktop/mobile male/female production-browser scenarios; types, scoped lint and build passed. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Requirements correction 3703: shared CSS/component now match incumbent Profile details heading and fact values; preserved full multiline answers, aligned row spacing/dividers. Added 18 read-only browser checks across both portals, private documented view, selected reviews, shared profiles and matchmaker at mobile/desktop sizes. Types, scoped lint and independent review passed. No backend or deployment changes.
+- Partial correction for Omar3710: generic outbound heading returns to exact Interest Update after own final approval; added unit/browser regression. Literal any-admin/user approval condition remains blocked by private public projections; no backend/data/deploy/certification.
+
+- Superseding Omar3715: exact You Have Sent An Interest until recipient acceptance unlocks the sender review; real female workflow waiting and post-review headings corrected using existing ownAction/ownDecision fields, no new backend disclosure. Added real Convex API lifecycle tests for both directions and real female projection browser coverage.
+
+- Integrated remaining typography/status bundle on certified live PR143, preserving inline /me review navigation and both source ancestries; preview-only verification. <!-- project: github.com/moeghashim/clawscrewskill -->

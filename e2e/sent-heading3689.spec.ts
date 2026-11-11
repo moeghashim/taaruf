@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Production Next renderer; synthetic authorized GETs only.
 // Run with playwright.sent3689.config.ts; no auth/Convex or real writes.
-const origin = "http://127.0.0.1:3689";
+const origin = process.env.HEADING_TEST_ORIGIN || "http://127.0.0.1:3689";
 test.use({ baseURL: origin, serviceWorkers: "block" });
 type Role = "brother" | "sister";
 const interest = (id: string, direction = "inbound", final = false) => ({
@@ -18,7 +18,7 @@ function fixture(role: Role) {
     me: { applicant: { name: "Synthetic Applicant", gender, status: "approved", applicantNumber: 999, profileCompletionStatus: "completed" },
       inbound: [] as ReturnType<typeof interest>[], outbound: [] as ReturnType<typeof interest>[], privateDocumented: [] as ReturnType<typeof interest>[],
       canSubmitInterest: false, interestSubmissionLimit: 3, interestSubmissions: [], eventLogisticsRestricted: false },
-    reviews: [] as { interestId: string }[],
+    reviews: [] as { interestId: string; role?: string; state?: string; ownDecision?: string; ownAction?: string | null; canView?: boolean }[],
     reviewContacts: {} as Record<string, string | null>,
     matches: [],
     events: [],
@@ -64,7 +64,8 @@ async function fits(page: Page) {
 }
 
 
-for (const role of ["brother", "sister"] as const) for (const width of [390, 1280]) {
+// Generic outbound is the real brother projection; sisters use workflow reviews below.
+for (const role of ["brother"] as const) for (const width of [390, 1280]) {
   test("sent heading and lifecycle " + role + " " + width, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     const state = fixture(role);
@@ -72,7 +73,7 @@ for (const role of ["brother", "sister"] as const) for (const width of [390, 128
     await mock(page, state); await page.goto("/me#applicant-interests");
     const ribbon = page.getByRole("region", { name: "Received interest updates", exact: true });
     const sent = ribbon.locator('[data-connection-notice="sent"]');
-    await expect(sent.getByRole("heading")).toHaveText("You Have Sent an Interest");
+    await expect(sent.getByRole("heading")).toHaveText("You Have Sent An Interest");
     await expect(sent).toContainText("No response is currently needed from you. You can review your connection.");
     await expect(sent.getByRole("link")).toHaveText("View interest");
     await expect(sent.getByRole("link")).toHaveAttribute("href", "/me?connection=sent#outbound-interests");
@@ -81,12 +82,18 @@ for (const role of ["brother", "sister"] as const) for (const width of [390, 128
     state.me.outbound.push({ ...interest("sent2", "outbound"), canRespond: false });
     await refresh(page, state, "/api/applicant/me");
     await expect(ribbon.locator('[data-connection-notice]')).toHaveCount(3);
-    await expect(ribbon.getByRole("heading", { name: "You Have Sent an Interest", exact: true })).toHaveCount(2);
+    await expect(ribbon.getByRole("heading", { name: "You Have Sent An Interest", exact: true })).toHaveCount(2);
     await expect(ribbon.getByRole("heading", { name: "You Have Received An Interest", exact: true })).toHaveCount(1);
     await fits(page);
     state.me.outbound[0].canFinalApprove = true;
     await refresh(page, state, "/api/applicant/me"); await expect(sent.getByRole("heading")).toHaveText("Your review is needed");
+    await sent.getByRole("link").click();
+    await expect(page).toHaveURL(/connection=sent#outbound-interests$/);
+    await expect(page.locator(".interest-detail-panel").filter({hasText:"Applicant sent"})).toBeVisible();
     state.me.outbound[0].canFinalApprove = false;
+    state.me.outbound[0].ownFinalApproval = "approved";
+    state.me.outbound[0].status = "in_progress"; state.me.outbound[0].flowStatus = "in_progress";
+    await refresh(page, state, "/api/applicant/me"); await expect(sent.getByRole("heading")).toHaveText("Interest Update");
     state.me.outbound[0].contactSharedAt = Date.now(); state.me.outbound[0].counterparty.email = "synthetic@example.test";
     await refresh(page, state, "/api/applicant/me"); await expect(sent.getByRole("heading")).toHaveText("Contacts are ready");
     state.me.outbound[0].paused = true;
@@ -96,3 +103,36 @@ for (const role of ["brother", "sister"] as const) for (const width of [390, 128
     expect(state.writes).toEqual([]); expect(state.unexpected).toEqual([]);
   });
 }
+
+for (const width of [390,1280]) test("sister actual workflow projection lifecycle " + width, async ({page}) => {
+ await page.setViewportSize({width,height:1000});
+ const state=fixture("sister");
+ state.me.privateDocumented=[{...interest("female-sent","private"),femaleWorkflow:true,canRespond:false,status:"in_progress",flowStatus:"in_progress"}];
+ state.reviews=[{interestId:"female-sent",role:"sister",state:"in_review",ownDecision:"pending",ownAction:null,canView:false}];
+ await mock(page,state); await page.goto("/me#applicant-interests");
+ const notice=page.locator('[data-connection-notice="female-sent"]');
+ await expect(notice.getByRole("heading")).toHaveText("You Have Sent An Interest");
+ state.reviews[0].canView=true;
+ await refresh(page,state,"/api/applicant/female-review");
+ await expect(notice.getByRole("heading")).toHaveText("You Have Sent An Interest");
+ state.reviews[0].ownAction="review";
+ await refresh(page,state,"/api/applicant/female-review");
+ await expect(notice.getByRole("heading")).toHaveText("Your review is needed");
+ await expect(notice.getByRole("link")).toHaveText("Review profile and respond");
+ await expect(notice.getByRole("link")).toHaveAttribute("href","/me?femaleReview=female-sent#inbound-interests");
+ await page.evaluate(() => (window as Window & { bundleDocument?: string }).bundleDocument="retained");
+ await notice.getByRole("link").click();
+ await expect(page).toHaveURL(/femaleReview=female-sent#inbound-interests$/);
+ await expect(page.locator(".selected-profile-review")).toContainText("Authorized review bio female-sent");
+ expect(await page.evaluate(() => (window as Window & { bundleDocument?: string }).bundleDocument)).toBe("retained");
+ state.reviews[0].ownAction=null;state.reviews[0].ownDecision="approved";
+ await refresh(page,state,"/api/applicant/female-review");
+ await expect(notice.getByRole("heading")).toHaveText("Interest Update");
+ state.reviews[0].state="contacts_released";state.reviewContacts["female-sent"]="synthetic@example.test";
+ await refresh(page,state,"/api/applicant/female-review");
+ await expect(notice.getByRole("heading")).toHaveText("Contacts are ready");
+ state.reviews[0].state="closed";
+ await refresh(page,state,"/api/applicant/female-review");
+ await expect(notice.getByRole("heading")).toHaveText("Connection closed");
+ await fits(page);expect(state.writes).toEqual([]);expect(state.unexpected).toEqual([]);
+});
