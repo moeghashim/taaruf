@@ -408,7 +408,9 @@ describe("Real Talk Oct 20 2026 event-only queues", () => {
     expect(await t.run(ctx => ctx.db.get(second.eventRegistrationId))).toMatchObject({registrationStatus:"pending"});
     await t.mutation(api.events.update,{adminSecret:"test-admin",eventId,maleCapacity:2});
     expect(await t.run(ctx => ctx.db.get(third.eventRegistrationId))).toMatchObject({registrationStatus:"pending"});
-    await expect(t.mutation(api.events.update,{adminSecret:"test-admin",eventId,maleCapacity:1})).rejects.toThrow("reserved");
+    await t.mutation(api.events.update,{adminSecret:"test-admin",eventId,maleCapacity:1});
+    expect(await t.run(ctx => ctx.db.get(second.eventRegistrationId))).toMatchObject({registrationStatus:"pending"});
+    expect(await t.run(ctx => ctx.db.get(third.eventRegistrationId))).toMatchObject({registrationStatus:"pending"});
     expect(await t.run(ctx => ctx.db.get(ids[0]))).toMatchObject({status:"approved"});
     await expect(t.mutation(api.registrations.updateStatus,{ adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, id:ids[0],status:"waitlisted"})).rejects.toThrow("retired");
   });
@@ -479,4 +481,75 @@ test("public capacity counts reservations beyond 500 historical rows", async () 
   expect(event?.maleAvailable).toBe(0);
   expect(event?.maleWaitlisted).toBe(true);
   expect(event?.femaleAvailable).toBe(1);
+});
+
+describe("explicit capacity controls", () => {
+  beforeEach(() => vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "test-admin"));
+  async function capacityFixture() {
+    const t = convexTest(schema, modules);
+    const data = await t.run(async ctx => {
+      const eventId = await insertEvent(ctx, "Capacity preview", "capacity-preview", Date.now() + 86400000, 62);
+      const rows: Id<"eventRegistrations">[] = [];
+      for (let i = 0; i < 62; i++) {
+        const id = await insertRegistration(ctx, "Reserved " + i, "female");
+        rows.push(await insertEventRegistration(ctx, eventId, id, "female", i % 2 ? "approved" : "pending", "confirmed"));
+      }
+      const queued = await insertRegistration(ctx, "Queued", "female");
+      const waitlisted = await insertEventRegistration(ctx, eventId, queued, "female", "waitlisted", "confirmed");
+      const newcomer = await insertRegistration(ctx, "Newcomer", "female");
+      return { eventId, rows, waitlisted, newcomer, queued };
+    });
+    return { t, ...data };
+  }
+  test("62 to 60 preserves every row; ordinary registration and promotion wait until below cap", async () => {
+    const { t, eventId, rows, waitlisted, newcomer } = await capacityFixture();
+    const before = await t.run(ctx => ctx.db.query("eventRegistrations").collect());
+    await t.mutation(api.events.update, { adminSecret: "test-admin", eventId, femaleCapacity: 60 });
+    expect(await t.run(ctx => ctx.db.query("eventRegistrations").collect())).toEqual(before);
+    const sessionHash = await createSession(t, newcomer);
+    const added = await t.mutation(api.events.registerForEvent, { eventId, sessionHash });
+    expect(added.registrationStatus).toBe("waitlisted");
+    expect((await t.mutation(api.events.addRegistration, { adminSecret: "test-admin", eventId, registrationId: newcomer })).eventRegistrationId).toBe(added.eventRegistrationId);
+    await t.mutation(api.events.updateRegistrationStatus, { adminSecret: "test-admin", eventRegistrationId: waitlisted, registrationStatus: "pending" });
+    for (let i = 0; i < 3; i++) {
+      await t.mutation(api.events.updateRegistrationConfirmation, { adminSecret: "test-admin", eventRegistrationId: rows[i], confirmationStatus: "cancelled" });
+      expect(await t.run(ctx => ctx.db.get(waitlisted))).toMatchObject({ registrationStatus: i < 2 ? "waitlisted" : "pending" });
+    }
+    expect(await t.run(ctx => ctx.db.get(added.eventRegistrationId))).toMatchObject({ registrationStatus: "waitlisted" });
+  });
+  test("only an explicitly authenticated confirmed force action moves one existing row to Pending", async () => {
+    const { t, eventId, waitlisted, queued, newcomer } = await capacityFixture();
+    await t.mutation(api.events.update, { adminSecret: "test-admin", eventId, femaleCapacity: 60 });
+    const args = { adminSecret: "test-admin", eventRegistrationId: waitlisted, confirmCapacityOverride: true as const };
+    const before = await t.run(ctx => ctx.db.query("eventRegistrations").collect());
+    await expect(t.mutation(api.events.forceRegisterWaitlisted, { ...args, adminSecret: "forged" })).rejects.toThrow("Unauthorized");
+    await expect(t.mutation(api.events.forceRegisterWaitlisted, { ...args, adminSecret: "" })).rejects.toThrow("Unauthorized");
+    // @ts-expect-error intentionally omitted confirmation
+    await expect(t.mutation(api.events.forceRegisterWaitlisted, { adminSecret: "test-admin", eventRegistrationId: waitlisted })).rejects.toThrow();
+    await t.mutation(api.events.forceRegisterWaitlisted, args);
+    const after = await t.run(ctx => ctx.db.query("eventRegistrations").collect());
+    expect(after).toHaveLength(before.length);
+    expect(after.filter(r => r._id !== waitlisted)).toEqual(before.filter(r => r._id !== waitlisted));
+    const original = before.find(r => r._id === waitlisted)!;
+    const changed = after.find(r => r._id === waitlisted)!;
+    expect(changed).toEqual({ ...original, registrationStatus: "pending", updatedAt: changed.updatedAt });
+    expect(await t.run(ctx => ctx.db.get(queued))).toMatchObject({ status: "approved" });
+    await expect(t.mutation(api.events.forceRegisterWaitlisted, args)).rejects.toThrow("Only an existing waitlisted");
+    const next = await t.mutation(api.events.addRegistration, { adminSecret: "test-admin", eventId, registrationId: newcomer });
+    expect(next.registrationStatus).toBe("waitlisted");
+    await t.mutation(api.events.updateRegistrationConfirmation, { adminSecret: "test-admin", eventRegistrationId: waitlisted, confirmationStatus: "cancelled" });
+    expect(await t.run(ctx => ctx.db.get(next.eventRegistrationId))).toMatchObject({ registrationStatus: "waitlisted" });
+  });
+  test.each(["completed", "cancelled", "not_open", "closed", "expired", "confirmation_cancelled"])("force does not bypass %s", async condition => {
+    const { t, eventId, waitlisted } = await capacityFixture();
+    await t.run(async ctx => {
+      if (condition === "completed" || condition === "cancelled") await ctx.db.patch(eventId, { status: condition });
+      if (condition === "not_open") await ctx.db.patch(eventId, { registrationOpensAt: Date.now() + 86400000 });
+      if (condition === "closed") await ctx.db.patch(eventId, { registrationClosesAt: Date.now() - 1000 });
+      if (condition === "expired") await ctx.db.patch(waitlisted, { confirmationStatus: "not_confirmed", confirmedAt: undefined, confirmationExpiresAt: Date.now() - 1000 });
+      if (condition === "confirmation_cancelled") await ctx.db.patch(waitlisted, { confirmationStatus: "cancelled" });
+    });
+    await expect(t.mutation(api.events.forceRegisterWaitlisted, { adminSecret: "test-admin", eventRegistrationId: waitlisted, confirmCapacityOverride: true })).rejects.toThrow();
+    expect(await t.run(ctx => ctx.db.get(waitlisted))).toMatchObject({ registrationStatus: "waitlisted" });
+  });
 });

@@ -81,6 +81,37 @@ async function eventAdmin(action: string, args: Record<string, unknown>) {
   if (!response.ok) throw new Error(result.error || "Unable to update event");
   return result.result;
 }
+function EventCapacityEditor({ event, onSave }: {
+  event: { _id: Id<"events">; maleCapacity: number; femaleCapacity: number };
+  onSave: (args: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const [male, setMale] = useState(String(event.maleCapacity));
+  const [female, setFemale] = useState(String(event.femaleCapacity));
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  return (
+    <form className="admin-form" style={{ marginBottom: 16 }} onSubmit={async (e) => {
+      e.preventDefault();
+      if (saving) return;
+      setSaving(true); setFeedback("");
+      try {
+        await onSave({ eventId: event._id, maleCapacity: Number(male), femaleCapacity: Number(female) });
+        setFeedback("Capacity saved. Existing registrations are preserved.");
+      } catch (error) { setFeedback(error instanceof Error ? error.message : "Unable to save capacity"); }
+      finally { setSaving(false); }
+    }}>
+      <h4>Event capacity</h4>
+      <p>Lowering capacity keeps everyone already registered. New applicants stay waitlisted and automatic promotion pauses while reserved places meet or exceed the limit. Increasing capacity can promote the waitlist.</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "end" }}>
+        <label>Male capacity<input type="number" min="1" step="1" required value={male} disabled={saving} onChange={e => setMale(e.target.value)} /></label>
+        <label>Female capacity<input type="number" min="1" step="1" required value={female} disabled={saving} onChange={e => setFemale(e.target.value)} /></label>
+        <button type="submit" className="btn" disabled={saving || (Number(male) === event.maleCapacity && Number(female) === event.femaleCapacity)}>{saving ? "Saving…" : "Save capacity"}</button>
+      </div>
+      <p role="status">{feedback}</p>
+    </form>
+  );
+}
+
 export function EventsPageClient() {
   const [profileId, setProfileId] = useState<string | null>(null);
   const events = useQuery("events.getAll");
@@ -110,6 +141,7 @@ export function EventsPageClient() {
     selectedEventId ? { eventId: selectedEventId as Id<"events"> } : "skip"
   );
   const [message, setMessage] = useState<string | null>(null);
+  const [forcingId, setForcingId] = useState<string | null>(null);
   const [emailKindByRegistration, setEmailKindByRegistration] = useState<Record<string, (typeof emailKinds)[number]>>({});
   const [broadcastEmailKind, setBroadcastEmailKind] = useState<(typeof emailKinds)[number]>("reminder");
   const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -273,6 +305,21 @@ export function EventsPageClient() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  async function handleForceRegister(row: NonNullable<typeof detail>["registrations"][number]) {
+    if (forcingId || !detail) return;
+    const cap = row.gender === "female" ? detail.femaleCapacity : detail.maleCapacity;
+    if (!window.confirm(
+      `Force-register ${row.registration?.name ?? "this applicant"} for ${detail.title}? This moves only this waitlisted person to Pending, bypassing the queue and the ${row.gender} capacity of ${cap}, even if full or over capacity. Existing registrations stay unchanged. This does not approve or confirm attendance and sends no email.`
+    )) return;
+    setForcingId(row._id);
+    try {
+      await eventAdmin("forceRegisterWaitlisted", { eventRegistrationId: row._id, confirmCapacityOverride: true });
+      setMessage("Moved to Pending with a reserved place. Approval and confirmation are unchanged; no email was sent.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally { setForcingId(null); }
   }
 
   async function handleRegistrationStatusChange(
@@ -531,6 +578,7 @@ export function EventsPageClient() {
               </button>
             </div>
           </div>
+          <EventCapacityEditor key={`${detail._id}-${detail.maleCapacity}-${detail.femaleCapacity}`} event={detail} onSave={updateEvent} />
           {detail.series === "1plus1_match" && detail.eventCode !== "manual-admin" && (
             <InterestSubmissionsToggle key={detail._id} eventId={detail._id} enabled={detail.interestSubmissionsEnabled === true} />
           )}
@@ -921,6 +969,11 @@ export function EventsPageClient() {
                     {row.registrationStatus === "waitlisted" && <option value="waitlisted" disabled>Waitlisted</option>}
                     {registrationDropdownStatuses.map((status) => <option key={status} value={status} disabled={status === "approved" && row.registrationStatus !== "pending" && row.registrationStatus !== "approved"}>{titleize(status)}</option>)}
                   </select>
+                  {row.registrationStatus === "waitlisted" && detail.status !== "completed" && detail.status !== "cancelled" && (
+                    <button type="button" className="btn" disabled={forcingId !== null} onClick={() => handleForceRegister(row)}>
+                      {forcingId === row._id ? "Registering…" : "Force-register…"}
+                    </button>
+                  )}
                   <select
                     aria-label="Confirmation status"
                     title="Confirmation status"
