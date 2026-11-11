@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { assertNotArchived } from "./archiveRules";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
 import { assertParticipantsAvailable, releasePairContacts } from "./contactGate";
@@ -29,7 +30,7 @@ export const emailReadiness = query({args: {adminSecret: v.optional(v.string())}
 function manual(m: Doc<"matches">) { return !m.interestId && (m.interestType === "admin_suggested" || m.initiatedBy === "admin_recommendation"); }
 function released(m: Doc<"matches">) { return m.contactGate === "contacts_released" || m.adminReleasedAt !== undefined || m.status === "contact_shared" || m.contactSharedNotificationSentAt !== undefined; }
 function publicFollowup(f: Doc<"matches">["maleFollowup"]) { return f ? {status: f.status, updatedAt: f.updatedAt} : undefined; }
-function active(m: Doc<"matches">) { return m.matchmakerWithdrawnAt === undefined && !["closed", "declined", "paused"].includes(m.status); }
+function active(m: Doc<"matches">) { return m.closedReason !== "participant_archived" && m.matchmakerWithdrawnAt === undefined && !["closed", "declined", "paused"].includes(m.status); }
 async function person(ctx: ReadCtx, hash: string) {
   const session = await ctx.db.query("applicantSessions").withIndex("by_sessionHash", q => q.eq("sessionHash", hash)).unique();
   if (!session || !await sessionAllowed(ctx, session)) throw new Error("Unauthorized");
@@ -48,6 +49,7 @@ export const setConsent = mutation({
   handler: async (ctx, args) => {
     const owner = await person(ctx, args.sessionHash);
     // Withdrawal of future consideration is always possible, including archived profiles.
+    if (args.optedIn) assertNotArchived(owner);
     await ctx.db.patch(owner._id, {backgroundMatchmakingOptIn: args.optedIn, backgroundMatchmakingConsentUpdatedAt: Date.now()});
     return null;
   },
@@ -58,6 +60,8 @@ export const present = mutation({
     requireAdmin(args.adminSecret);
     const match = await ctx.db.get(args.matchId);
     if (!match || !manual(match) || match.testResetAt !== undefined || !active(match)) throw new Error("Match unavailable");
+    assertNotArchived(await ctx.db.get(match.maleRegistrationId));
+    assertNotArchived(await ctx.db.get(match.femaleRegistrationId));
     if (match.matchmakerPresentedAt !== undefined) return {alreadyPresented: true};
     if (released(match)) throw new Error("Historical contact-shared matches cannot be presented again");
     const {male, female} = await assertParticipantsAvailable(ctx, match.maleRegistrationId, match.femaleRegistrationId, match._id);
@@ -95,13 +99,14 @@ export const getMine = query({
       if (!manual(m) || m.testResetAt !== undefined || (m.matchmakerPresentedAt === undefined && !released(m))) continue;
       const male = m.maleRegistrationId === owner._id;
       const p = await ctx.db.get(male ? m.femaleRegistrationId : m.maleRegistrationId);
+      const accessible = owner.archivedAt === undefined && p?.archivedAt === undefined && m.closedReason !== "participant_archived" &&
+        ![owner, p].some(person => person?.lastRestoredArchivedAt !== undefined && m.createdAt <= person.lastRestoredArchivedAt);
       const contactShared = released(m);
-      const images = (contactShared || active(m)) && p?.photoSharingPermission === "yes" ? (await Promise.all((p.imageStorageIds ?? []).map(async storageId => ({storageId, url: await ctx.storage.getUrl(storageId)})))).filter(image => image.url !== null) : [];
-      matches.push({_id: m._id, status: m.status, presentedAt: m.matchmakerPresentedAt, contactShared, canWithdraw: !contactShared && m.matchmakerWithdrawnAt === undefined, canApprove: !contactShared && active(m) && p !== null && owner.status === "approved", withdrawnAt: m.matchmakerWithdrawnAt,
+      const images = accessible && (contactShared || active(m)) && p?.photoSharingPermission === "yes" ? (await Promise.all((p.imageStorageIds ?? []).map(async storageId => ({storageId, url: await ctx.storage.getUrl(storageId)})))).filter(image => image.url !== null) : [];
+      matches.push({_id: m._id, status: m.status === "declined" ? "closed" : m.status, presentedAt: m.matchmakerPresentedAt, contactShared, canWithdraw: accessible && !contactShared && m.matchmakerWithdrawnAt === undefined, canApprove: accessible && !contactShared && active(m) && p !== null && owner.status === "approved", withdrawnAt: m.matchmakerWithdrawnBy === owner._id ? m.matchmakerWithdrawnAt : undefined,
         myApproval: (male ? m.maleMatchmakerApprovalAt : m.femaleMatchmakerApprovalAt) !== undefined,
-        partnerApproval: (male ? m.femaleMatchmakerApprovalAt : m.maleMatchmakerApprovalAt) !== undefined,
-        myFollowup: publicFollowup(male ? m.maleFollowup : m.femaleFollowup), partnerFollowup: publicFollowup(male ? m.femaleFollowup : m.maleFollowup),
-        partner: p ? {publicApplicantNumber: p.publicApplicantNumber, age: await currentAge(ctx, p), gender: p.gender, maritalStatus: p.maritalStatus, education: p.education, job: p.job, ethnicity: p.ethnicity, prayerCommitment: p.prayerCommitment, hijabResponse: p.hijabResponse, spouseRequirement1: p.spouseRequirement1, spouseRequirement2: p.spouseRequirement2, spouseRequirement3: p.spouseRequirement3, shareableBio: p.shareableBio, images, ...(contactShared ? {name: p.name, email: p.email, phone: p.phone} : {})} : null});
+        myFollowup: publicFollowup(male ? m.maleFollowup : m.femaleFollowup),
+        partner: accessible && p ? {publicApplicantNumber: p.publicApplicantNumber, age: await currentAge(ctx, p), gender: p.gender, maritalStatus: p.maritalStatus, education: p.education, job: p.job, ethnicity: p.ethnicity, prayerCommitment: p.prayerCommitment, hijabResponse: p.hijabResponse, spouseRequirement1: p.spouseRequirement1, spouseRequirement2: p.spouseRequirement2, spouseRequirement3: p.spouseRequirement3, shareableBio: p.shareableBio, images, ...(contactShared ? {name: p.name, email: p.email, phone: p.phone} : {})} : null});
     }
     return {optedIn: owner.backgroundMatchmakingOptIn === true, consentUpdatedAt: owner.backgroundMatchmakingConsentUpdatedAt, matches};
   },
@@ -109,6 +114,8 @@ export const getMine = query({
 const applicantMatchArgs = {sessionHash: v.string(), matchId: v.id("matches")};
 export const approve = mutation({args: applicantMatchArgs, handler: async (ctx, args) => {
   const {owner, match} = await ownMatch(ctx, args.sessionHash, args.matchId);
+  assertNotArchived(owner);
+  assertNotArchived(await ctx.db.get(owner._id === match.maleRegistrationId ? match.femaleRegistrationId : match.maleRegistrationId));
   if (!active(match) || owner.status !== "approved") throw new Error("Match unavailable");
   if (released(match)) return null;
   const field = owner._id === match.maleRegistrationId ? "maleMatchmakerApprovalAt" : "femaleMatchmakerApprovalAt";
@@ -141,6 +148,8 @@ export const claimNotification = mutation({args: {adminSecret: v.optional(v.stri
   if (cooldown && Number(cooldown.value) > Date.now()) return null;
   const m = await ctx.db.get(args.matchId);
   if (!m || !manual(m) || m.matchmakerPresentedAt === undefined || m.testResetAt !== undefined || !active(m) || ![m.maleRegistrationId, m.femaleRegistrationId].includes(args.recipientId)) throw new Error("Match unavailable");
+  assertNotArchived(await ctx.db.get(m.maleRegistrationId));
+  assertNotArchived(await ctx.db.get(m.femaleRegistrationId));
   const key = "matchmaker:" + m._id + ":" + args.recipientId;
   const delivery = await ctx.db.query("matchmakerNotifications").withIndex("by_key", q => q.eq("key", key)).unique();
   if (!delivery || delivery.status !== "pending") return null;

@@ -1,3 +1,4 @@
+import { interestBioVisible } from "./bioVisibility";
 import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { currentAge, withCurrentAge } from "./birthdays";
 import { capabilityAllowed } from "./capabilitySecurity";
@@ -47,6 +48,14 @@ async function resolvedInterest(ctx: QueryCtx, share: ShareScope & { createdAt?:
   return null;
 }
 async function available(ctx: QueryCtx, share: Doc<"profileShares">) {
+  // Historical decisions remain intact, but neither archived participant may
+  // retain a live bearer capability (including context-free declined shares).
+  const [owner, recipient] = await Promise.all([
+    ctx.db.get(share.ownerRegistrationId), ctx.db.get(share.recipientRegistrationId),
+  ]);
+  if (!owner || !recipient || owner.archivedAt !== undefined || recipient.archivedAt !== undefined) return false;
+  // Restoration must not reactivate historical bearer links, even declined ones.
+  if ([owner, recipient].some(person => person.lastRestoredArchivedAt !== undefined && share.createdAt <= person.lastRestoredArchivedAt!)) return false;
   return await capabilityAllowed(ctx, share.createdAt) && share.revokedAt === undefined && share.status !== "closed" && await resolvedInterest(ctx, share) !== false;
 }
 async function imagesAllowed(ctx: QueryCtx, share: ShareScope & { includeImages: boolean }, owner: Doc<"registrations"> | null) {
@@ -59,7 +68,7 @@ async function imagesAllowed(ctx: QueryCtx, share: ShareScope & { includeImages:
   return owner.photoSharingPermission === "yes";
 }
 
-import { assertProfileCompleted, getRegistrationOrThrow } from "./interestRules";
+import { assertProfileCompleted, getRegistrationOrThrow, assertMatchingParticipants } from "./interestRules";
 
 export const getAll = query({
   args: { adminSecret: v.optional(v.string()),},
@@ -96,6 +105,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     if (await resolvedInterest(ctx, args) === false) throw new Error("Share context is unavailable; select the active interest");
+    await assertMatchingParticipants(ctx, args.ownerRegistrationId, args.recipientRegistrationId);
     const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
     assertProfileCompleted(ownerRegistration, "Profile owner");
     if (args.includeImages && !(await imagesAllowed(ctx, args, ownerRegistration))) throw new Error("Photo sharing requires explicit owner consent");
@@ -132,6 +142,11 @@ export const getByShareToken = query({
     const owner = await ctx.db.get(share.ownerRegistrationId);
     const recipient = await ctx.db.get(share.recipientRegistrationId);
 
+    const linkedInterest = await resolvedInterest(ctx, share);
+    // Exact linked interest only: a reverse/event sibling never grants bio access.
+    // Standalone legacy grants have no attributable interest; preserve them pending explicit migration.
+    // Manual matchmaker presentations are a separate lifecycle, unchanged here.
+    const bioVisible = linkedInterest ? await interestBioVisible(ctx, linkedInterest) : linkedInterest === null;
     const includeImages = await imagesAllowed(ctx, share, owner);
     const images = includeImages ? (await Promise.all((owner?.imageStorageIds ?? []).map(async storageId => ({ storageId, url: await ctx.storage.getUrl(storageId) })))).filter((image): image is { storageId: typeof image.storageId; url: string } => image.url !== null) : [];
     return {
@@ -143,7 +158,7 @@ export const getByShareToken = query({
         education: owner.education, job: owner.job, ethnicity: owner.ethnicity,
         prayerCommitment: owner.prayerCommitment, hijabResponse: owner.hijabResponse,
         spouseRequirement1: owner.spouseRequirement1, spouseRequirement2: owner.spouseRequirement2,
-        spouseRequirement3: owner.spouseRequirement3, shareableBio: owner.shareableBio,
+        spouseRequirement3: owner.spouseRequirement3, shareableBio: bioVisible ? owner.shareableBio : undefined,
         photoSharingPermission: owner.photoSharingPermission,
         imageStorageIds: includeImages ? owner.imageStorageIds : [],
       } : null,

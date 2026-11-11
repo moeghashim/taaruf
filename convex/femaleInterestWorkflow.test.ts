@@ -33,17 +33,19 @@ test("private -> authenticated read only review -> explicit accept -> one pendin
   expect(read.profile.email).toBeNull(); expect(read.profile.imageUrls).toEqual([]);
   expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toMatchObject([{ kind: "brother_review", status: "failed" }]);
   expect((await t.run(ctx => ctx.db.get(interestId)))?.femaleWorkflow?.state).toBe("awaiting_brother_review");
-  await expect(t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true })).rejects.toThrow("Brother acceptance");
+  await expect(t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true })).rejects.toThrow("Review unavailable");
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
   expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(2);
   const first = await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
   const second = await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
-  expect(first.matchId).toBe(second.matchId);
+  expect(first).toEqual({ ownDecision: "approved" });
+  expect(second).toEqual(first);
+  const matchId = (await t.run(ctx => ctx.db.get(interestId)))!.matchId!;
   expect(await t.run(ctx => ctx.db.query("matches").take(100))).toHaveLength(1);
-  expect(await t.run(ctx => ctx.db.get(first.matchId!))).toMatchObject({ interestType: "mutual_interest", status: "reviewing" });
+  expect(await t.run(ctx => ctx.db.get(matchId))).toMatchObject({ interestType: "mutual_interest", status: "reviewing" });
   expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(4);
-  await expect(t.mutation(api.matches.updateStatus, { adminSecret: "wrong", id: first.matchId!, status: "contact_shared" })).rejects.toThrow("Unauthorized");
+  await expect(t.mutation(api.matches.updateStatus, { adminSecret: "wrong", id: matchId, status: "contact_shared" })).rejects.toThrow("Unauthorized");
   await expect(t.mutation(api.femaleInterestWorkflow.releaseContacts, { interestId })).rejects.toThrow("Unauthorized");
   expect((await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "sister", interestId })).profile.email).toBeNull();
   await t.mutation(api.femaleInterestWorkflow.releaseContacts, { adminSecret, interestId });
@@ -131,8 +133,9 @@ test("one recipient failure never resends successful sibling; abandoned lease re
 });
 test("closed match, revoked session and unrelated bound match cannot expose review", async () => {
   const { t, interestId } = await accepted();
-  const confirmed = await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
-  await t.mutation(api.matches.updateStatus, { adminSecret, id: confirmed.matchId!, status: "closed" });
+  await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  const matchId = (await t.run(ctx => ctx.db.get(interestId)))!.matchId!;
+  await t.mutation(api.matches.updateStatus, { adminSecret, id: matchId, status: "closed" });
   await expect(t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId })).rejects.toThrow("unavailable");
   await expect(t.mutation(api.femaleInterestWorkflow.releaseContacts, { adminSecret, interestId })).rejects.toThrow("unavailable");
   const f = await accepted();
@@ -140,7 +143,7 @@ test("closed match, revoked session and unrelated bound match cannot expose revi
   await expect(f.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId: f.interestId })).rejects.toThrow("Unauthorized");
 });
 
-for (const sessionHash of ["brother", "sister"]) test(sessionHash + " discovers fresh review after 110 historical rows and pages through empty history", async () => {
+for (const sessionHash of ["brother", "sister"]) test(sessionHash + " discovers fresh review after 110 historical rows and pages through privacy-safe history", async () => {
   const { t, interestId } = await accepted();
   const fresh = await t.run(async ctx => {
     const row = (await ctx.db.get(interestId))!;
@@ -151,7 +154,8 @@ for (const sessionHash of ["brother", "sister"]) test(sessionHash + " discovers 
   const first = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { cursor: null, numItems: 50 } });
   expect(first.page.some(r => r.interestId === fresh)).toBe(true); expect(first.isDone).toBe(false);
   const empty = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { cursor: first.continueCursor, numItems: 50 } });
-  expect(empty.page).toEqual([]); expect(empty.isDone).toBe(false); expect(empty.continueCursor).not.toBe(first.continueCursor);
+  expect(empty.page).toHaveLength(sessionHash === "sister" ? 25 : 0);
+  for (const row of empty.page) expect(row).toEqual({ interestId: expect.any(String), role: "sister", state: "closed", ownDecision: "pending", ownAction: null, paused: false, reviewExpired: false, canPause: false, canView: false }); expect(empty.isDone).toBe(false); expect(empty.continueCursor).not.toBe(first.continueCursor);
   const last = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { cursor: empty.continueCursor, numItems: 50 } });
   expect(last.page.some(r => r.interestId === interestId)).toBe(true); expect(last.isDone).toBe(true);
   const other = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "other", paginationOpts: { cursor: null, numItems: 50 } });
@@ -202,11 +206,11 @@ test("serialized brother review surfaces omit sister identity throughout approva
     }
   }
   await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
-  await check("awaiting_brother_review");
+  await check("in_review");
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
-  await check("awaiting_sister_confirmation");
+  await check("in_review");
   await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
-  await check("pending_admin_approval");
+  await check("in_review");
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated");
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com");
   vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com");

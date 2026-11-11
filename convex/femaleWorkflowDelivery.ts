@@ -102,11 +102,11 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   if (row.firstAttemptAt !== undefined && !row.providerPayload) {
     await ctx.db.patch(row._id, { status: "failed", leaseUntil: undefined, error: "Prior attempt has no immutable payload; manual reconciliation required" }); return false;
   }
-  const subject = row.kind === "brother_review" ? "A profile is ready for your review" : row.kind === "sister_confirmation" ? "The brother accepted — your final decision is required" : row.kind === "pending_review" ? "Mutual match pending admin approval" : "Your contacts are ready in the portal";
+  const subject = row.kind === "brother_review" ? "A profile is ready for your review" : row.kind === "sister_confirmation" ? "This connection is awaiting your review" : row.kind === "pending_review" ? "Your connection is being reviewed" : "Your contacts are ready in the portal";
   const portal = new URL(config.portal);
   portal.pathname = review ? "/dashboard" : "/me";
   portal.searchParams.set(review ? "femaleReview" : "connection", row.interestId);
-  const payload = row.providerPayload ?? { from: config.from, to: [email], subject, text: row.kind === "sister_confirmation" ? "The brother has accepted your interest. Your final decision is required before a match can be created. Sign in to review his profile and explicitly confirm or decline. Opening this link does not approve or create a match. Review profile and respond: " + portal.toString() : subject + ". Sign in to view and take action: " + portal.toString() };
+  const payload = row.providerPayload ?? { from: config.from, to: [email], subject, text: row.kind === "sister_confirmation" ? "This connection is awaiting your review. Sign in to review his profile and explicitly confirm or decline. Opening this link does not approve or create a match. Review profile and respond: " + portal.toString() : subject + ". Sign in to view and take action: " + portal.toString() };
   await ctx.db.patch(row._id, { providerPayload: payload, firstAttemptAt: row.firstAttemptAt ?? now, error: payload.to[0] !== email ? "Recipient changed since first attempt; replaying frozen payload for reconciliation" : undefined });
   return payload;
 }});
@@ -121,6 +121,12 @@ export const finish = internalMutation({ args: { id: v.id("femaleWorkflowDeliver
     for (const sibling of siblings) {
       if (sibling._id !== row._id && (!scopedKinds() || scopedKinds()!.includes(sibling.kind))) await ctx.db.patch(sibling._id, { status: "pending", leaseUntil: undefined, nextAttemptAt: Math.max(sibling.nextAttemptAt, until) });
     }
+  }
+  // Archive fences retries immediately, but cannot recall a provider request
+  // already attempted. Preserve only matching-attempt successful completion.
+  if (row.status === "cancelled" && row.attempts === args.attempt && args.success && row.firstAttemptAt !== undefined && row.providerPayload) {
+    await ctx.db.patch(row._id, { status: "sent", sentAt: Date.now(), leaseUntil: undefined, error: "Provider accepted in-flight delivery after cancellation; no retry" });
+    return null;
   }
   if (row.status !== "sending" || row.attempts !== args.attempt) return null;
   const retry = !args.success && args.retry && row.attempts < 6;

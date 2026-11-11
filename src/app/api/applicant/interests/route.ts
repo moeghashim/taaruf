@@ -20,6 +20,8 @@ function applicantInterestErrorResponse(error: unknown) {
   if (/interest submissions|submission event|approved and have attended|expectedEventId/i.test(message)) {
     return NextResponse.json({ error: "Interest availability has changed. Submissions require an enabled event and approved, confirmed, checked-in attendance. Please check the updated availability and try again." }, { status: 409 });
   }
+  if (/archived|not active/i.test(message)) return NextResponse.json({ success: false, skipped: "ineligible", error: "Matching activity stopped because the connection is no longer eligible." }, { status: 409 });
+  if (message.includes("Pause unavailable until contact release")) return NextResponse.json({ error: "Pause unavailable until contact release" }, { status: 409 });
   for (const safeMessage of ["Applicant details could not be verified", "You can submit a maximum of 3 interests per event", "Interest already submitted for this event"]) {
     if (message.includes(safeMessage)) return NextResponse.json({ error: safeMessage }, { status: 400 });
   }
@@ -130,7 +132,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (result.inboundInterestNotification) {
-        const recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: result.interestId, kind: "inbound" });
+        let recipient: { name: string; email: string };
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
@@ -146,6 +148,17 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        try {
+          recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: result.interestId, kind: "inbound" });
+          await convex.mutation(api.interests.assertNotificationEligible, { id: result.inboundInterestNotification.interestId, adminSecret: getAdminSecret() });
+        } catch (error) {
+          // The claim is optimistic: suppression must release its sent marker.
+          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { adminSecret: getAdminSecret(),
+            interestId: result.inboundInterestNotification.interestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
         const emailResult = await sendInboundInterestReceivedEmail({
           name: recipient.name,
           email: recipient.email,
@@ -193,13 +206,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "interestId and approved are required" }, { status: 400 });
       }
       const result = await convex.mutation(api.applicantInterests.giveFinalApproval, {
+        adminSecret: getAdminSecret(),
         sessionHash,
         interestId: body.interestId,
         approved: body.approved,
       });
 
       if (result.finalApprovalNotification) {
-        const recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: body.interestId, kind: "final_approval" });
+        let recipient: { name: string; email: string };
         const appUrl = getAppUrl();
         if (!appUrl) {
           const error = "App URL not configured";
@@ -209,11 +223,21 @@ export async function POST(request: NextRequest) {
           });
           return NextResponse.json({
             success: true,
-            message: "Approval recorded, but the notification email could not be sent.",
-            notification: { sent: false, error },
+            message: "Your decision has been recorded.",
           });
         }
 
+        try {
+          recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: body.interestId, kind: "final_approval" });
+          await convex.mutation(api.interests.assertNotificationEligible, { id: body.interestId, adminSecret: getAdminSecret() });
+        } catch (error) {
+          // The claim is optimistic: suppression must release its sent marker.
+          await convex.mutation(api.applicantInterests.recordFinalApprovalNotificationFailure, { adminSecret: getAdminSecret(),
+            interestId: body.interestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
         const emailResult = await sendFinalApprovalRequestedEmail({
           name: recipient.name,
           email: recipient.email,
@@ -227,19 +251,17 @@ export async function POST(request: NextRequest) {
           });
           return NextResponse.json({
             success: true,
-            message: "Approval recorded, but the notification email could not be sent.",
-            notification: { sent: false, error: emailResult.error || "Failed to send final approval requested email" },
+            message: "Your decision has been recorded.",
           });
         }
 
         return NextResponse.json({
           success: true,
-          message: "Approval recorded. The other applicant has been notified.",
-          notification: { sent: true, providerId: emailResult.id },
+          message: "Your decision has been recorded.",
         });
       }
 
-      return NextResponse.json({ success: true, message: "Approval recorded." });
+      return NextResponse.json({ success: true, message: "Your decision has been recorded." });
     }
 
     if (body.action === "withdraw") {

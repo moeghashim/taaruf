@@ -162,7 +162,7 @@ async function reviewing(general = false) {
 for (const general of [false, true]) for (const kind of ["pending_review", "contacts_ready"] as const) test(`paused ${general ? "general" : "female"} ${kind} retry replays only the failed recipient without changing disclosure history`, async () => {
   const { t, interestId, matchId } = await reviewing(general); isolated();
   let fail = true;
-  const subject = kind === "pending_review" ? "Mutual match pending admin approval" : "Your contacts are ready in the portal";
+  const subject = kind === "pending_review" ? "Your connection is being reviewed" : "Your contacts are ready in the portal";
   const provider = vi.fn<typeof fetch>().mockImplementation(async (_url, options) => {
     const payload = JSON.parse(options!.body as string);
     return new Response("{}", { status: fail && payload.subject === subject && payload.to[0] === "brother@example.com" ? 400 : 200 });
@@ -221,4 +221,18 @@ for (const invalid of ["closed", "declined", "interest_reset", "match_reset", "i
   expect(provider).toHaveBeenCalledTimes(2);
   expect(await t.run(ctx => ctx.db.get(failed._id))).toEqual(failed);
   expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
+});
+
+test.each([true,false])("archive preserves attempted outbox result without retries (success=%s)",async success=>{
+ const {t,sister}=await accepted();isolated();const claimed=await t.mutation(internal.femaleWorkflowDelivery.claim,{});const row=claimed.find(r=>r.kind==="sister_confirmation")!;expect(row).toBeDefined();
+ expect(await t.mutation(internal.femaleWorkflowDelivery.markAttempt,{id:row._id,attempt:row.attempts})).toBeTruthy();
+ const archived=await t.mutation(api.archive.archiveAdmin,{adminSecret,registrationId:sister,expectedArchivedAt:null,confirm:true});
+ expect(await t.run(ctx=>ctx.db.get(row._id))).toMatchObject({status:"cancelled"});
+ await t.mutation(internal.femaleWorkflowDelivery.finish,{id:row._id,attempt:row.attempts+1,success:true,retry:false});
+ expect(await t.run(ctx=>ctx.db.get(row._id))).toMatchObject({status:"cancelled"});
+ await t.mutation(internal.femaleWorkflowDelivery.finish,{id:row._id,attempt:row.attempts,success,retry:!success});
+ expect(await t.run(ctx=>ctx.db.get(row._id))).toMatchObject({status:success?"sent":"cancelled"});
+ await t.mutation(api.archive.restoreAdmin,{adminSecret,registrationId:sister,expectedArchivedAt:archived.archivedAt,confirm:true});
+ const fetcher=vi.fn();vi.stubGlobal("fetch",fetcher);await t.action(internal.femaleWorkflowDelivery.drain,{});expect(fetcher).not.toHaveBeenCalled();
+ expect(await t.mutation(internal.femaleWorkflowDelivery.claim,{})).toEqual([]);
 });

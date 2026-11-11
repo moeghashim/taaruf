@@ -1,6 +1,7 @@
 import { withCurrentAge } from "./birthdays";
 import { paginationOptsValidator } from "convex/server";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
+import { assertNotArchived, assertMatchingParticipants } from "./interestRules";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -89,6 +90,7 @@ export const updateAdminStatus = mutation({
     }
 
     if (args.adminStatus === "matched" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
+    if (args.adminStatus !== "declined") await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     await ctx.db.patch(args.id, {
       adminStatus: args.adminStatus,
       status: args.adminStatus === "declined" ? "declined" : interest.status,
@@ -128,6 +130,9 @@ export const claimDeclineNotification = mutation({
       throw new Error("Interest registration not found");
     }
 
+    assertNotArchived(requester);
+    assertNotArchived(target);
+    if ([requester, target].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) throw new Error("Historical archived workflow cannot send notifications");
     const targetNumber = target.publicApplicantNumber ?? null;
 
     await ctx.db.patch(args.id, {
@@ -210,6 +215,7 @@ export const updateStatus = mutation({
       if (flow) await ctx.db.patch(flow._id, { flowStatus: args.status as "closed" | "declined", updatedAt: Date.now() });
     }
     if (args.status === "converted_to_match" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
+    if (!["closed", "declined", "withdrawn"].includes(args.status)) await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     await ctx.db.patch(args.id, {
       status: args.status,
       adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,
@@ -328,23 +334,51 @@ export const workbenchPage = query({
     requireAdmin(args.adminSecret);
     const result = await ctx.db.query("interests").paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
     const interests = result.page;
+    // Hydrate each distinct entity once per bounded page, not once per interest.
+    const registrationIds = [...new Set(interests.flatMap(i => [i.fromRegistrationId, i.toRegistrationId]))];
+    const registrations = new Map(await Promise.all(registrationIds.map(async id => [id, await withCurrentAge(ctx, await ctx.db.get(id))] as const)));
+    const matchIds = [...new Set(interests.flatMap(i => i.matchId ? [i.matchId] : []))];
+    const matches = new Map(await Promise.all(matchIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    const primaryIds = [...new Set([...matches.values()].flatMap(m => m?.interestId ? [m.interestId] : []))];
+    const primaries = new Map(await Promise.all(primaryIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    const eventIds = [...new Set(interests.map(i => i.eventId))];
+    const events = new Map(await Promise.all(eventIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    return { ...result, page: withoutCapabilities(interests.map(interest => ({
+      ...interest,
+      fromRegistration: registrations.get(interest.fromRegistrationId) ?? null,
+      toRegistration: registrations.get(interest.toRegistrationId) ?? null,
+      match: (() => {
+        const match = interest.matchId ? matches.get(interest.matchId) : null;
+        const primary = match?.interestId ? primaries.get(match.interestId) : null;
+        return match && primary && !primary.testReset && primary.matchId === match._id && primary.eventId === interest.eventId ? match : null;
+      })(),
+      event: events.get(interest.eventId) ?? null,
+    }))) };
+  },
+});
 
-    return { ...result, page: withoutCapabilities(await Promise.all(
-      interests.map(async (interest) => {
-        const fromRegistration = await ctx.db.get(interest.fromRegistrationId);
-        const toRegistration = await ctx.db.get(interest.toRegistrationId);
-        const linkedMatch = interest.matchId ? await ctx.db.get(interest.matchId) : null;
-        const match = linkedMatch?.testResetAt !== undefined ? null : linkedMatch;
-        const event = interest.eventId ? await ctx.db.get(interest.eventId) : null;
+/** Lean legacy disclosure scan: no per-interest flow queries or capability fields. */
+export const disclosureEvidencePage = query({
+  args: { adminSecret: v.optional(v.string()), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const result = await ctx.db.query("interestFlows").paginate({ ...args.paginationOpts, numItems: Math.min(500, args.paginationOpts.numItems) });
+    return { ...result, page: result.page.filter(f => f.contactSharedAt !== undefined).map(f => ({
+      interestId: f.interestId, fromRegistrationId: f.fromRegistrationId, toRegistrationId: f.toRegistrationId, contactSharedAt: f.contactSharedAt!,
+    })) };
+  },
+});
 
-        return {
-          ...interest,
-          fromRegistration: withoutCapabilities(await withCurrentAge(ctx, fromRegistration)),
-          toRegistration: withoutCapabilities(await withCurrentAge(ctx, toRegistration)),
-          match,
-          event,
-        };
-      })
-    )) };
+/** Used by server routes to revalidate previously claimed notification work. */
+export const assertNotificationEligible = mutation({
+  args: { adminSecret: v.string(), id: v.id("interests") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const interest = await ctx.db.get(args.id);
+    if (!interest) throw new Error("Interest not found");
+    await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
+    const participants = await Promise.all([ctx.db.get(interest.fromRegistrationId), ctx.db.get(interest.toRegistrationId)]);
+    if (interest.status === "closed" || participants.some(person => person?.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) throw new Error("Historical archived workflow cannot send notifications");
+    return true;
   },
 });

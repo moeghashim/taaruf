@@ -138,6 +138,9 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  interestReopenAudits: defineTable({
+    operationKey: v.string(), interestId: v.id("interests"), fingerprint: v.string(), snapshot: v.string(), actor: v.literal("admin"), reason: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
   deliveryCancellationAudits: defineTable({
     operationKey: v.string(), authorization: v.string(), snapshot: v.string(), createdAt: v.number(),
   }).index("by_operationKey", ["operationKey"]),
@@ -171,6 +174,10 @@ export default defineSchema({
   registrations: defineTable({
     backgroundMatchmakingOptIn: v.optional(v.boolean()),
     backgroundMatchmakingConsentUpdatedAt: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    lastRestoredArchivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.union(v.literal("participant"), v.literal("admin"))),
+    archivedByRegistrationId: v.optional(v.id("registrations")),
     // Legacy/internal identifier. Keep for compatibility, but human-facing
     // applicant references should use publicApplicantNumber.
     applicantNumber: v.optional(v.number()),
