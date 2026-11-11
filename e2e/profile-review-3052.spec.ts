@@ -68,7 +68,7 @@ for (const width of [1280,390,320]) for (const surface of ["share","me"]) test(s
   await expect(target.getByRole("heading",{name:"Requirements",exact:true})).toBeVisible();
   await expect(target.locator(".profile-requirements li").first()).toHaveText(long);
   await expect(target.locator("img")).toHaveCount(1);
-  const image=target.locator("img");await expect(image).toBeVisible();
+  const image=target.locator("img");await image.scrollIntoViewIfNeeded();await expect(image).toBeVisible();
   await expect.poll(()=>image.evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(900);
   const box=await image.boundingBox();expect(Math.abs(box!.width/box!.height-1.5)).toBeLessThan(.01);
   expect(await page.locator("body").evaluate(el=>el.scrollWidth<=innerWidth)).toBe(true);
