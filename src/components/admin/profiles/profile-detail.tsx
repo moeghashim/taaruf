@@ -442,6 +442,7 @@ function ProfileDetailBody({
             >
               {busyAction === "reject" ? "Rejecting…" : "Reject profile"}
             </button>
+            <p style={{ flexBasis: "100%", margin: 0 }}>Rejecting the whole profile sends the application notice once when rejection emails are enabled. Event rejection does not send this notice. Reversing rejection cannot reliably recall an email already sending or sent.</p>
           </>
         )}
         <button

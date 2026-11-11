@@ -1,3 +1,4 @@
+import { transition as rejectionNoticeTransition } from "./profileRejectionNotice";
 import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
 import { currentAge, ownerDateOfBirth, saveDateOfBirth, withCurrentAge } from "./birthdays";
 import { validateDateOfBirth } from "./age";
@@ -562,6 +563,9 @@ export const updateStatus = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     if (args.status === "waitlisted") throw new Error("Global profile waitlisting is retired; use an event registration");
+    const previous = await ctx.db.get(args.id);
+    if (!previous) throw new Error("Profile not found");
+    await rejectionNoticeTransition(ctx, previous, args.status);
     await ctx.db.patch(args.id, { status: args.status });
     return args.id;
   },

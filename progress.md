@@ -690,3 +690,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Implemented issue97 background matchmaking in convex lifecycle/schema, applicant tab/API, admin Present/release/followups and dedicated gated notification sender; added privacy/withdrawal/idempotency/race/mobile regression coverage. Preview only; no live backend/data/email changes.
 ## 2026-11-10
 - Issue #46 isolated preview: private birthdays, owner profile editing, current-age projections/clock and privacy/legacy/eligibility tests; no live deployment. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Added isolated whole-profile rejection-notice transactional outbox, protected opt-in activation, immutable retries/reconciliation, synthetic tests, admin explanation and release documentation; no live activation.
