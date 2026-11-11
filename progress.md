@@ -749,3 +749,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — preserve3539
 - Preserve latest live public-event badge removal in release candidate; retain both histories and independent share issuance/access without changing consent or revocation gates. No deployment or data changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Added narrowly evidenced configuration-blocked delivery reset handling and repeat-cycle/disabled-sender regression tests; no live writes or deployment.
