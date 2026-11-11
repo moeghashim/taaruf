@@ -100,11 +100,11 @@ function EventCapacityEditor({ event, onSave }: {
       } catch (error) { setFeedback(error instanceof Error ? error.message : "Unable to save capacity"); }
       finally { setSaving(false); }
     }}>
-      <h4>Event capacity</h4>
-      <p>Lowering capacity keeps everyone already registered. New applicants stay waitlisted and automatic promotion pauses while reserved places meet or exceed the limit. Increasing capacity can promote the waitlist.</p>
+      <h4 style={{ marginBottom: 8 }}>Event capacity</h4>
+      <p style={{ marginBottom: 12 }}>Lowering capacity keeps everyone already registered. New applicants stay waitlisted and automatic promotion pauses while reserved places meet or exceed the limit. Increasing capacity can promote the waitlist.</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "end" }}>
-        <label>Male capacity<input type="number" min="1" step="1" required value={male} disabled={saving} onChange={e => setMale(e.target.value)} /></label>
-        <label>Female capacity<input type="number" min="1" step="1" required value={female} disabled={saving} onChange={e => setFemale(e.target.value)} /></label>
+        <label className="field"><span>Male capacity</span><input type="number" min="1" step="1" required value={male} disabled={saving} onChange={e => setMale(e.target.value)} /></label>
+        <label className="field"><span>Female capacity</span><input type="number" min="1" step="1" required value={female} disabled={saving} onChange={e => setFemale(e.target.value)} /></label>
         <button type="submit" className="btn" disabled={saving || (Number(male) === event.maleCapacity && Number(female) === event.femaleCapacity)}>{saving ? "Saving…" : "Save capacity"}</button>
       </div>
       <p role="status">{feedback}</p>
