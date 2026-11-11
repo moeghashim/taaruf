@@ -30,7 +30,7 @@ for (const [name, handler, body] of [["send", send, { registrationIds: ["synthet
   }
   test(name + " emails only the token resolved by authenticated backend issuance", async () => {
     expect((await handler(request())).status).toBe(200);
-    expect(mocks.mutation).toHaveBeenCalledWith(api.registrations.ensureProfileAccessToken, { adminSecret, id: "synthetic-id", token: expect.stringMatching(/^[a-f0-9]{48}$/) });
+    expect(mocks.mutation).toHaveBeenCalledWith(api.registrations.ensureProfileAccessToken, { adminSecret, id: "synthetic-id", expectedEmail: "synthetic@example.invalid", token: expect.stringMatching(/^[a-f0-9]{48}$/) });
     expect(mocks.email).toHaveBeenCalledWith({ name: "Synthetic", email: "synthetic@example.invalid", profileUrl: "https://app.invalid/profile/fresh-usable-token" });
     if (name === "backfill") expect(mocks.action).toHaveBeenCalledWith(api.migrations.profileCompletion.backfillProfileCompletionStatuses, expect.objectContaining({ adminSecret }));
   });
