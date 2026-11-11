@@ -57,7 +57,7 @@ export function ArchiveParticipant({ archivedAt, lastRestoredArchivedAt, registr
       {restored && !archived && <p role="status">Availability restored. Event bookings, closed matching, profile approval, photo access, and contact sharing have not been restored.</p>}
       <Dialog open={open} onOpenChange={value => { if (!busy) { setOpen(value); setError(""); } }}>
         <DialogTrigger asChild><button type="button" className="btn">{archived ? "Restore availability" : "Archive participant"}</button></DialogTrigger>
-        <DialogContent onOpenAutoFocus={event => { event.preventDefault(); cancel.current?.focus(); }}>
+        <DialogContent className="z-[301]" overlayClassName="z-[300]" onOpenAutoFocus={event => { event.preventDefault(); cancel.current?.focus(); }}>
           <DialogTitle>{archived ? "Restore availability for" : "Archive"} {name || "your participant profile"}?</DialogTitle>
           <DialogDescription className="text-foreground">{archived
             ? "Restore availability only. Future event registration and matching remain subject to normal eligibility checks."

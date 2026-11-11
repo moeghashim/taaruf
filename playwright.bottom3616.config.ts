@@ -1,0 +1,2 @@
+import { defineConfig } from "@playwright/test";
+export default defineConfig({testDir:"./e2e",testMatch:"archive-bottom3616.spec.ts",workers:2,use:{baseURL:"http://127.0.0.1:3616",channel:"chrome"},webServer:{command:"npm run start -- --hostname 127.0.0.1 --port 3616",url:"http://127.0.0.1:3616/dashboard",reuseExistingServer:false,env:{VERCEL_ENV:"preview",PREVIEW_BACKEND_ISOLATED:"false",ADMIN_PASSWORD:"synthetic3616",ADMIN_TOKEN_SALT:"synthetic-salt"}}});

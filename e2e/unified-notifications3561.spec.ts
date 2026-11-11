@@ -217,3 +217,17 @@ for (const width of [320, 1280]) for (const role of ["brother", "sister"] as con
     expect(state.unexpected).toEqual([]);
   });
 }
+
+test("failed mutation and stale GET cannot strand or restore revoked details", async ({page}) => {
+ const state=fixture("brother");state.me.inbound=[interest("race")];await mock(page,state);await page.goto("/me?connection=race#inbound-interests");
+ await expect(page.locator("#inbound-interests .interest-detail-panel")).toContainText("Authorized bio race");
+ await page.route("**/api/applicant/me*",route=>route.fulfill({status:503,json:{error:"Refresh unavailable"}}));
+ await page.evaluate(()=>window.dispatchEvent(new Event("focus")));
+ await expect(page.locator("#inbound-interests .interest-detail-panel")).toHaveCount(0);
+ await expect(page.getByRole("region",{name:"Your notifications",exact:true})).toHaveCount(0);
+ await page.unroute("**/api/applicant/me*");await page.getByRole("button",{name:"Retry refresh"}).click();
+ await expect(page.locator("#inbound-interests .interest-detail-panel")).toContainText("Authorized bio race");
+ const accept=page.locator("#inbound-interests").getByRole("button",{name:"Accept",exact:true});await accept.click();
+ await expect(page.getByRole("alert").filter({hasText:"Read-only regression fixture"})).toBeVisible();
+ await expect(page.getByRole("region",{name:"Your notifications",exact:true})).toBeVisible();await expect(accept).toBeEnabled();expect(state.writes).toEqual(["/api/applicant/interests"]);
+});

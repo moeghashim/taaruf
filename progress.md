@@ -759,3 +759,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — banners and archive placement3616
 - Integrated reviewed unified notices onto live reset baseline; preserved archive restrictions and moved existing archive controls after portal/profile content.
+
+- Final review fixes preserve unsaved profile edits on failed refresh while suppressing stale third-party details, settle mutation reloads, and keep archive confirmations above the admin drawer. Verified 1298 tests, root/Convex types, scoped lint/build, 85 banner and12 archive-bottom browser checks at1280/390/320; no backend/data/config/deploy changes.
