@@ -1,3 +1,4 @@
+import { currentSisterConfirmation } from "./sisterConfirmationActivation";
 import { deliveryAuthorized } from "./brotherReviewActivation";
 import { sessionAllowed } from "./capabilitySecurity";
 import { enqueueContactDelivery, deliveryParticipants, linkedFlows, recordPairApproval, releasePairContacts } from "./contactGate";
@@ -171,7 +172,8 @@ export const retryDelivery = mutation({ args: { adminSecret: v.optional(v.string
   if (!await deliveryAuthorized(ctx, row)) throw new Error("Delivery unavailable: not authorized by activation boundary/kind");
   const interest = await ctx.db.get(row.interestId);
   if (interest?.femaleWorkflow) {
-    const { workflow, brother } = await active(ctx, row.interestId, true);
+    const { workflow, brother, sister } = await active(ctx, row.interestId, true);
+    if (row.kind === "sister_confirmation" && (!currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email))) throw new Error("Sister confirmation unavailable for retry");
     if (row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !workflow.reviewTokenHash || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) throw new Error("Review unavailable for retry");
   } else await deliveryParticipants(ctx, row.interestId);
   if (row.firstAttemptAt !== undefined && Date.now() - row.firstAttemptAt >= 23 * 3600000) throw new Error("Idempotency window expired; reconcile provider delivery manually");

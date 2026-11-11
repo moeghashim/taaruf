@@ -678,3 +678,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Integrated authorized contact notice c14e265 and scoped focus-click e154e8c onto serving ffe260e in female-reviews.tsx; preserved contact gates and revalidation geometry, added stale-response/pending-POST browser coverage. No backend/config/email/live changes.
+## 2026-11-10
+- Add separately gated future-only sister final-approval email, recipient/acceptance freshness checks and synthetic tests; no production send, activation or deployment.
+
+## 2026-11-10
+- Added narrowly scoped combined brother/sister notification mode with independent cutoffs, stale recipient/sender retry cancellation, coexistence/security tests and activation checklist; no production changes.
