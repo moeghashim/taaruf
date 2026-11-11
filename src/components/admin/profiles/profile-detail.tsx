@@ -62,6 +62,7 @@ function ProfileDetailBody({
 }: Props) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
+  const rejectionNotice = useQuery("profileRejectionNotice.status", { registrationId: profile._id as Id<"registrations"> });
   const eventHistory = useQuery("events.getByRegistration", {
     registrationId: profile._id as Id<"registrations">,
   });
@@ -423,6 +424,15 @@ function ProfileDetailBody({
           borderTop: "1px solid var(--line-2)",
         }}
       >
+        {rejectionNotice && <p role="status" style={{ flexBasis: "100%" }}>
+          {rejectionNotice.state === "pending" && rejectionNotice.attempted ? "Application notice delivery unconfirmed; retrying with original key. Reversal stops retries but cannot recall an accepted email." :
+           rejectionNotice.state === "pending" ? (rejectionNotice.notBefore ? "Application notice pending — not before " + new Date(rejectionNotice.notBefore).toLocaleString() + ". Reverse rejection before dispatch to cancel." : "Application notice pending reconciliation.") :
+           rejectionNotice.state === "cancelled" ? "Application notice cancelled — not sent. A new rejection starts a fresh 15-minute grace period." :
+           rejectionNotice.state === "accepted" ? "Application notice sent — provider accepted; inbox delivery not confirmed." :
+           rejectionNotice.state === "sending" ? "Application notice dispatch started — it may no longer be recalled." :
+           "Application notice held for provider reconciliation — do not resend."}
+        </p>}
+        {profile.status === "rejected" && <button className="btn" onClick={() => handleStatus("approved")} disabled={busyAction !== null}>Reverse rejection and approve profile</button>}
         {actionError && <p role="alert">{actionError}</p>}
         {profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke profile approval"}</button>}
         {profile.status === "pending" && (
@@ -442,6 +452,7 @@ function ProfileDetailBody({
             >
               {busyAction === "reject" ? "Rejecting…" : "Reject profile"}
             </button>
+            <p style={{ flexBasis: "100%", margin: 0 }}>Rejecting the whole profile queues the application notice with a 15-minute grace period when rejection emails are enabled. Reversing before dispatch cancels it; rejecting again after an unsent cancellation starts a fresh 15 minutes. Sent or attempted notices are never reset. Event rejection does not send this notice.</p>
           </>
         )}
         <button

@@ -1,6 +1,7 @@
 import { api } from '../../convex/_generated/api';
 // Creation/reset/contact sharing retain their dedicated guarded routes.
 export const adminQueries = {
+ 'profileRejectionNotice.status': api.profileRejectionNotice.status,
  'registrations.getAll': api.registrations.getAll,
  'interests.getAll': api.interests.getAll,
  'matches.workbenchPage': api.matches.workbenchPage,

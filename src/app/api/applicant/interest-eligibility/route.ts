@@ -14,6 +14,7 @@ export async function GET() {
     if (!sessionHash) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
     const dashboard = await getConvexClient().query(api.applicantInterests.getInterestEligibility, { sessionHash });
     return NextResponse.json({
+      eventLogisticsRestricted: dashboard.eventLogisticsRestricted,
       canSubmitInterest: dashboard.canSubmitInterest,
       interestSubmissionEventId: dashboard.interestSubmissionEventId,
       interestSubmissionLimit: dashboard.interestSubmissionLimit,
