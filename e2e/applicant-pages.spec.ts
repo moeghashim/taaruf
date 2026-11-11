@@ -84,3 +84,41 @@ for (const width of [1280, 820, 390, 320]) for (const gender of ["male", "female
   await go("My Profile");
   await expect(page.getByLabel("Ethnicity",{exact:false})).toHaveValue("Unsaved");
 });
+
+for (const width of [1280, 390, 320]) test("event privacy and live eligibility revalidation " + width, async ({ page }, testInfo) => {
+ page.on("pageerror", error => console.error(error));
+ await page.setViewportSize({width,height:900});
+ let rejected=false;
+ await page.route("**/*",async route=>{
+  const url=new URL(route.request().url()); if(url.origin!=="http://127.0.0.1:3418") return route.abort(); if(!url.pathname.startsWith("/api/")) return route.continue();
+  const path=new URL(route.request().url()).pathname;
+  const eligibility={eventLogisticsRestricted:rejected,canSubmitInterest:false,interestSubmissionEventId:null,interestSubmissions:[],interestSubmissionLimit:3};
+  if(path==="/api/applicant/me") return route.fulfill({json:{...eligibility,applicant:{name:"Synthetic",gender:"male",status:rejected?"rejected":"approved",applicantNumber:1,profileCompletionStatus:"completed"},inbound:[],outbound:[],privateDocumented:[]}});
+  if(path==="/api/applicant/interest-eligibility") return route.fulfill({json:eligibility});
+  if(path==="/api/applicant/events") return route.fulfill({json:rejected?{logisticsRestricted:true,upcoming:[],history:[{_id:"row",registrationStatus:"approved",attendanceStatus:"attended",event:null}]}:{logisticsRestricted:false,upcoming:[{_id:"event",title:"Secret venue November 14",location:"Private location",startsAt:1794697200000,registration:null}],history:[{_id:"row",registrationStatus:"approved",attendanceStatus:"attended",event:{title:"Secret venue November 14",location:"Private location",startsAt:1794697200000}}]}});
+  if(path==="/api/applicant/profile") return route.fulfill({json:{registration:{name:"Synthetic",gender:"male",email:"synthetic@example.invalid",education:"College",ethnicity:"Arab",images:[],imageUrls:[],interestSubmissionNumbers:[]}}});
+  if(path==="/api/applicant/matchmaker") return route.fulfill({json:{optedIn:false,matches:[]}});
+  return route.fulfill({json:{page:[],isDone:true,continueCursor:null}});
+ });
+ await page.goto("http://127.0.0.1:3418/me#events");
+ const section=page.locator("#events");
+ await expect(section.getByRole("button",{name:"Register",exact:true})).toBeVisible();
+ await expect(section).toContainText("Private location");
+ rejected=true;
+ await page.evaluate(()=>window.dispatchEvent(new Event("focus")));
+ await expect(section).not.toContainText("Private location",{timeout:10000});
+ await expect(section).not.toContainText("November 14");
+ await expect(section.getByRole("button",{name:/Register|Confirm/})).toHaveCount(0);
+ await expect(section).toContainText("Approved");
+ for (const label of ["Applicant Interests", "My Profile", "Matchmaker Matching", "Overview"]) {
+ await page.getByRole("navigation",{name:"Applicant pages"}).getByRole("link",{name:label,exact:true}).click();
+ await expect(page.locator("body")).not.toContainText("Private location");
+ await expect(page.locator("body")).not.toContainText("November 14");
+ await expect(section.getByRole("button",{name:/Register|Confirm/})).toHaveCount(0);
+ }
+ await page.reload();
+ await expect(section).toContainText("Your registration history is retained");
+ await expect(section).not.toContainText("Private location");
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath("rejected-logistics-"+width+".png"),fullPage:true});
+});
