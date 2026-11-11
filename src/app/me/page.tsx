@@ -5,6 +5,7 @@ import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { ProfileRequirements } from "@/components/applicant/profile-requirements";
 import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
@@ -276,6 +277,7 @@ function canCloseConnection(interest: DashboardInterest) {
 
 function profileFactsFor(counterparty: NonNullable<DashboardInterest["counterparty"]>): Fact[] {
   return [
+    { label: "Age", value: counterparty.age },
     { label: "Marital", value: titleizeValue(counterparty.maritalStatus) },
     { label: "Education", value: titleizeValue(counterparty.education) },
     { label: "Job", value: counterparty.job || "-" },
@@ -363,7 +365,7 @@ function ProfileSideCard({
       <div className="interest-detail-head">
         <div>
           <h3>{counterparty?.label ?? "Unknown applicant"}</h3>
-          <p>{`${titleize(counterparty.gender)} · age ${counterparty.age}`}</p>
+          <p>{titleize(counterparty.gender)}{!counterparty.fullProfileVisible && ` · age ${counterparty.age}`}</p>
         </div>
         <div className="pill-row">
           <StatusBadge value={interest.flowStatus} />
@@ -398,21 +400,7 @@ function ProfileSideCard({
 
       {counterparty?.fullProfileVisible && (
         <div className="profile-review-box">
-          <h4>Top spouse requirements</h4>
-          <ol className="applicant-share-requirements">
-            <li>
-              <span className="rank">01</span>
-              <span>{counterparty.spouseRequirement1 || "-"}</span>
-            </li>
-            <li>
-              <span className="rank">02</span>
-              <span>{counterparty.spouseRequirement2 || "-"}</span>
-            </li>
-            <li>
-              <span className="rank">03</span>
-              <span>{counterparty.spouseRequirement3 || "-"}</span>
-            </li>
-          </ol>
+          <ProfileRequirements profile={counterparty} />
         </div>
       )}
 
