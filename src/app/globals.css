@@ -1212,3 +1212,7 @@
 [data-admin] .profile-requirements li + li { margin-top: 12px; }
 [data-admin] .profile-review-photos { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
 [data-admin] .profile-review-photos img { display: block; width: 100%; height: auto; max-height: none; object-fit: contain; }
+
+/* Longer sister response label wraps within the shared invitation hierarchy. */
+[data-admin] .sister-confirmation .interest-invitation-actions { min-width: 0; flex-shrink: 1; }
+[data-admin] .sister-confirmation .btn { white-space: normal; text-align: center; }
