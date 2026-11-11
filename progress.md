@@ -709,3 +709,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Applicant copy3395: removed internal draft explanation; kept match presentation guidance. No admin draft behavior change.
+
+## 2026-11-10 — cancellation integration
+- Preserved newest live b5320f9 and integrated only unchanged approved cancellation module/tests plus original additive audit table; no reset, sends or activation.
