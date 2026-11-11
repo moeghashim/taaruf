@@ -732,3 +732,9 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10 — matching release3445
 - Reconciled approved matching and draft validation onto exact live portal; 1097 tests, build/types and portal/comparison/New match browser checks pass. Production remains unchanged pending final gates. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Integrated only rejection shared-provider adaptation240503e on verified live matching/portal65cbfc8; 1101 tests, types, lint and build passed; activation remains parent-gated.
+
+## 2026-11-11
+- Hardened rejection claim against absent/invalid activation and preactivation queued work, including attempted rows; added six synthetic no-send/immutable-cutoff regressions.
