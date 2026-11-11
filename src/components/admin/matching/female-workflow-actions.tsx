@@ -11,12 +11,14 @@ async function request(body: Record<string, unknown>) {
 }
 export function FemaleWorkflowActions({ interestId, state, compact = false }: { interestId: string; state: string; compact?: boolean }) {
   const [busy, setBusy] = useState(false);
+  const actionInFlight = useRef(false);
   const [message, setMessage] = useState("");
   const [url, setUrl] = useState("");
   async function act(action: string) {
-    if (busy) return;
+    if (actionInFlight.current) return;
     if (action === "release" && !window.confirm("Give final admin approval and release contacts in both applicant portals?")) return;
     if (action === "revoke" && !window.confirm("Permanently revoke this review?")) return;
+    actionInFlight.current = true;
     setBusy(true); setMessage("");
     try {
       const result = await request({ action, interestId });
@@ -24,10 +26,10 @@ export function FemaleWorkflowActions({ interestId, state, compact = false }: { 
       setMessage(action === "create" ? "Requester profile shared in the brother’s authenticated portal." : action === "release" ? "Contacts released. Portal notification emails queued for both applicants." : "Review revoked.");
       refreshAdminData();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update review."); }
-    finally { setBusy(false); }
+    finally { actionInFlight.current = false; setBusy(false); }
   }
   return <div style={{ display: "grid", gap: 8 }}>
-    <span>{state.replaceAll("_", " ")}</span>
+    {state !== "private_documented" && <span>{state.replaceAll("_", " ")}</span>}
     <div className="action-row">
       {state === "private_documented" && <button type="button" className={compact ? "btn btn-sm btn-primary" : "btn btn-primary"} disabled={busy} onClick={() => void act("create")}>{busy ? "Creating…" : "Share requester profile"}</button>}
       {state === "awaiting_brother_review" && <button type="button" className="btn" disabled={busy} onClick={() => void act("create")}>Reissue review link</button>}

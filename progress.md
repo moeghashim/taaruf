@@ -764,3 +764,11 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — archive placement3582
 - Moved unchanged participant archive/restore card to the final portal content position for both roles; added responsive all-view last-position, duplicate and confirmation-cancel no-write tests. No backend or live operations. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — workbench focus-click3639
+- Same-query paginated refresh now retains the last complete snapshot until success/failure; changed queries and failed/auth-denied reads still clear. Baseline mouse/touch Close interest lost POST on focus refresh; candidate preserves one POST. Added synthetic pointer/touch/keyboard/auth-denial regression script; no production/backend/data operations. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Reported Review profile links reproduced lost navigation during list focus refresh; keep non-sensitive invitation/confirmation links mounted while revalidating, clear on denial. Both-role mouse/touch pass; existing decision guards and 401/409/500 privacy clearing pass. <!-- project: github.com/moeghashim/clawscrewskill -->
+## 2026-11-11 — redundant workbench label3634
+- Hide only the private documented display label in FemaleWorkflowActions; retain its state, share action, other statuses and all permissions. Added markup/action regressions; no backend or live changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Added Omar3637 exact received-interest heading in initial inbound notifications for both roles; preserved body/CTAs and final/outbound/event wording. Added 12 desktop/mobile read-only browser cases. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Follow-up: exact admin Share requester control rapid double activation reproduced2POST; synchronous in-flight ref now sends1. Added unit regression; integrated certified copy ancestry98b04b8 without changing frozenPR137. <!-- project: github.com/moeghashim/clawscrewskill -->

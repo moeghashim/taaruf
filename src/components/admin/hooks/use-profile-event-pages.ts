@@ -18,7 +18,10 @@ export function useProfileEventPages<K extends Name>(name: K, args: Args<K> | "s
     if (serialized === '"skip"') return;
     const controller = new AbortController();
     let stopped = false;
-    setState({ key });
+    // Keep a complete same-query snapshot mounted during revalidation so
+    // focus returning between pointer-down and click cannot discard the action.
+    // A changed query still clears immediately; failed refreshes clear below.
+    setState(previous => previous?.key === key && previous.rows ? previous : { key });
     async function load() {
       try {
         let cursor: string | null = null;
