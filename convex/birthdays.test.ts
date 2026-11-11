@@ -98,8 +98,8 @@ test("shared profiles and admin nested records expose current age but never DOB"
   const { t, id, other, update } = await fixture();
   await t.mutation(api.applicantProfile.updateProfile, { ...update, sessionHash: "owner", dateOfBirth: "2000-11-11" });
   await t.run(async ctx => {
-    await ctx.db.insert("profileShares", { ownerRegistrationId: id, recipientRegistrationId: other, includeImages: false, status: "shared", shareToken: "share", createdAt: Date.now(), updatedAt: Date.now() });
-    await ctx.db.insert("matches", { maleRegistrationId: other, femaleRegistrationId: id, interestType: "admin_suggested", status: "new", createdAt: Date.now(), updatedAt: Date.now() });
+    const matchId = await ctx.db.insert("matches", { maleRegistrationId: other, femaleRegistrationId: id, interestType: "admin_suggested", matchmakerPresentedAt: Date.now(), status: "new", createdAt: Date.now(), updatedAt: Date.now() });
+    await ctx.db.insert("profileShares", { matchId, ownerRegistrationId: id, recipientRegistrationId: other, includeImages: false, status: "shared", shareToken: "share", createdAt: Date.now(), updatedAt: Date.now() });
   });
   vi.setSystemTime(new Date("2026-11-11T06:00:00Z"));
   const shared = await t.query(api.profileShares.getByShareToken, { shareToken: "share" });
