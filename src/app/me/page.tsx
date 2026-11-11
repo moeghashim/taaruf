@@ -497,7 +497,8 @@ function ProfileSideCard({
           >
             Withdraw
           </button>
-        </div>      )}
+        </div>
+      )}
 
       {canClose && (
         <div className="action-row">
@@ -993,7 +994,8 @@ export default function ApplicantDashboardPage() {
   }
 
   if (isLoading && !data) {
-    return (      <main data-admin className="min-h-screen">
+    return (
+      <main data-admin className="min-h-screen">
         <div className="content">
           <div className="coming-soon">
             <div className="lede">Loading...</div>
