@@ -1,6 +1,7 @@
 "use client";
 import { interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
+import { formatEducation } from "@/lib/education";
 
 import { useEffect, useState } from "react";
 import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
@@ -104,7 +105,7 @@ function ProfileDetailBody({
     { label: "Photo sharing permission", value: profile.photoSharingPermission?.replace(/_/g, " ") || "—" },
     { label: "Profile completion", value: profile.profileCompletionStatus?.replace(/_/g, " ") || "not started" },
     { label: "Marital status", value: profile.maritalStatus || "—" },
-    { label: "Education", value: profile.education || "—" },
+    { label: "Education", value: formatEducation(profile.education) },
     { label: "Occupation", value: profile.job || "—" },
     { label: "Email", value: profile.email },
     { label: "Phone", value: profile.phone || "—" },
