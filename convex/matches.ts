@@ -406,6 +406,7 @@ export const updateStatus = mutation({
     const now = Date.now();
     await ctx.db.patch(args.id, {
       status: args.status,
+      ...(previousStatus === "contact_shared" && !match.interestId ? { contactGate: "contacts_released" as const } : {}),
       adminNotes: args.adminNotes ?? match.adminNotes,
       closedReason: args.closedReason ?? match.closedReason,
       updatedAt: now,

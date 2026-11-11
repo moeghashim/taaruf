@@ -10,8 +10,8 @@ import { Ico } from "@/components/admin/primitives/icons";
 export function NewMatchDialog() {
   const [open, setOpen] = useState(false);
   return <Dialog open={open} onOpenChange={setOpen}>
-    <DialogTrigger asChild><button type="button" className="btn btn-primary" aria-label="New match">{Ico.plus}<span className="btn-label">New match</span></button></DialogTrigger>
-    <DialogContent data-admin><DialogTitle>New match</DialogTitle><DialogDescription style={{ color: "var(--mute)" }}>Select two eligible applicants to create an admin-only suggestion. Applicant consent must be collected through the existing interest workflow before contacts can be shared. This does not share photos or contacts, record consent, or send emails.</DialogDescription>
+    <DialogTrigger asChild><button type="button" className="btn btn-primary" aria-label="New match">{Ico.plus}<span>New match</span></button></DialogTrigger>
+    <DialogContent data-admin><DialogTitle>New match</DialogTitle><DialogDescription style={{ color: "var(--mute)" }}>Save a private draft for admin review. Applicants cannot see it and no notifications are sent. Presenting background matches is not available yet: both applicants must opt in before a future presentation step.</DialogDescription>
       {open && <NewMatchForm onCreated={() => setOpen(false)} />}
     </DialogContent>
   </Dialog>;
@@ -53,6 +53,6 @@ function NewMatchForm({ onCreated }: { onCreated: () => void }) {
     </label>)}
     <label style={{ display: "grid", gap: 6 }}>Admin notes (optional)<textarea maxLength={2000} disabled={busy} value={notes} onChange={e => setNotes(e.target.value)} style={{ width: "100%", padding: 10, border: "1px solid var(--line)", borderRadius: 6, fontSize: 16 }} /></label>
     {error && <p role="alert">{error}</p>}
-    <button type="submit" className="btn btn-primary" disabled={busy || !male || !female}>{busy ? "Creating…" : "Create match"}</button>
+    <button type="submit" className="btn btn-primary" disabled={busy || !male || !female}>{busy ? "Saving…" : "Save draft"}</button>
   </form>;
 }
