@@ -2,6 +2,7 @@
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useProfileEventPages } from "@/components/admin/hooks/use-profile-event-pages";
+import { workbenchEventLabel } from "@/lib/workbench-event-label";
 import { matchEventId, inEventScope, scopedWorkbenchRecords } from "@/lib/workbench-event-filter";
 import Link from "next/link";
 import { canReleaseContacts, interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
@@ -1060,7 +1061,7 @@ export function WorkbenchPageClient() {
             <select id="workbench-event" value={eventScope} onChange={event => { setEventScope(event.target.value); setSelectedInterestId(""); setSelectedMatchId(""); setMessage(null); }} style={{ width: "100%", minWidth: 0, minHeight: 44, background: "var(--panel)", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 6, padding: 8 }}>
               <option value="all">All events</option>
               <option value="unscoped">No recorded event</option>
-              {catalog.rows.map(event => <option key={event._id} value={event._id}>{event.title}</option>)}
+              {catalog.rows.map(event => <option key={event._id} value={event._id}>{workbenchEventLabel(event)}</option>)}
               {eventScope !== "all" && eventScope !== "unscoped" && !catalog.rows.some(e => e._id === eventScope) && <option value={eventScope}>Unavailable event</option>}
             </select>
             <p aria-live="polite">{interests.length} interests · {matches.length} matches. Global conflict and consent checks still apply.</p>
