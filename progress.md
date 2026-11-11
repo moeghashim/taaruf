@@ -712,3 +712,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Harden workbench New match discoverability with an explicit accessible creation group before event filters; retain existing private draft/present flow and backend gates. Hide zero-date sentinel, add action and nine-state browser regressions. Fresh live screenshot mismatch remains unexplained; no deployment.
+
+## 2026-11-10
+- Prepare future-only matching emails: immutable activation stamps, explicit transactional transport reuse, fresh-Present-only send and readiness-gated applicant copy; no live activation.

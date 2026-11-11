@@ -1,6 +1,6 @@
 import { currentAge } from "./birthdays";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { sessionAllowed } from "./capabilitySecurity";
@@ -8,6 +8,24 @@ import { requireAdmin } from "./adminAuthorization";
 import { assertParticipantsAvailable, releasePairContacts } from "./contactGate";
 
 type ReadCtx = QueryCtx | MutationCtx;
+const activationKey = "matchmakerEmailActivationAt";
+async function emailActivation(ctx: ReadCtx) {
+  const row = await ctx.db.query("settings").withIndex("by_key", q => q.eq("key", activationKey)).unique();
+  const at = Number(row?.value);
+  return Number.isSafeInteger(at) && at > 0 ? at : null;
+}
+// Immutable operator-only cutoff; deployment alone never enables email.
+export const prepareEmailActivation = internalMutation({args: {}, handler: async ctx => {
+  const existing = await emailActivation(ctx);
+  if (existing !== null) return {activationAt: existing};
+  const activationAt = Date.now();
+  await ctx.db.insert("settings", {key: activationKey, value: String(activationAt)});
+  return {activationAt};
+}});
+export const emailReadiness = query({args: {adminSecret: v.optional(v.string())}, handler: async (ctx, args) => {
+  requireAdmin(args.adminSecret);
+  return {activationAt: await emailActivation(ctx)};
+}});
 function manual(m: Doc<"matches">) { return !m.interestId && (m.interestType === "admin_suggested" || m.initiatedBy === "admin_recommendation"); }
 function released(m: Doc<"matches">) { return m.contactGate === "contacts_released" || m.adminReleasedAt !== undefined || m.status === "contact_shared" || m.contactSharedNotificationSentAt !== undefined; }
 function publicFollowup(f: Doc<"matches">["maleFollowup"]) { return f ? {status: f.status, updatedAt: f.updatedAt} : undefined; }
@@ -35,7 +53,7 @@ export const setConsent = mutation({
   },
 });
 export const present = mutation({
-  args: {adminSecret: v.optional(v.string()), matchId: v.id("matches")},
+  args: {adminSecret: v.optional(v.string()), matchId: v.id("matches"), emailReady: v.optional(v.boolean())},
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const match = await ctx.db.get(args.matchId);
@@ -54,10 +72,12 @@ export const present = mutation({
       }
     }
     const now = Date.now();
+    const activationAt = await emailActivation(ctx);
+    const emailEligible = args.emailReady === true && activationAt !== null && now > activationAt;
     await ctx.db.patch(match._id, {matchmakerPresentedAt: now, status: "reviewing", updatedAt: now});
     for (const p of [male, female]) {
       const key = "matchmaker:" + match._id + ":" + p._id;
-      if (!await ctx.db.query("matchmakerNotifications").withIndex("by_key", q => q.eq("key", key)).unique()) await ctx.db.insert("matchmakerNotifications", {matchId: match._id, recipientId: p._id, key, status: "pending", createdAt: now});
+      if (!await ctx.db.query("matchmakerNotifications").withIndex("by_key", q => q.eq("key", key)).unique()) await ctx.db.insert("matchmakerNotifications", {matchId: match._id, recipientId: p._id, key, status: emailEligible ? "pending" : "failed", createdAt: now, ...(emailEligible ? {activationAt: activationAt!} : {})});
     }
     return {alreadyPresented: false};
   },
@@ -124,6 +144,10 @@ export const claimNotification = mutation({args: {adminSecret: v.optional(v.stri
   const key = "matchmaker:" + m._id + ":" + args.recipientId;
   const delivery = await ctx.db.query("matchmakerNotifications").withIndex("by_key", q => q.eq("key", key)).unique();
   if (!delivery || delivery.status !== "pending") return null;
+  const activationAt = await emailActivation(ctx);
+  if (activationAt === null || delivery.activationAt !== activationAt || m.matchmakerPresentedAt <= activationAt || delivery.createdAt <= activationAt || released(m)) return null;
+  const {male, female} = await assertParticipantsAvailable(ctx, m.maleRegistrationId, m.femaleRegistrationId, m._id);
+  if ([male, female].some(p => p.backgroundMatchmakingOptIn !== true || p.profileCompletionStatus !== "completed" || (p.searchStatus ?? "active") !== "active")) return null;
   const p = await ctx.db.get(args.recipientId);
   if (!p || p.status !== "approved") throw new Error("Applicant unavailable");
   await ctx.db.patch(delivery._id, {status: "claimed", claimedAt: Date.now()});

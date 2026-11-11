@@ -410,7 +410,7 @@ export default defineSchema({
   matchmakerNotifications: defineTable({
     matchId: v.id("matches"), recipientId: v.id("registrations"), key: v.string(),
     status: v.union(v.literal("pending"), v.literal("claimed"), v.literal("sent"), v.literal("failed")),
-    createdAt: v.number(), claimedAt: v.optional(v.number()), completedAt: v.optional(v.number()),
+    createdAt: v.number(), activationAt: v.optional(v.number()), claimedAt: v.optional(v.number()), completedAt: v.optional(v.number()),
   }).index("by_key", ["key"]),
   matches: defineTable({
     matchmakerPresentedAt: v.optional(v.number()),
