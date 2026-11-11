@@ -122,7 +122,7 @@ test("delayed workflow authority, transitions, pagination and authorization deni
   state.reviews[0].state = "closed"; await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(ribbon).toContainText("Connection closed"); await expect(ribbon.getByRole("link")).toHaveCount(0);
   deny = true; await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await expect(ribbon).toContainText("Unable to load interest updates"); await expect(ribbon.locator('[data-connection-notice]')).toHaveCount(0);
+  await expect(ribbon).toContainText("Unable to load some interest updates"); await expect(ribbon.locator('[data-connection-notice]')).toHaveCount(0);
 });
 test("workflow pagination retains later actionable records and distinct matchmaker introduction", async ({ page }) => {
   const state = fixture("sister"); state.me.inbound = [{ ...interest("same"), canRespond: false }]; state.matches = [match("independent")];
@@ -178,4 +178,22 @@ for (const role of ["brother", "sister"] as const) test("review first click and 
   deny = true; await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.getByText("Authorized profile", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "What happens next" })).toHaveCount(0);
+});
+test("independent actions survive workflow and optional contact-check failures", async ({ page }) => {
+  const state = fixture("brother"); state.me.inbound = [interest("actionable"), { ...interest("ambiguous"), canRespond: false }];
+  state.reviews = [{ ...review("released", "brother"), state: "contacts_released", ownAction: null }, review("workflow-action", "brother")];
+  await mock(page, state); let failList = false;
+  await page.route("**/api/applicant/female-review*", route => {
+    if (new URL(route.request().url()).searchParams.has("interestId")) return route.abort();
+    if (failList) return route.fulfill({ status: 503, json: { error: "Unavailable" } });
+    return route.fulfill({ json: { page: state.reviews, isDone: true, continueCursor: "" } });
+  });
+  await page.goto("/me"); const ribbon = page.getByRole("region", { name: "Received interest updates", exact: true });
+  await expect(ribbon.locator('[data-connection-notice="actionable"]')).toBeVisible();
+  await expect(ribbon.locator('[data-connection-notice="workflow-action"]')).toBeVisible();
+  await expect(ribbon).not.toContainText("Contacts are ready");
+  failList = true; await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(ribbon).toContainText("Unable to load some interest updates");
+  await expect(ribbon.locator('[data-connection-notice="actionable"]')).toBeVisible();
+  await expect(ribbon.locator('[data-connection-notice="ambiguous"]')).toHaveCount(0);
 });

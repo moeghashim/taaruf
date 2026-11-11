@@ -776,3 +776,4 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-11
 - Consolidated applicant interest/workflow notices into one ID-keyed ribbon, preserving distinct connections, lifecycle copy, cursor completeness and authorized contact checks; added unit and synthetic production-browser coverage. No backend or live-data changes.
 - Polished both applicant review surfaces: consistent portal typography, complete requirements with separated prose, and stage-specific What happens next before decisions; preserved disclosure/mutation gates and first-click DOM behavior.
+- Independent review P2 fixed: optional contact verification failures no longer clear other reviews; verified generic actions remain available when the workflow list fails, without restoring ambiguous idle fallbacks. Added mixed-failure regression.

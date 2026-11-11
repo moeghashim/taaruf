@@ -30,11 +30,13 @@ export function ReceivedInterestRibbon({ interests, approved }: { interests: Int
       if (request.signal.aborted) return;
       setReviews(rows); setLoaded(true);
       for (const item of rows.filter(item => item.state === "contacts_released" && !item.paused && !item.reviewExpired)) {
+        try {
         const response = await fetch("/api/applicant/female-review?interestId=" + encodeURIComponent(item.interestId), { cache: "no-store", signal: request.signal });
         if (!response.ok) continue;
         const detail = await response.json();
         const profile = detail.profile || detail.counterparty;
         if (!request.signal.aborted && detail.state === "contacts_released" && !detail.paused && (profile?.email?.trim() || profile?.phone?.trim())) setReadyIds(previous => [...previous, item.interestId]);
+        } catch { /* An optional contact check must not hide other invitations. */ }
       }
     } catch { if (!request.signal.aborted) { setReviews([]); setReadyIds([]); setError(true); setLoaded(false); } }
   }, [approved]);
@@ -46,12 +48,15 @@ export function ReceivedInterestRibbon({ interests, approved }: { interests: Int
     return () => { controller.current?.abort(); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVisible); };
   }, [refresh]);
   // Do not render a contradictory generic fallback before workflow authority loads.
-  const notices = loaded ? receivedInterestUpdates(interests, reviews, readyIds) : [];
+  const notices = loaded ? receivedInterestUpdates(interests, reviews, readyIds) : receivedInterestUpdates(
+    interests.filter(item => !item.femaleWorkflow && (item.canRespond || item.canFinalApprove)), [],
+  );
   if (!notices.length && !error) return loaded ? null : <p role="status">Loading interest updates…</p>;
   return <section className="interest-invitation received-interest-ribbon" aria-label="Received interest updates">
-    {error ? <p role="alert">Unable to load interest updates. <button className="btn" onClick={() => void refresh()}>Retry</button></p> : <ul className="received-interest-items">{notices.map((notice, index) => <li key={notice.id} data-connection-notice={notice.id}>
+    {error && <p role="alert">Unable to load some interest updates. <button className="btn" onClick={() => void refresh()}>Retry</button></p>}
+    <ul className="received-interest-items">{notices.map((notice, index) => <li key={notice.id} data-connection-notice={notice.id}>
       <div className="interest-invitation-copy"><h2>{notice.heading}</h2>{notices.length > 1 && <p>Connection {index + 1}</p>}<p>{notice.copy}</p></div>
       {notice.href && <a className="btn btn-primary" href={notice.href} aria-label={notices.length > 1 ? notice.action + " for connection " + (index + 1) : undefined}>{notice.action}</a>}
-    </li>)}</ul>}
+    </li>)}</ul>
   </section>;
 }
