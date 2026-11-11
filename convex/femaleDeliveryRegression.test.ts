@@ -222,3 +222,22 @@ for (const invalid of ["closed", "declined", "interest_reset", "match_reset", "i
   expect(await t.run(ctx => ctx.db.get(failed._id))).toEqual(failed);
   expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
 });
+
+test("disabled configuration claims once but never prepares or sends provider request", async () => {
+  const { t, interestId } = await accepted();
+  await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "disabled");
+  const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  expect(fetchMock).not.toHaveBeenCalled();
+  const rows = await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect());
+  const blocked = rows.filter(r => r.error === "Isolated delivery configuration missing or recipient not allowlisted");
+  expect(blocked.length).toBeGreaterThan(0);
+  for (const row of blocked) {
+    expect(row).toMatchObject({ status: "failed", attempts: 1 });
+    for (const field of ["firstAttemptAt", "providerPayload", "sentAt", "leaseUntil"] as const) expect(row[field]).toBeUndefined();
+  }
+  await t.action(internal.femaleWorkflowDelivery.drain, {});
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).toEqual(rows);
+});

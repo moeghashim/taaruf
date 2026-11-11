@@ -50,7 +50,13 @@ async function snapshot(ctx: QueryCtx) {
   for (const d of deliveries) {
     if (!pair.has(d.recipientId)) throw new Error("Foreign delivery recipient");
     // A network request may already be in flight even after its lease expires.
-    if (d.status === "sending" || d.leaseUntil !== undefined || ((d.status === "pending" || d.status === "failed") && (d.firstAttemptAt !== undefined || d.attempts !== 0 || d.providerPayload !== undefined))) throw new Error("Delivery requires manual reconciliation before reset");
+    // claim increments attempts before markAttempt checks configuration. This exact
+    // terminal preflight failure proves no provider request was prepared; do not
+    // treat arbitrary failures or prior provider attempts as equivalent.
+    const configurationBlocked = d.status === "failed" && d.attempts === 1 &&
+      d.error === "Isolated delivery configuration missing or recipient not allowlisted" &&
+      d.firstAttemptAt === undefined && d.providerPayload === undefined && d.sentAt === undefined;
+    if (d.status === "sending" || d.leaseUntil !== undefined || ((d.status === "pending" || d.status === "failed") && (d.firstAttemptAt !== undefined || d.providerPayload !== undefined || d.sentAt !== undefined || (d.attempts !== 0 && !configurationBlocked)))) throw new Error("Delivery requires manual reconciliation before reset");
   }
   // Same complete-row digest approach as repaired singleInterestTestReset: never
   // recursively embed prior snapshots; preserve every original audit untouched.
@@ -95,7 +101,7 @@ export const reset = mutation({ args: { adminSecret: v.string(), expectedFingerp
   }
   for (const m of s.activeMatches) await ctx.db.patch(m._id, { status: "closed", closedReason: "admin_pair_test_reset", testResetAt: now, updatedAt: now });
   for (const share of s.activeShares) await ctx.db.patch(share._id, { status: "closed", revokedAt: now, includeImages: false, updatedAt: now });
-  for (const d of s.pending) await ctx.db.patch(d._id, { status: "cancelled", error: "Admin reset test pair" });
+  for (const d of s.pending) await ctx.db.patch(d._id, { status: "cancelled" });
   for (const r of s.pointers) await ctx.db.patch(r._id, { activeMatchId: undefined });
   return { alreadyReset: false, auditId };
 }});
