@@ -188,6 +188,7 @@ export const resetPair = mutation({
 
     for (const match of matchesToDelete) {
       if (match.testResetAt !== undefined) throw new Error("Reset test match is read-only");
+      if (!match.interestId && (match.interestType === "admin_suggested" || match.initiatedBy === "admin_recommendation") && (match.matchmakerPresentedAt !== undefined || match.status === "contact_shared" || match.contactGate === "contacts_released" || match.adminReleasedAt !== undefined || match.contactSharedNotificationSentAt !== undefined)) throw new Error("Presented matchmaker history must be retained; close the match instead");
       await ctx.db.delete(match._id);
     }
 
@@ -331,6 +332,7 @@ export const deletePairConnection = mutation({
 
     for (const match of matchesToDelete) {
       if (match.testResetAt !== undefined) throw new Error("Reset test match is read-only");
+      if (!match.interestId && (match.interestType === "admin_suggested" || match.initiatedBy === "admin_recommendation") && (match.matchmakerPresentedAt !== undefined || match.status === "contact_shared" || match.contactGate === "contacts_released" || match.adminReleasedAt !== undefined || match.contactSharedNotificationSentAt !== undefined)) throw new Error("Presented matchmaker history must be retained; close the match instead");
       await ctx.db.delete(match._id);
     }
 
@@ -406,6 +408,7 @@ export const updateStatus = mutation({
     const now = Date.now();
     await ctx.db.patch(args.id, {
       status: args.status,
+      ...(previousStatus === "contact_shared" && !match.interestId ? { contactGate: "contacts_released" as const } : {}),
       adminNotes: args.adminNotes ?? match.adminNotes,
       closedReason: args.closedReason ?? match.closedReason,
       updatedAt: now,
@@ -537,7 +540,9 @@ export const markContactSharedNotificationSent = mutation({
   },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
-    if ((await ctx.db.get(args.id))?.testResetAt !== undefined) throw new Error("Reset test match is read-only");
+    const match = await ctx.db.get(args.id);
+    if (match?.testResetAt !== undefined) throw new Error("Reset test match is read-only");
+    if (!match || (match.status !== "contact_shared" && match.contactGate !== "contacts_released" && match.adminReleasedAt === undefined)) throw new Error("Contacts must be released before recording notification");
     await ctx.db.patch(args.id, {
       contactSharedNotificationSentAt: args.sent ? Date.now() : undefined,
       contactSharedNotificationError: args.error,

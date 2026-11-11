@@ -1,4 +1,5 @@
 import { sisterActivation } from "./sisterConfirmationActivation";
+import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { deliveryAuthorized, reviewActivation } from "./brotherReviewActivation";
 import { deliveryConfig } from "./femaleWorkflowDelivery";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -102,7 +103,7 @@ export async function assertParticipantsAvailable(ctx: ReadCtx, maleId: Id<"regi
   const femaleMatches = await ctx.db.query("matches").withIndex("by_femaleRegistrationId", q => q.eq("femaleRegistrationId", femaleId)).take(1001);
   if (maleMatches.length > 1000 || femaleMatches.length > 1000) throw new Error("Match history requires manual review");
   const matches = [...maleMatches, ...femaleMatches];
-  if (matches.some(m => m._id !== except && m.testResetAt === undefined && !["closed", "declined", "paused"].includes(m.status))) throw new Error("Applicant already has an active match");
+  if (matches.some(m => !isManualMatchDraft(m) && m._id !== except && m.testResetAt === undefined && !["closed", "declined", "paused"].includes(m.status))) throw new Error("Applicant already has an active match");
   return { male, female };
 }
 
@@ -189,6 +190,15 @@ export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interest
 
 export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches">) {
   if (match.testResetAt !== undefined || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+  if (!match.interestId && match.matchmakerPresentedAt !== undefined) {
+    if (match.matchmakerWithdrawnAt !== undefined || match.maleMatchmakerApprovalAt === undefined || match.femaleMatchmakerApprovalAt === undefined) throw new Error("Both applicants must give final approval before contacts can be shared");
+    const {male, female} = await assertParticipantsAvailable(ctx, match.maleRegistrationId, match.femaleRegistrationId, match._id);
+    if ([male, female].some(p => !p.email || !p.phone)) throw new Error("Both applicants must have contact details");
+    const now = Date.now();
+    await ctx.db.patch(match._id, {status: "contact_shared", contactGate: "contacts_released", adminReleasedAt: match.adminReleasedAt ?? now, updatedAt: now});
+    for (const p of [male, female]) await ctx.db.patch(p._id, {activeMatchId: match._id});
+    return;
+  }
   const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
   if (!interest) throw new Error("Active linked interest required");
   assertMatchInterest(match, interest);
@@ -213,6 +223,7 @@ export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches"
 }
 
 export async function setPairPaused(ctx: MutationCtx, match: Doc<"matches">, paused: boolean, actorId?: Id<"registrations">) {
+  if (isManualMatchDraft(match)) throw new Error("Private drafts can only be edited or closed; presentation is not available yet");
   if (match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) throw new Error("Match is not active");
   if (actorId && ![match.maleRegistrationId, match.femaleRegistrationId].includes(actorId)) throw new Error("Unauthorized");
   const primary = match.interestId ? await ctx.db.get(match.interestId) : null;
@@ -224,9 +235,9 @@ export async function setPairPaused(ctx: MutationCtx, match: Doc<"matches">, pau
   if (!male || !female || male.gender !== "male" || female.gender !== "female" || male._id === female._id) throw new Error("Linked pair mismatch");
   if (!paused) await assertParticipantsAvailable(ctx, male._id, female._id, match._id);
   if ((match.status === "paused") === paused) return match._id;
-  const released = match.contactGate === "contacts_released" || (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
+  const released = match.status === "contact_shared" || match.adminReleasedAt !== undefined || match.contactSharedNotificationSentAt !== undefined || match.contactGate === "contacts_released" || (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
   const status = paused ? "paused" : released ? "contact_shared" : "reviewing";
-  await ctx.db.patch(match._id, { status, updatedAt: Date.now() });
+  await ctx.db.patch(match._id, { status, ...(released && !match.interestId ? { contactGate: "contacts_released" as const } : {}), updatedAt: Date.now() });
   for (const person of [male, female]) {
     if (paused && person.activeMatchId === match._id) await ctx.db.patch(person._id, { activeMatchId: undefined });
     if (!paused && released) await ctx.db.patch(person._id, { activeMatchId: match._id });
