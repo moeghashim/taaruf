@@ -1,3 +1,4 @@
+import { canReceiveEventMessages } from "./eventMessagingEligibility";
 import { recordPairApproval, contactsVisible, linkedFlows, assertMatchInterest } from "./contactGate";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
@@ -251,6 +252,7 @@ export const getInterestEligibility = query({
     const submissions = event ? await ctx.db.query("interests")
       .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", event._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3) : [];
     return {
+      eventLogisticsRestricted: !canReceiveEventMessages(registration),
       interestSubmissionEventId: event?._id ?? null,
       interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
       canSubmitInterest: Boolean(event) && ["pending", "approved"].includes(registration.status) && registration.profileCompletionStatus === "completed",
@@ -299,6 +301,7 @@ export const getDashboard = query({
     const submissions = eligibleEvent ? await ctx.db.query("interests")
       .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3) : [];
     return {
+      eventLogisticsRestricted: !canReceiveEventMessages(registration),
       requestedConnectionId: args.connectionId ?? null,
       interestSubmissionEventId: eligibleEvent?._id ?? null,
       interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),

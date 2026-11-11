@@ -1,0 +1,1 @@
+import {defineConfig} from "@playwright/test"; export default defineConfig({testDir:"./browser",outputDir:"./browser-results",workers:1,use:{channel:"chrome",serviceWorkers:"block"}});
