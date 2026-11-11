@@ -2,6 +2,7 @@
 import { applicantLoginHref } from "@/lib/applicant-destination";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { ProfileRequirements } from "./profile-requirements";
 import { FactList } from "@/components/admin/primitives/fact-list";
 
 type Review = { paused?: boolean; interestId: string; state: string; role: string; reviewExpiresAt?: number; matchId?: string };
@@ -125,15 +126,14 @@ export function FemaleReviews() {
 
       </div>)}
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
-      {selected && <section aria-label="Selected profile review" style={{ maxWidth: "70ch", display: "grid", gap: 16 }}>
+      {selected && <section aria-label="Selected profile review" className="selected-profile-review">
         {access?.matchId && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
         {reviewLoading && <p role="status">Loading profile…</p>}
         {profile && <><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
-          {profile.age && <p>Age {profile.age}</p>}
-          <FactList facts={[{ label: "Education", value: profile.education || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
+          <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: profile.education || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
-          <ul>{(["spouseRequirement1", "spouseRequirement2", "spouseRequirement3"] as const).map(key => profile[key] && <li key={key}>{profile[key]}</li>)}</ul>
-          {!!profile.imageUrls?.length && <div className="photo-grid">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={320} height={320} unoptimized />)}</div>}
+          <ProfileRequirements profile={profile} />
+          {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {access?.state === "contacts_released" && <div className="contact-box"><h4>Contact details</h4><p>{profile.email}</p><p>{profile.phone}</p></div>}
         </>}
         {!access?.paused && access?.role === "sister" && access.state === "awaiting_sister_confirmation" && <div className="action-row">

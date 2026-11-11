@@ -1200,3 +1200,15 @@
   [data-admin] .interest-invitation { flex-direction: column; align-items: stretch; padding: 24px; gap: 24px; }
   [data-admin] .interest-invitation h2 { font-size: 28px; }
 }
+
+/* Applicant review: consistent facts, complete answers and uncropped photos. */
+[data-admin] .selected-profile-review { display: grid; gap: 16px; width: 100%; max-width: 680px; min-width: 0; }
+[data-admin] .selected-profile-review > * { min-width: 0; }
+[data-admin] .profile-requirements { min-width: 0; max-width: 70ch; }
+[data-admin] .profile-requirements h4 { margin-bottom: 12px; }
+[data-admin] .profile-requirements ul { margin: 0; padding-left: 1.25em; list-style: disc; }
+[data-admin] .profile-requirements li,
+[data-admin] .profile-requirements > p { font-size: 16px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+[data-admin] .profile-requirements li + li { margin-top: 12px; }
+[data-admin] .profile-review-photos { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+[data-admin] .profile-review-photos img { display: block; width: 100%; height: auto; max-height: none; object-fit: contain; }

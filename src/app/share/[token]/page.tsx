@@ -4,6 +4,7 @@ import { formatHijabResponse } from "@/lib/hijab";
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { ProfileRequirements } from "@/components/applicant/profile-requirements";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
 
@@ -150,14 +151,14 @@ export default function SharedProfilePage({
             </div>
           </div>
           <div className="applicant-share-section">
-            <div className="photo-grid">
+            <div className="profile-review-photos">
               {owner.imageUrls.map((imageUrl, index) => (
                 <div key={`${imageUrl}-${index}`} className="photo-card">
                   <Image
                     src={imageUrl}
                     alt={`Profile image ${index + 1}`}
-                    width={320}
-                    height={128}
+                    width={960}
+                    height={720}
                     unoptimized
                   />
                 </div>
@@ -168,26 +169,8 @@ export default function SharedProfilePage({
       )}
 
       <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h3>Top spouse requirements</h3>
-          </div>
-        </div>
         <div className="applicant-share-section">
-          <ol className="applicant-share-requirements">
-            <li>
-              <span className="rank">01</span>
-              <span>{owner.spouseRequirement1 || "—"}</span>
-            </li>
-            <li>
-              <span className="rank">02</span>
-              <span>{owner.spouseRequirement2 || "—"}</span>
-            </li>
-            <li>
-              <span className="rank">03</span>
-              <span>{owner.spouseRequirement3 || "—"}</span>
-            </li>
-          </ol>
+          <ProfileRequirements profile={owner} />
         </div>
       </section>
 
