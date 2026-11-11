@@ -791,3 +791,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Integrated remaining typography/status bundle on certified live PR143, preserving inline /me review navigation and both source ancestries; preview-only verification. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Omar3761: suppress standalone review notification banners in inline mode only; preserve unified top ribbon, inbound list and selected profile actions. Added 12 both-role mobile/desktop regression checks; no backend/data changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Omar3779: remove standalone back link and ordinary review heading/subtitle only from embedded selected profiles in both portals; retain lifecycle notices and standalone routes. Added selected-state, switching, keyboard, lifecycle and standalone regression coverage. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Omar3782/3786: exact initial-review What happens next paragraphs for male/female recipients with correct counterpart pronouns; final guidance and workflow unchanged. Added exact-copy unit/browser regressions. <!-- project: github.com/moeghashim/clawscrewskill -->

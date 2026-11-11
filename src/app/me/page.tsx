@@ -305,10 +305,12 @@ function InterestRow({
 }
 
 function ProfileSideCard({
+  viewerGender,
   interest,
   onAction,
   busy,
 }: {
+  viewerGender?: string;
   interest: DashboardInterest | null;
   onAction: (body: Record<string, unknown>) => Promise<void>;
   busy: boolean;
@@ -436,7 +438,7 @@ function ProfileSideCard({
         </div>
       )}
 
-      {(canRespond || canFinalApprove) && <ReviewNextSteps stage={canRespond ? "initial" : "final"} />}
+      {(canRespond || canFinalApprove) && <ReviewNextSteps stage={canRespond ? "initial" : "final"} recipientGender={interest.direction === "inbound" ? viewerGender : undefined} />}
 
       {canRespond && (
         <div className="action-row">
@@ -524,6 +526,7 @@ function ProfileSideCard({
 }
 
 function Section({
+  viewerGender,
   title,
   description,
   interests,
@@ -532,6 +535,7 @@ function Section({
   onAction,
   busy,
 }: {
+  viewerGender?: string;
   children?: React.ReactNode;
   requestedConnectionId?: string | null;
   title: string;
@@ -587,7 +591,7 @@ function Section({
                 />
               ))}
             </div>
-            <ProfileSideCard interest={selectedInterest} onAction={onAction} busy={busy} />
+            <ProfileSideCard viewerGender={viewerGender} interest={selectedInterest} onAction={onAction} busy={busy} />
           </>
         ) : (
           <div className="coming-soon compact">
@@ -1425,6 +1429,7 @@ export default function ApplicantDashboardPage() {
               {!!data.history?.length && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{data.history.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
               <Section
                 title="Inbound Interests"
+                viewerGender={data.applicant.gender}
                 description="People who expressed interest in you."
                 requestedConnectionId={data.requestedConnectionId}
                 interests={data.inbound}

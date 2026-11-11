@@ -47,7 +47,8 @@ for(const width of [390,1280]) test("inline matches actual Private Documented In
  }
  expect((await panel.boundingBox())!.width).toBeGreaterThan(width===1280?680:250);
  expect(state.writes.concat(refState.writes)).toEqual([]);expect(state.unexpected.concat(refState.unexpected)).toEqual([]);
- await page.getByRole("link",{name:"Back to applicant interests"}).click();await expect(panel).toHaveCount(0);
+ await expect(page.getByRole("link",{name:"Back to applicant interests"})).toHaveCount(0);
+ await page.goBack();await expect(panel).toHaveCount(0);
  await context.close();
 });
 for(const width of [390,1280])for(const mode of ["no-photos","denied","contacts","standalone"] as const)test(mode+" preserves access "+width,async({page})=>{

@@ -209,7 +209,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       </div>
       {!reviewExpired(item) && !["closed", "revoked", "expired"].includes(item.state) && item.canView && <a className="btn btn-primary" aria-label={history.length > 1 ? "View review for connection " + (index + 1) : undefined} href={reviewHref(item.interestId)}>View review</a>}
     </section>)}
-    {selected && <a className="btn" href="/me#applicant-interests">Back to applicant interests</a>}
+    {!inline && selected && <a className="btn" href="/me#applicant-interests">Back to applicant interests</a>}
     <div style={{ padding: inline ? 0 : 16, display: "grid", gap: 16 }}>
       {error && <p className="notice error" role="alert">{error} <a href={loginHref}>Sign in</a> or <button type="button" className="btn" disabled={busy || reviewLoading} onClick={() => setAccessVersion(value => value + 1)}>Retry loading review</button>.</p>}
       {busy && <p role="status">Recording your decision…</p>}
@@ -218,7 +218,8 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       {!rows.length && (!done || loading || selected) && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
       {rows.filter(item => item.interestId === selected).map(item => <div key={item.interestId}>
         {item.paused && <p>Paused</p>}
-        <h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : item.ownAction === "review" ? "This connection is awaiting your review." : stateCopy[item.state]}</p>
+        {/* The embedded profile already sits under Inbound Interests; standalone routes retain their review header. */}
+        {(!inline || reviewExpired(item) || item.state !== "in_review") && <><h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : item.ownAction === "review" ? "This connection is awaiting your review." : stateCopy[item.state]}</p></>}
         {item.ownDecision === "approved" && <p>Your decision: approved.</p>}{item.ownDecision === "approved" && item.state === "in_review" && !item.paused && !item.reviewExpired && <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>}
         {item.ownDecision === "declined" && <p>Your decision: declined.</p>}
 
@@ -249,7 +250,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
-        {!access?.paused && access?.ownAction === "review" && <ReviewNextSteps stage={access.role === "brother" ? "workflow-initial" : "final"} />}
+        {!access?.paused && access?.ownAction === "review" && <ReviewNextSteps stage={access.role === "brother" ? "workflow-initial" : "final"} recipientGender={access.role === "brother" ? "male" : "female"} />}
         {!access?.paused && access?.role === "sister" && access.ownAction === "review" && <div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm interest</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>

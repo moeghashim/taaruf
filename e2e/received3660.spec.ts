@@ -146,8 +146,8 @@ for (const role of ["brother", "sister"] as const) for (const width of [390, 128
     await page.route("**/api/applicant/female-review?interestId=*", route => route.fulfill({ json: { ...state.reviews[0], profile: { label: "Applicant #220", age: 26, education: "master", job: "Mechanical engineer", ethnicity: "Arab", shareableBio: role === "sister" ? "Authorized bio" : null, spouseRequirement1: "A thoughtful partner who values regular prayer and kindness.", spouseRequirement2: "Enjoys swimming and spending time outdoors.", spouseRequirement3: "Communicates openly and respectfully.", imageUrls: ["data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400"><rect width="800" height="400" fill="#e3ddd1"/></svg>')] } } }));
     await page.goto("/dashboard?femaleReview=same");
     const panel = page.getByRole("region", { name: "Selected profile review" }); const next = panel.getByRole("region", { name: "What happens next" });
-    await expect(next).toContainText(role === "brother" ? "bio becomes available after this initial acceptance" : "Confirm your interest after reviewing");
-    await expect(next).toContainText("final admin approval"); await expect(next).toContainText("Decline closes");
+    await expect(next).toContainText(role === "brother" ? "her full bio will become available" : "Confirm your interest after reviewing");
+    await expect(next).toContainText(role === "brother" ? "and the admin approves" : "final admin approval"); await expect(next).toContainText(role === "brother" ? "If you decline" : "Decline closes");
     await expect(panel.getByRole("region", { name: "Requirements", exact: true }).getByRole("listitem")).toHaveCount(3);
     await expect(panel.getByText("Authorized bio", { exact: true })).toHaveCount(role === "sister" ? 1 : 0);
     const photo = panel.getByRole("img"); await expect(photo).toBeVisible();
@@ -159,11 +159,13 @@ for (const role of ["brother", "sister"] as const) for (const width of [390, 128
     await fits(page); await page.screenshot({ path: "test-results/review3667-" + role + "-" + width + ".png", fullPage: true });
   });
 }
-for (const final of [false, true]) test("general interest stage explanation " + final, async ({ page }) => {
-  const state = fixture("sister"); state.me.inbound = [interest("stage", "inbound", final)];
+for (const role of ["brother", "sister"] as const) for (const final of [false, true]) test("general interest stage explanation " + role + final, async ({ page }) => {
+  const state = fixture(role); state.me.inbound = [interest("stage", "inbound", final)];
   await mock(page, state); await page.goto("/me?connection=stage#inbound-interests");
   const panel = page.locator("#inbound-interests .interest-detail-panel");
-  await expect(panel.getByRole("region", { name: "What happens next" })).toContainText(final ? "Confirm your interest" : "continue to the bio review stage");
+  const next = panel.getByRole("region", { name: "What happens next" });
+  if (final) { await expect(next).toContainText("Confirm your interest"); await expect(next.locator("p")).toHaveCount(3); }
+  else await expect(next.locator("p")).toHaveText(["This applicant has expressed interest in getting to know you better.", "If you accept, "+(role === "brother" ? "her" : "his")+" full bio will become available for you to review. Accepting does not create a match and does not share any contact details.", "A match is only created after you review "+(role === "brother" ? "her" : "his")+" bio and give your final approval, "+(role === "brother" ? "she gives hers" : "he gives his")+", and the admin approves.", "If you decline, this connection will be closed and no contact details will be shared."]);
 });
 for (const role of ["brother", "sister"] as const) test("review first click and denial preserve gates " + role, async ({ page }) => {
   const state = fixture(role); state.reviews = [review("same", role)]; await mock(page, state);
@@ -237,9 +239,11 @@ test("inline reopening restores focus and old decline cannot clear new selection
     await new Promise<void>(resolve => { finish = resolve; });
     return route.fulfill({ json: { ok: true } });
   });
-  await page.goto("/me?femaleReview=first#inbound-interests");
+  await page.goto("/me#applicant-interests");
+  await page.getByRole("region", { name: "Received interest updates", exact: true }).locator('[data-connection-notice="first"]').getByRole("link").click();
   const panel = page.locator("#inline-selected-review"); await expect(panel).toBeFocused();
-  await page.getByRole("link", { name: "Back to applicant interests" }).click();
+  await expect(page.getByRole("link", { name: "Back to applicant interests" })).toHaveCount(0);
+  await page.goBack();
   await expect(panel).toHaveCount(0);
   const ribbon = page.getByRole("region", { name: "Received interest updates", exact: true });
   await ribbon.locator('[data-connection-notice="first"]').getByRole("link").click(); await expect(panel).toBeFocused();
