@@ -1097,7 +1097,6 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
-            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
             <nav className="portal-pages" aria-label="Applicant pages">
               {portalViews.map(item => <a key={item.id} href={item.href} className={`btn ${view === item.id ? "btn-primary" : ""}`} aria-current={view === item.id ? "page" : undefined}>{item.label}</a>)}
             </nav>
@@ -1454,6 +1453,7 @@ export default function ApplicantDashboardPage() {
                 />
               )}
             </div>
+            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
           </div>
         </div>
       </div>
