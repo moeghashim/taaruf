@@ -732,3 +732,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10 — matching release3445
 - Reconciled approved matching and draft validation onto exact live portal; 1097 tests, build/types and portal/comparison/New match browser checks pass. Production remains unchanged pending final gates. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — public event code badge
+- Removed only the homepage internal event-code badge; kept registration routing, event title/date/location and availability pills. Added all-four-status regression checks; 1097 tests, types, lint (8 existing warnings), production build pass. <!-- project: github.com/moeghashim/clawscrewskill -->
