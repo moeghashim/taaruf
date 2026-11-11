@@ -93,7 +93,9 @@ for (const role of ["brother", "sister"] as const) for (const input of ["mouse",
     // A focus-triggered pending refresh must not remove a pressed navigation target.
     if (input === "keyboard") { await link.focus(); await page.evaluate(() => window.dispatchEvent(new Event("focus"))); await page.keyboard.press("Enter"); }
     else if (input === "touch") await link.tap(); else await link.click();
-    await expect(page).toHaveURL(origin + "/dashboard?femaleReview=same");
+    await expect(page).toHaveURL(origin + "/me?femaleReview=same#inbound-interests");
+    expect(context.pages()).toHaveLength(1);
+    await expect(page.locator("#inbound-interests #inline-selected-review")).toBeFocused();
     await expect(page.getByRole("region", { name: "Selected profile review" })).toBeVisible();
     expect(state.writes).toEqual([]); expect(state.unexpected).toEqual([]);
     await context.close();
@@ -196,4 +198,55 @@ test("independent actions survive workflow and optional contact-check failures",
   await expect(ribbon).toContainText("Unable to load some interest updates");
   await expect(ribbon.locator('[data-connection-notice="actionable"]')).toBeVisible();
   await expect(ribbon.locator('[data-connection-notice="ambiguous"]')).toHaveCount(0);
+});
+for (const role of ["brother", "sister"] as const) test("inline later-page selection, refresh, history and denial " + role, async ({ page, context }) => {
+  const state = fixture(role); state.reviews = [review("first", role), review("later", role)];
+  await mock(page, state); let denied = false;
+  await page.route("**/api/applicant/female-review*", async route => {
+    const params = new URL(route.request().url()).searchParams;
+    const id = params.get("interestId");
+    if (id) {
+      await new Promise(resolve => setTimeout(resolve, id === "later" ? 300 : 50));
+      return route.fulfill({ status: denied ? 403 : 200, json: denied ? { error: "Review unavailable" } : { ...review(id, role), profile: { label: "Authorized " + id, imageUrls: [], shareableBio: role === "sister" ? "Visible bio " + id : null } } });
+    }
+    return route.fulfill({ json: { page: [state.reviews[params.has("cursor") ? 1 : 0]], isDone: params.has("cursor"), continueCursor: params.has("cursor") ? null : "page-two" } });
+  });
+  await page.goto("/me");
+  await page.evaluate(() => { (window as unknown as { documentMarker: boolean }).documentMarker = true; });
+  const ribbon = page.getByRole("region", { name: "Received interest updates", exact: true });
+  await ribbon.locator('[data-connection-notice="later"]').getByRole("link").click();
+  const panel = page.locator("#inbound-interests #inline-selected-review");
+  await expect(panel).toContainText("Authorized later"); await expect(panel).not.toContainText("Authorized first");
+  await expect(panel).toBeFocused();
+  expect(await page.evaluate(() => (window as unknown as { documentMarker: boolean }).documentMarker)).toBe(true);
+  expect(context.pages()).toHaveLength(1);
+  await page.reload(); await expect(panel).toContainText("Authorized later");
+  await ribbon.locator('[data-connection-notice="first"]').getByRole("link").click();
+  await expect(panel).toContainText("Authorized first");
+  await page.goBack(); await expect(panel).toContainText("Authorized later"); await expect(panel).toBeFocused();
+  denied = true; await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(panel).not.toContainText("Authorized later"); await expect(panel.getByRole("button", { name: "Accept", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("alert").filter({ hasText: "Review unavailable" })).toBeVisible();
+  expect(state.writes).toEqual([]); expect(state.unexpected).toEqual([]);
+});
+test("inline reopening restores focus and old decline cannot clear new selection", async ({ page }) => {
+  const state = fixture("brother"); state.reviews = [review("first", "brother"), review("second", "brother")]; await mock(page, state);
+  let finish: (() => void) | undefined;
+  await page.route("**/api/applicant/female-review*", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    await new Promise<void>(resolve => { finish = resolve; });
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/me?femaleReview=first#inbound-interests");
+  const panel = page.locator("#inline-selected-review"); await expect(panel).toBeFocused();
+  await page.getByRole("link", { name: "Back to applicant interests" }).click();
+  await expect(panel).toHaveCount(0);
+  const ribbon = page.getByRole("region", { name: "Received interest updates", exact: true });
+  await ribbon.locator('[data-connection-notice="first"]').getByRole("link").click(); await expect(panel).toBeFocused();
+  await panel.getByRole("button", { name: "Decline", exact: true }).click();
+  await expect.poll(() => !!finish).toBe(true);
+  await ribbon.locator('[data-connection-notice="second"]').getByRole("link").click();
+  await expect(panel).toContainText("Review second"); finish!();
+  await expect(page.getByText("Recording your decision…")).toHaveCount(0);
+  await expect(panel).toContainText("Review second"); await expect(page).toHaveURL(/femaleReview=second/);
 });

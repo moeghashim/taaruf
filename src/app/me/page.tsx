@@ -14,6 +14,7 @@ import { ProfileRequirements } from "@/components/applicant/profile-requirements
 import { ReviewNextSteps } from "@/components/applicant/review-next-steps";
 import { MatchmakerNotifications } from "@/components/applicant/matchmaker-notifications";
 import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
+import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { ReceivedInterestRibbon } from "@/components/applicant/received-interest-ribbon";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
@@ -526,10 +527,12 @@ function Section({
   title,
   description,
   interests,
+  children,
   requestedConnectionId,
   onAction,
   busy,
 }: {
+  children?: React.ReactNode;
   requestedConnectionId?: string | null;
   title: string;
   description: string;
@@ -570,6 +573,7 @@ function Section({
           {interests.length} item{interests.length === 1 ? "" : "s"}
         </span>
       </div>
+      {children}
       <div className={`interest-workspace ${interests.length ? "" : "empty"}`}>
         {interests.length ? (
           <>
@@ -1426,7 +1430,9 @@ export default function ApplicantDashboardPage() {
                 interests={data.inbound}
                 onAction={async body => { await runAction(body); }}
                 busy={busy || archived}
-              />
+              >
+                {!archived && data.applicant.status === "approved" && <FemaleReviews inline active={view === "interests"} />}
+              </Section>
               <Section
                 title="Outbound Interests"
                 description="Visible interests you sent."

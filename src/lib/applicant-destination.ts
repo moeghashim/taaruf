@@ -9,7 +9,7 @@ export function applicantDestination(value: unknown): string {
   const path = separator < 0 ? destination : destination.slice(0, separator);
   if (path !== "/me" && path !== "/dashboard") return "/me";
   const params = new URLSearchParams(separator < 0 ? "" : destination.slice(separator + 1));
-  const key = path === "/me" ? "connection" : "femaleReview";
+  const key = path === "/me" && !params.has("femaleReview") ? "connection" : "femaleReview";
   if (!params.has(key)) return path + hash;
   const ids = params.getAll(key);
   if (ids.length !== 1 || !/^[a-zA-Z0-9_-]{1,128}$/.test(ids[0])) return "/me";
