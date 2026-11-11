@@ -48,6 +48,7 @@ export function FemaleReviews() {
   const [listError, setListError] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const actionInFlight = useRef(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const load = useCallback(async (next: string | null = null) => {
@@ -74,8 +75,14 @@ export function FemaleReviews() {
     return () => window.removeEventListener("focus", refresh);
   }, [load]);
   const row = rows.find(item => item.interestId === selected);
+  // Retain the current view during revalidation so a focus event cannot
+  // unmount a pressed button before its click. A changed selection is cleared.
+  const accessSelection = useRef<string | null>(null);
+  const accessRequest = useRef(0);
   useEffect(() => {
-    setAccess(null);
+    const requestId = ++accessRequest.current;
+    if (accessSelection.current !== selected) setAccess(null);
+    accessSelection.current = selected;
     if (!selected) return;
     let stopped = false;
     setReviewLoading(true);
@@ -84,8 +91,8 @@ export function FemaleReviews() {
     void fetch("/api/applicant/female-review?" + params, { cache: "no-store" }).then(async response => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Review unavailable.");
-      if (!stopped) { setAccess(payload); setError(""); }
-    }).catch(error => { if (!stopped) setError(error.message); }).finally(() => { if (!stopped) setReviewLoading(false); });
+      if (!stopped && requestId === accessRequest.current) { setAccess(payload); setError(""); }
+    }).catch(error => { if (!stopped && requestId === accessRequest.current) { setAccess(null); setError(error.message); } }).finally(() => { if (!stopped && requestId === accessRequest.current) setReviewLoading(false); });
     return () => { stopped = true; };
   }, [selected, token, row?.role, row?.state, row?.paused, accessVersion]);
   useEffect(() => {
@@ -111,7 +118,9 @@ export function FemaleReviews() {
     }
   }, [access]);
   async function act(body: Record<string, unknown>) {
-    if (busy) return;
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    ++accessRequest.current;
     setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch(["pause", "resume"].includes(String(body.action)) ? "/api/applicant/interests" : "/api/applicant/female-review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(["pause", "resume"].includes(String(body.action)) ? { ...body, action: body.action === "pause" ? "pause_connection" : "resume_connection" } : body) });
@@ -122,8 +131,8 @@ export function FemaleReviews() {
       setAccessVersion(value => value + 1);
       if (body.decision === "decline" || body.confirmed === false) { setSelected(null); setToken(undefined); }
       await load();
-    } catch (error) { setError(error instanceof Error ? error.message : "Unable to record your decision."); }
-    finally { setBusy(false); }
+    } catch (error) { ++accessRequest.current; setReviewLoading(false); setAccess(null); setError(error instanceof Error ? error.message : "Unable to record your decision."); }
+    finally { actionInFlight.current = false; setBusy(false); }
   }
   const profile = access?.profile || access?.counterparty;
   const invitations = rows.filter(needsBrotherReview);
@@ -171,9 +180,10 @@ export function FemaleReviews() {
     <div className="panel-head"><div><h3>Profile reviews</h3><p>Review invitations and confirmations. Only you can respond from your account.</p></div><button type="button" className="btn" disabled={busy || loading} onClick={() => { void load(); setAccessVersion(value => value + 1); }}>Refresh</button></div>
     <div style={{ padding: 16, display: "grid", gap: 16 }}>
       {error && <p className="notice error" role="alert">{error} <a href={loginHref}>Sign in</a> or refresh your portal.</p>}
+      {busy && <p role="status">Recording your decision…</p>}
       {message && <p className="notice success" role="status">{message}</p>}
       {listError && <p className="notice error" role="alert">{listError} <a href={loginHref}>Sign in</a>, use Refresh or try Load more again.</p>}
-      {loading ? <p role="status">Loading reviews…</p> : !rows.length && <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>}
+      {!rows.length && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
       {(selected ? rows : history).map(item => <div key={item.interestId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 16 }}>
         {item.paused && <p>Paused</p>}
         <h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p>
@@ -183,14 +193,14 @@ export function FemaleReviews() {
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
       {selected && <section aria-label="Selected profile review" className="selected-profile-review">
         {access?.matchId && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
-        {reviewLoading && <p role="status">Loading profile…</p>}
-        {profile && <><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
+        {reviewLoading && !access && <p role="status">Loading profile…</p>}
+        {profile && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
           <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: profile.education || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
           <ProfileRequirements profile={profile} />
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
-        </>}
+        </div>}
         {!access?.paused && access?.role === "sister" && access.state === "awaiting_sister_confirmation" && <div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm mutual interest</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>

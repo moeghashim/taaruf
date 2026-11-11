@@ -675,3 +675,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Independent capacity review follow-up: preserve save feedback across data refresh; explicitly explain and test mixed decrease/increase all-row preservation, both genders and expired reservations. No backend behavioral change from reviewed implementation. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Contacts-ready3218: preserve latest serving ffe260e ancestry; show both portals a prominent notice only after authorized detail GET returns permitted contact fields; focus reauthorized details CTA, fail closed, add six synthetic responsive/privacy/pagination tests. No backend/config/email/production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Integrated authorized contact notice c14e265 and scoped focus-click e154e8c onto serving ffe260e in female-reviews.tsx; preserved contact gates and revalidation geometry, added stale-response/pending-POST browser coverage. No backend/config/email/live changes.
