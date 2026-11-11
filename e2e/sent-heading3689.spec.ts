@@ -64,7 +64,8 @@ async function fits(page: Page) {
 }
 
 
-for (const role of ["brother", "sister"] as const) for (const width of [390, 1280]) {
+// Generic outbound is the real brother projection; sisters use workflow reviews below.
+for (const role of ["brother"] as const) for (const width of [390, 1280]) {
   test("sent heading and lifecycle " + role + " " + width, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     const state = fixture(role);
@@ -86,6 +87,9 @@ for (const role of ["brother", "sister"] as const) for (const width of [390, 128
     await fits(page);
     state.me.outbound[0].canFinalApprove = true;
     await refresh(page, state, "/api/applicant/me"); await expect(sent.getByRole("heading")).toHaveText("Your review is needed");
+    await sent.getByRole("link").click();
+    await expect(page).toHaveURL(/connection=sent#outbound-interests$/);
+    await expect(page.locator(".interest-detail-panel").filter({hasText:"Applicant sent"})).toBeVisible();
     state.me.outbound[0].canFinalApprove = false;
     state.me.outbound[0].ownFinalApproval = "approved";
     state.me.outbound[0].status = "in_progress"; state.me.outbound[0].flowStatus = "in_progress";
@@ -115,6 +119,12 @@ for (const width of [390,1280]) test("sister actual workflow projection lifecycl
  await refresh(page,state,"/api/applicant/female-review");
  await expect(notice.getByRole("heading")).toHaveText("Your review is needed");
  await expect(notice.getByRole("link")).toHaveText("Review profile and respond");
+ await expect(notice.getByRole("link")).toHaveAttribute("href","/me?femaleReview=female-sent#inbound-interests");
+ await page.evaluate(() => (window as Window & { bundleDocument?: string }).bundleDocument="retained");
+ await notice.getByRole("link").click();
+ await expect(page).toHaveURL(/femaleReview=female-sent#inbound-interests$/);
+ await expect(page.locator(".selected-profile-review")).toContainText("Authorized review bio female-sent");
+ expect(await page.evaluate(() => (window as Window & { bundleDocument?: string }).bundleDocument)).toBe("retained");
  state.reviews[0].ownAction=null;state.reviews[0].ownDecision="approved";
  await refresh(page,state,"/api/applicant/female-review");
  await expect(notice.getByRole("heading")).toHaveText("Interest Update");

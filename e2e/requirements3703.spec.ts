@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Real Next renderer; synthetic authorized GETs only.
 // Run with playwright.requirements3703.config.ts; no auth/Convex or real writes.
-const origin = "http://127.0.0.1:3703";
+const origin = process.env.PORTAL_BASE || "http://127.0.0.1:3703";
 test.use({ baseURL: origin, serviceWorkers: "block" });
 export type Role = "brother" | "sister";
 const interest = (id: string, direction = "inbound", final = false) => ({
