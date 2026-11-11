@@ -111,9 +111,6 @@ export default async function Home() {
               {activeEvents.map((event) => (
                 <article key={event._id} className="applicant-home-event">
                   <div>
-                    <div className="pill-row">
-                      <span className="pill green">{event.eventCode}</span>
-                    </div>
                     <h4>{event.title}</h4>
                     <p>{formatEventDate(event.startsAt)} · {event.location}</p>
                   </div>
