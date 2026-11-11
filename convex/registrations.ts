@@ -1,3 +1,4 @@
+import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
 import { capabilityAllowed, profileCapabilityAllowed } from "./capabilitySecurity";
 import { assertImageOwnership, claimSignupImages } from "./imageAuthorization";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
@@ -221,6 +222,7 @@ async function createOrRestoreEventRegistration(
     now: number;
   }
 ) {
+  requireEventMessagingEligibility(args.registration);
   if (
     typeof args.registration.publicApplicantNumber !== "number" &&
     typeof args.registration.applicantNumber !== "number"
