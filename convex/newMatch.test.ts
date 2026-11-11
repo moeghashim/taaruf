@@ -144,3 +144,61 @@ test("browser password is not accepted as the service credential", async () => {
   vi.stubEnv("ADMIN_PASSWORD", "different-browser-password");
   await expect(t.mutation(api.matches.create, { ...args, adminSecret: "different-browser-password" })).rejects.toThrow("Unauthorized");
 });
+
+
+test("draft is invisible in both applicant dashboards and rejects direct profile disclosure", async () => {
+  const { t, args } = await fixture();
+  const id = await t.mutation(api.matches.create, args);
+  for (const [index, registrationId] of [args.maleRegistrationId, args.femaleRegistrationId].entries()) {
+    const sessionHash = "draft-session-" + index;
+    await t.run(ctx => ctx.db.insert("applicantSessions", { registrationId, sessionHash, createdAt: Date.now(), expiresAt: Date.now() + 60000 }));
+    const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash });
+    expect(dashboard.inbound).toEqual([]);
+    expect(dashboard.outbound).toEqual([]);
+    expect(dashboard.privateDocumented).toEqual([]);
+    expect(await t.query(api.femaleInterestWorkflow.getDashboard, { sessionHash })).toEqual([]);
+  }
+  for (const status of ["new", "reviewing", "paused", "closed", "declined"] as const) {
+    await t.run(ctx => ctx.db.patch(id, { status }));
+    for (const reverse of [false, true]) for (const linked of [false, true]) {
+      const ownerRegistrationId = reverse ? args.femaleRegistrationId : args.maleRegistrationId;
+      const recipientRegistrationId = reverse ? args.maleRegistrationId : args.femaleRegistrationId;
+      const share = { ownerRegistrationId, recipientRegistrationId, includeImages: false, shareToken: status + reverse + linked, ...(linked ? { matchId: id } : {}) };
+      await expect(t.mutation(api.profileShares.create, { ...share, adminSecret: secret })).rejects.toThrow("context");
+      await t.run(ctx => ctx.db.insert("profileShares", { ...share, status: "shared", createdAt: Date.now(), updatedAt: Date.now() }));
+      expect(await t.query(api.profileShares.getByShareToken, { shareToken: share.shareToken })).toBeNull();
+      await expect(t.mutation(api.profileShares.markViewed, { shareToken: share.shareToken })).rejects.toThrow("not found");
+    }
+  }
+});
+
+test("draft pause/resume cannot promote it; closing and private notes still work", async () => {
+  const { t, args } = await fixture();
+  const id = await t.mutation(api.matches.create, args);
+  await expect(t.mutation(api.matches.updateStatus, { adminSecret: secret, id, status: "paused" })).rejects.toThrow("Private drafts");
+  await expect(t.mutation(api.matches.resume, { adminSecret: secret, id })).rejects.toThrow("Private drafts");
+  await t.mutation(api.matches.updateStatus, { adminSecret: secret, id, status: "new", adminNotes: "Private edited note" });
+  await t.mutation(api.matches.updateStatus, { adminSecret: secret, id, status: "closed" });
+  expect(await t.run(ctx => ctx.db.get(id))).toMatchObject({ status: "closed", adminNotes: "Private edited note" });
+});
+
+
+test("legacy contact release survives pause/resume and retains an existing share token", async () => {
+  const { t, args } = await fixture();
+  const id = await t.run(ctx => ctx.db.insert("matches", { maleRegistrationId: args.maleRegistrationId, femaleRegistrationId: args.femaleRegistrationId, interestType: "admin_suggested", initiatedBy: "admin_recommendation", status: "contact_shared", createdAt: 1, updatedAt: 1 }));
+  await t.mutation(api.profileShares.create, { adminSecret: secret, ownerRegistrationId: args.maleRegistrationId, recipientRegistrationId: args.femaleRegistrationId, matchId: id, includeImages: false, shareToken: "historical" });
+  await t.mutation(api.matches.updateStatus, { adminSecret: secret, id, status: "paused" });
+  expect(await t.run(ctx => ctx.db.get(id))).toMatchObject({ status: "paused", contactGate: "contacts_released" });
+  expect(await t.query(api.profileShares.getByShareToken, { shareToken: "historical" })).not.toBeNull();
+  await t.mutation(api.matches.resume, { adminSecret: secret, id });
+  expect(await t.run(ctx => ctx.db.get(id))).toMatchObject({ status: "contact_shared", contactGate: "contacts_released" });
+  await t.mutation(api.matches.updateStatus, { adminSecret: secret, id, status: "closed" });
+  expect(await t.run(ctx => ctx.db.get(id))).toMatchObject({ status: "closed", contactGate: "contacts_released" });
+});
+
+test("a later draft does not revoke a previously shared context-free bio", async () => {
+  const { t, args } = await fixture();
+  await t.run(ctx => ctx.db.insert("profileShares", { ownerRegistrationId: args.maleRegistrationId, recipientRegistrationId: args.femaleRegistrationId, includeImages: false, shareToken: "predates-draft", status: "shared", createdAt: 1, updatedAt: 1 }));
+  await t.mutation(api.matches.create, args);
+  expect(await t.query(api.profileShares.getByShareToken, { shareToken: "predates-draft" })).not.toBeNull();
+});
