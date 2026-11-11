@@ -698,3 +698,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Added durable 15-minute rejection-notice grace and safe unsent re-rejection reset, authenticated admin status/reversal feedback, fake-clock/concurrency/legacy tests and synthetic browser coverage; preserved email text, bounded idempotent retries and live activation gate.
+
+## 2026-11-10
+- Completed isolated joined Chromium/real Next routes/real convex-test functions rejection E2E; retained evidence/joined harness and local-joined-result.md, no production code/config/sender changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Integrated confirmed Layla3350 grace policy additively; reran890 unit tests, joined real-route/function browser E2E,9 synthetic browser cases, types/lint/build; independent review PASS. No real mail/data/config/deploy changes. <!-- project: github.com/moeghashim/clawscrewskill -->
