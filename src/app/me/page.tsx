@@ -60,6 +60,7 @@ type DashboardInterest = {
 };
 
 type DashboardData = {
+  eventLogisticsRestricted?: boolean;
   requestedConnectionId?: string | null;
   applicant: {
     status?: string;
@@ -79,6 +80,7 @@ type DashboardData = {
 };
 
 type ApplicantEventData = {
+  logisticsRestricted?: boolean;
   upcoming: Array<{
     _id: string;
     title: string;
@@ -1114,11 +1116,13 @@ export default function ApplicantDashboardPage() {
               <div className="panel-head">
                 <div>
                   <h3>Events</h3>
-                  <p>Register for upcoming events and review your event history.</p>
+                  <p>{data.eventLogisticsRestricted || eventsData?.logisticsRestricted ? "Event details and registration are unavailable for your profile. Your registration history is retained." : "Register for upcoming events and review your event history."}</p>
                 </div>
               </div>
               <div className="interest-list">
-                {(eventsData?.upcoming || []).length ? (
+                {data.eventLogisticsRestricted || eventsData?.logisticsRestricted || eligibilityError ? (
+                  <p role="status">Event details are unavailable.</p>
+                ) : (eventsData?.upcoming || []).length ? (
                   eventsData?.upcoming.map((event) => (
                     <div key={event._id} className="interest-row" style={{ alignItems: "center" }}>
                       <div className="interest-row-main">
@@ -1163,8 +1167,8 @@ export default function ApplicantDashboardPage() {
                     {eventsData?.history.map((row) => (
                       <div key={row._id} className="interest-row">
                         <div className="interest-row-main">
-                          <h4>{row.event?.title ?? "Event"}</h4>
-                          <p>{row.event ? `${formatDate(row.event.startsAt)} · ${row.event.location}` : "-"}</p>
+                          <h4>{!data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError ? row.event?.title ?? "Event" : "Event registration"}</h4>
+                          <p>{!data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError && row.event ? `${formatDate(row.event.startsAt)} · ${row.event.location}` : "Details unavailable"}</p>
                         </div>
                         <div className="interest-row-meta">
                           <StatusBadge value={row.registrationStatus} />

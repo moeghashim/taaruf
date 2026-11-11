@@ -162,7 +162,7 @@ test("narrow eligibility query matches dashboard and never changes session on at
     await f.t.mutation(api.events.updateAttendanceStatus, { adminSecret: "selection-secret", eventRegistrationId: f.row, attendanceStatus });
     const eligibility = await refresh();
     const dashboard = await f.dashboard();
-    expect(eligibility).toEqual({ canSubmitInterest: dashboard.canSubmitInterest, interestSubmissionEventId: dashboard.interestSubmissionEventId, interestSubmissions: dashboard.interestSubmissions, interestSubmissionLimit: 3 });
+    expect(eligibility).toEqual({ eventLogisticsRestricted: dashboard.eventLogisticsRestricted, canSubmitInterest: dashboard.canSubmitInterest, interestSubmissionEventId: dashboard.interestSubmissionEventId, interestSubmissions: dashboard.interestSubmissions, interestSubmissionLimit: 3 });
     expect(eligibility.canSubmitInterest).toBe(attendanceStatus === "attended");
   }
   await f.submit();

@@ -693,3 +693,4 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Added isolated whole-profile rejection-notice transactional outbox, protected opt-in activation, immutable retries/reconciliation, synthetic tests, admin explanation and release documentation; no live activation.
+- Restrict applicant event logistics using current profile eligibility; retain status-only history, hide stale portal details on refresh, and add synthetic API/browser tests. No public-site, notification, live-data or deployment changes.
