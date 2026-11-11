@@ -1,5 +1,5 @@
-import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
 import { withCurrentAge } from "./birthdays";
+import { canReceiveEventMessages, requireEventMessagingEligibility } from "./eventMessagingEligibility";
 import { paginationOptsValidator } from "convex/server";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
@@ -387,15 +387,32 @@ export const getApplicantEvents = query({
   args: { sessionHash: v.string() },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
-    const events = await ctx.db.query("events").withIndex("by_startsAt").order("desc").take(100);
     const eventRegistrations = await ctx.db
       .query("eventRegistrations")
       .withIndex("by_registrationId", (q) => q.eq("registrationId", registration._id))
       .take(100);
+    // Read current profile in this transaction; allowlist history to exclude
+    // descriptions, title/date hints, and nested profile notes for blocked viewers.
+    if (!canReceiveEventMessages(registration)) {
+      return {
+        logisticsRestricted: true,
+        upcoming: [],
+        history: eventRegistrations.map(row => ({
+          _id: row._id,
+          registrationStatus: row.registrationStatus,
+          confirmationStatus: row.confirmationStatus,
+          attendanceStatus: row.attendanceStatus,
+          event: null,
+        })),
+        canSubmitInterest: false,
+      };
+    }
+    const events = await ctx.db.query("events").withIndex("by_startsAt").order("desc").take(100);
     const byEventId = new Map(eventRegistrations.map((row) => [row.eventId, row] as const));
     const eligibleEvent = await findEligibleInterestSubmissionEvent(ctx, registration._id);
 
     return {
+      logisticsRestricted: false,
       upcoming: events
         .filter((event) => event.status === "scheduled")
         .map((event) => ({

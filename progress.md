@@ -694,3 +694,20 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-10
 - Split applicant portal into four history-aware views; preserve forms/actions, legacy destinations and DOB privacy; add synthetic navigation/action coverage. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Applied Layla3403 DOB records/privacy copy and aligned six profile basics in one responsive grid; no required-field or age-validation changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Added isolated whole-profile rejection-notice transactional outbox, protected opt-in activation, immutable retries/reconciliation, synthetic tests, admin explanation and release documentation; no live activation.
+- Restrict applicant event logistics using current profile eligibility; retain status-only history, hide stale portal details on refresh, and add synthetic API/browser tests. No public-site, notification, live-data or deployment changes.
+- Combined rejection notice and logistics candidate: preserved lifetime dedup policy; hardened non-JSON rate-limit handling and synthetic browser external-origin blocking after independent review. Preview only, no activation or live deployment.
+
+## 2026-11-10
+- Added durable 15-minute rejection-notice grace and safe unsent re-rejection reset, authenticated admin status/reversal feedback, fake-clock/concurrency/legacy tests and synthetic browser coverage; preserved email text, bounded idempotent retries and live activation gate.
+
+## 2026-11-10
+- Completed isolated joined Chromium/real Next routes/real convex-test functions rejection E2E; retained evidence/joined harness and local-joined-result.md, no production code/config/sender changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Integrated confirmed Layla3350 grace policy additively; reran890 unit tests, joined real-route/function browser E2E,9 synthetic browser cases, types/lint/build; independent review PASS. No real mail/data/config/deploy changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Prepared rejection3391 additive release above feature97 and corrected birthday28b8aed; full1021 tests/types/lint/build plus9 synthetic browser and joined route gates passed; dedicated sender variables absent; production untouched pending parent slot. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Applicant copy3395: removed internal draft explanation; kept match presentation guidance. No admin draft behavior change.
