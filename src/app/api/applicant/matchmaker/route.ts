@@ -1,3 +1,5 @@
+import { matchmakerDeliveryConfig } from "@/lib/matchmaker-delivery";
+import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
@@ -11,7 +13,13 @@ function failure(error: unknown) {
 export async function GET() {
   const sessionHash = await getApplicantSessionHash();
   if (!sessionHash) return privateJson({ error: "Please sign in again." }, 401);
-  try { return privateJson(await getConvexClient().query(api.matchmakerMatching.getMine, { sessionHash })); }
+  try {
+    const client = getConvexClient();
+    const data = await client.query(api.matchmakerMatching.getMine, {sessionHash});
+    const config = matchmakerDeliveryConfig();
+    const readiness = config?.mode === "production" ? await client.query(api.matchmakerMatching.emailReadiness, {adminSecret: getAdminSecret()}) : null;
+    return privateJson({...data, emailEnabled: !!readiness?.activationAt});
+  }
   catch (error) { return failure(error); }
 }
 export async function POST(request: NextRequest) {

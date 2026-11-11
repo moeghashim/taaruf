@@ -5,8 +5,10 @@ import type { Id } from "../../convex/_generated/dataModel";
 /** Dedicated, opt-in sender. Never inherits another workflow's production approval. */
 export function matchmakerDeliveryConfig() {
   const mode = process.env.MATCHMAKER_EMAIL_MODE;
-  const key = process.env.MATCHMAKER_RESEND_API_KEY;
-  const from = process.env.MATCHMAKER_EMAIL_FROM;
+  if (process.env.MATCHMAKER_EMAIL_ENABLED !== "true") return null;
+  const shared = mode === "production" && process.env.MATCHMAKER_EMAIL_TRANSPORT === "transactional";
+  const key = shared ? process.env.RESEND_API_KEY : process.env.MATCHMAKER_RESEND_API_KEY;
+  const from = shared ? "1Plus1 Match <contact@1plus1match.com>" : process.env.MATCHMAKER_EMAIL_FROM;
   const portal = process.env.MATCHMAKER_PORTAL_URL;
   if (!key || !from || !portal || !["isolated", "production"].includes(mode ?? "")) return null;
   if (mode === "production" && process.env.MATCHMAKER_PRODUCTION_APPROVED !== "true") return null;
