@@ -1224,3 +1224,19 @@
 /* Longer sister response label wraps within the shared invitation hierarchy. */
 [data-admin] .sister-confirmation .interest-invitation-actions { min-width: 0; flex-shrink: 1; }
 [data-admin] .sister-confirmation .btn { white-space: normal; text-align: center; }
+
+/* Admin workbench: shared row tracks keep long saved answers aligned. */
+[data-admin] .workbench-profile-comparison { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+[data-admin] .comparison-profile { min-width: 0; }
+[data-admin] .comparison-profile-body { min-width: 0; overflow-wrap: anywhere; }
+[data-admin] .comparison-profile .fact { grid-template-columns: minmax(0, 100px) minmax(0, 1fr); }
+@media (min-width: 1000px) {
+  [data-admin] .workbench-profile-comparison { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-admin] .comparison-profile { display: grid; grid-template-rows: subgrid; grid-row: span 15; }
+  [data-admin] .comparison-profile-body { grid-template-rows: subgrid; grid-row: span 14; align-items: start; }
+}
+
+@media (min-width: 1000px) {
+  [data-admin] .comparison-profile .fact-list { display: grid; grid-template-rows: subgrid; grid-row: span 8; }
+  [data-admin] .comparison-profile .fact { height: 100%; box-sizing: border-box; align-items: start; }
+}
