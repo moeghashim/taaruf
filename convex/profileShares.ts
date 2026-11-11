@@ -1,3 +1,4 @@
+import { interestBioVisible } from "./bioVisibility";
 import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { currentAge, withCurrentAge } from "./birthdays";
 import { capabilityAllowed } from "./capabilitySecurity";
@@ -132,6 +133,11 @@ export const getByShareToken = query({
     const owner = await ctx.db.get(share.ownerRegistrationId);
     const recipient = await ctx.db.get(share.recipientRegistrationId);
 
+    const linkedInterest = await resolvedInterest(ctx, share);
+    // Exact linked interest only: a reverse/event sibling never grants bio access.
+    // Standalone legacy grants have no attributable interest; preserve them pending explicit migration.
+    // Manual matchmaker presentations are a separate lifecycle, unchanged here.
+    const bioVisible = linkedInterest ? await interestBioVisible(ctx, linkedInterest) : linkedInterest === null;
     const includeImages = await imagesAllowed(ctx, share, owner);
     const images = includeImages ? (await Promise.all((owner?.imageStorageIds ?? []).map(async storageId => ({ storageId, url: await ctx.storage.getUrl(storageId) })))).filter((image): image is { storageId: typeof image.storageId; url: string } => image.url !== null) : [];
     return {
@@ -143,7 +149,7 @@ export const getByShareToken = query({
         education: owner.education, job: owner.job, ethnicity: owner.ethnicity,
         prayerCommitment: owner.prayerCommitment, hijabResponse: owner.hijabResponse,
         spouseRequirement1: owner.spouseRequirement1, spouseRequirement2: owner.spouseRequirement2,
-        spouseRequirement3: owner.spouseRequirement3, shareableBio: owner.shareableBio,
+        spouseRequirement3: owner.spouseRequirement3, shareableBio: bioVisible ? owner.shareableBio : undefined,
         photoSharingPermission: owner.photoSharingPermission,
         imageStorageIds: includeImages ? owner.imageStorageIds : [],
       } : null,

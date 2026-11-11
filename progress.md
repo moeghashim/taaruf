@@ -735,3 +735,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Layla3472: applicant-only neutral decision notices and DTOs across event interests, female reviews, matchmaker introductions, and future email copy; own decisions/admin detail retained, progression/contact/bio gates unchanged. Preview-only; frozen email retries and workflow timing can still reveal historical/progression information.
+
+- Layla3477 supersedes earlier unchanged-bio scope: exact-interest initial acceptance now gates bios in applicant list/detail, female review, and linked shares. Existing context-free share grants and manual matchmaker lifecycle remain separate; no migration or progression change. Read-only email audit found zero frozen payloads.

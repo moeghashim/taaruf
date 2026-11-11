@@ -540,7 +540,7 @@ describe("interest rules", () => {
       spouseRequirement2: "Visible Male requirement two",
       spouseRequirement3: "Visible Male requirement three",
       photoSharingPermission: "ask_me_first",
-      shareableBio: "Visible Male bio text",
+      shareableBio: null, // Initial interest has not been accepted.
       label: "Visible Male",
       email: null,
       phone: null,
@@ -556,7 +556,7 @@ describe("interest rules", () => {
       job: "Engineer",
       ethnicity: "Arab",
       spouseRequirement1: "Visible Female requirement one",
-      shareableBio: "Visible Female bio text",
+      shareableBio: null, // Initial interest has not been accepted.
       label: "Applicant #2",
       email: null,
       phone: null,
@@ -742,7 +742,7 @@ describe("interest rules", () => {
       job: "Engineer",
       ethnicity: "Arab",
       spouseRequirement1: "Documented Male requirement one",
-      shareableBio: "Documented Male bio text",
+      shareableBio: null, // Private documentation is not initial acceptance.
       label: "Documented Male",
       email: null,
       phone: null,
