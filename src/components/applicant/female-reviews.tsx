@@ -140,6 +140,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       const response = await fetch(["pause", "resume"].includes(String(body.action)) ? "/api/applicant/interests" : "/api/applicant/female-review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(["pause", "resume"].includes(String(body.action)) ? { ...body, action: body.action === "pause" ? "pause_connection" : "resume_connection" } : body) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to record your decision.");
+      window.dispatchEvent(new Event("applicant-interest-updated"));
       if (selectedRef.current !== actionSelection) { await load(); return; }
       setMessage(body.action === "pause" ? "Connection paused." : body.action === "resume" ? "Connection resumed. New contact disclosure still requires final admin approval." : body.action === "respond" && body.decision === "accept" ? "Initial acceptance recorded. Review the bio, then choose Approve or Decline. No final approval or contact sharing has occurred." : "Your decision is recorded. Contact details stay private until final admin approval.");
       setAccess(null);
