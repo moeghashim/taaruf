@@ -117,6 +117,9 @@ export const finish = internalMutation({ args: { id: v.id("femaleWorkflowDeliver
   // Retired epochs accept evidence only, never workflow writes, retries or
   // sibling/cooldown changes. Keep the original frozen payload/errors intact.
   if (row.resetAuditId !== undefined) {
+    // Preserve every callback, including superseded attempts and duplicate
+    // callbacks, separately from the convenience latest-outcome summary.
+    await ctx.db.insert("retiredDeliveryResults", { deliveryId: row._id, resetAuditId: row.resetAuditId, attempt: args.attempt, success: args.success, receivedAt: Date.now(), ...(args.error !== undefined ? { error: args.error } : {}), ...(args.rateLimited !== undefined ? { rateLimited: args.rateLimited } : {}), ...(args.retryAfterMs !== undefined ? { retryAfterMs: args.retryAfterMs } : {}) });
     if (row.attempts === args.attempt && row.firstAttemptAt !== undefined && row.providerPayload && (!row.lateResult || (!row.lateResult.success && args.success))) {
       await ctx.db.patch(row._id, { lateResult: { attempt: args.attempt, success: args.success, receivedAt: Date.now(), ...(args.error ? { error: args.error } : {}) } });
     }
@@ -147,7 +150,18 @@ export const authorizeSend = internalMutation({ args: { id: v.id("femaleWorkflow
   const row = await ctx.db.get(args.id);
   if (!row || row.resetAuditId !== undefined || row.status !== "sending" || row.attempts !== args.attempt || !row.leaseUntil || row.leaseUntil <= Date.now() || !row.providerPayload) return false;
   if (!await deliveryAuthorized(ctx, row)) return false;
-  try { await participants(ctx, row.interestId); } catch { return false; }
+  try {
+    const { workflow, sister, brother } = await participants(ctx, row.interestId);
+    const recipient = row.recipientId === sister._id ? sister : row.recipientId === brother._id ? brother : null;
+    if (!recipient || row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== recipient.email) return false;
+    if (row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) return false;
+    if (row.kind === "sister_confirmation") {
+      const interest = await ctx.db.get(row.interestId);
+      if (!interest || row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation" || !currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email)) return false;
+    }
+    if (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") return false;
+    if (row.kind === "contacts_ready" && workflow.state !== "contacts_released") return false;
+  } catch { return false; }
   return true;
 }});
 export function deliveryConfig(email: string) {

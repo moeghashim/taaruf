@@ -280,6 +280,8 @@ test("old in-flight late failure/429 then success preserve evidence without chan
   expect(await t.run(ctx => ctx.db.get(newer))).toEqual(newBefore);
   await t.mutation(internal.femaleWorkflowDelivery.finish, { id: row._id, attempt: row.attempts, success: false, retry: true });
   expect(await t.run(ctx => ctx.db.get(row._id))).toEqual(after); expect(provider).not.toHaveBeenCalled();
+  const evidence = await t.run(ctx => ctx.db.query("retiredDeliveryResults").withIndex("by_deliveryId", q => q.eq("deliveryId", row._id)).collect());
+  expect(evidence.map(e => [e.attempt, e.success, e.error])).toEqual([[row.attempts + 1, true, undefined], [row.attempts, false, "late HTTP429"], [row.attempts, true, undefined], [row.attempts, false, undefined]]);
 });
 
 test("reset between payload freeze and final pre-send check prevents external fetch", async () => {
@@ -298,4 +300,15 @@ test("reset between payload freeze and final pre-send check prevents external fe
     return result;
   } }, {});
   expect(calls).toBe(3); expect(provider).not.toHaveBeenCalled();
+});
+
+for (const drift of ["recipient", "workflow"] as const) test("final pre-send authorization rejects " + drift + " drift after freezing", async () => {
+  const { t, sister, interestId } = await accepted(); isolated();
+  const [row] = await t.mutation(internal.femaleWorkflowDelivery.claim, {});
+  expect(await t.mutation(internal.femaleWorkflowDelivery.markAttempt, { id: row._id, attempt: row.attempts })).toBeTruthy();
+  await t.run(async ctx => {
+    if (drift === "recipient") await ctx.db.patch(sister, { email: "changed@example.com" });
+    else { const interest = (await ctx.db.get(interestId))!; await ctx.db.patch(interestId, { femaleWorkflow: { ...interest.femaleWorkflow!, state: "pending_admin_approval" } }); }
+  });
+  expect(await t.mutation(internal.femaleWorkflowDelivery.authorizeSend, { id: row._id, attempt: row.attempts })).toBe(false);
 });
