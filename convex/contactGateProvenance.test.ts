@@ -2,7 +2,7 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import schema from "./schema";
 import { modules } from "./test.setup";
-import { joinApprovedPair, recordPairApproval } from "./contactGate";
+import { joinApprovedPair, recordPairApproval, releasePairContacts } from "./contactGate";
 
 async function fixture(state: "revoked" | "closed" | "reset" | "active" = "revoked", crossEvent = false) {
   const t = convexTest(schema, modules);
@@ -88,4 +88,27 @@ for (const declineFirst of [true, false]) test("concurrent contradictory final a
   const flow = await f.t.run(ctx => ctx.db.get(f.reverseFlow));
   const matches = await f.t.run(ctx => ctx.db.query("matches").take(10));
   expect(matches).toHaveLength(flow?.requesterFinalApproval === "approved" ? 1 : 0);
+});
+
+
+test("legacy pending match remains admin-release eligible without retroactive explicit certification", async () => {
+  const f = await fixture("active");
+  const matchId = await f.t.run(async ctx => {
+    // Exclude the unrelated unlinked reverse; preserve the original historical pair.
+    await ctx.db.patch(f.reverse, {status: "closed"});
+    const id = await ctx.db.insert("matches", {maleRegistrationId: f.brother, femaleRegistrationId: f.sister, interestId: f.origin, interestType: "mutual_interest", status: "reviewing", contactGate: "pending_admin_approval", initiatedBy: "interest_signal", createdAt: 12, updatedAt: 12});
+    await ctx.db.patch(f.origin, {matchId: id, status: "converted_to_match"});
+    return id;
+  });
+  const before = await f.t.run(ctx => ctx.db.get(f.originFlow));
+  expect(before?.recipientExplicitFinalAt).toBeUndefined();
+  expect(before?.requesterExplicitFinalAt).toBeUndefined();
+  await f.t.run(async ctx => releasePairContacts(ctx, (await ctx.db.get(matchId))!));
+  expect(await f.t.run(ctx => ctx.db.get(matchId))).toMatchObject({status: "contact_shared", contactGate: "contacts_released"});
+  const after = await f.t.run(ctx => ctx.db.get(f.originFlow));
+  expect(after?.recipientExplicitFinalAt).toBeUndefined();
+  expect(after?.requesterExplicitFinalAt).toBeUndefined();
+  expect(after?.recipientFinalApprovalAt).toBe(before?.recipientFinalApprovalAt);
+  expect(after?.requesterFinalApprovalAt).toBe(before?.requesterFinalApprovalAt);
+  expect(after?.contactSharedAt).toBeDefined();
 });

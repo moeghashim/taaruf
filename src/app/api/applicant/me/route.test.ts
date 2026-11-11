@@ -342,6 +342,8 @@ test("real sister projection moves at actual share before target acceptance", as
  await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId:id,decision:"accept"});
  expect((await categories()).outbound.map(row=>row.interestId)).toEqual([id]);
  await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId:id,confirmed:true});
+ expect((await t.run(ctx=>ctx.db.get(id)))!.matchId).toBeUndefined();
+ await t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"brother",interestId:id,approved:true});
  const matchId=(await t.run(ctx=>ctx.db.get(id)))!.matchId!;
  await t.mutation(api.matches.updateStatus,{adminSecret:secret,id:matchId,status:"contact_shared"});
  expect((await categories()).outbound[0].counterparty?.email).toBe("brother@example.invalid");

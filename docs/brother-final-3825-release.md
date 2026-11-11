@@ -2,7 +2,7 @@
 
 ## Scope and base
 - Isolated branch starts at live PR147 SHA 5a80a4d729514cfdab5f8ad3007ca73844241611.
-- PR148 candidate 4d12c3f23be590885f13e576572a14d617e4e614 is NOT an ancestor and is not included.
+- Initial candidate fb83129565e44b9d3c7a6dfd0298fdc39b40c1e9 excluded then-unreleased PR148. Superseding user instruction: PR148 is now LIVE at ec45f4838c0d7a74c461bdfbb42f43781e7ecffe; merge 830c4af preserves that ancestry append-only. Both original candidates and published history remain intact.
 - No production backend/frontend deployment, migration, applicant mutation, email activation, configuration change, or human DCO authorization is part of implementation.
 - Original dirty checkout and existing worktrees/history are preserved.
 
@@ -18,13 +18,13 @@
 An internal pending-admin match is not contact release. Both explicit final consents permit existing pair aggregation to create/link the internal match; sharing email/phone still requires the independent admin release gate. Initial acceptance alone must never call pair joining, even if another approval exists. Do not broaden creation rules beyond separating initial and final consent.
 
 ## PR148 compatibility
-PR148's overlapping female-reviews hunk dispatches applicant-interest-updated following a successful POST; its classification changes are separate. Preserve that event when combining later; do not cherry-pick the full candidate into this release. Re-test outbound routing and final-stage notification classification on the eventual combined head.
+PR148 is now integrated from its certified live SHA. The overlapping female-reviews hunk retains applicant-interest-updated following a successful POST, with sister reviews routed under Outbound. Integrated tests must cover outbound routing plus final-stage notification classification.
 
 ## Historical handling
 - Optional requesterExplicitFinalAt/recipientExplicitFinalAt record only fresh authenticated source actions; they are never propagated onto reciprocal rows.
 - Ambiguous unmatched brother approvals (including old propagated events) do not authorize joining. Preserved closed/revoked/reset same-event female origins are considered when detecting ambiguity. Missing origin acceptance timestamps conservatively require fresh consent. Genuine timestamp-distinct reciprocal final events remain recognized.
 - No bulk backfill, clearing, match mutation, or migration runs on deployment. A fresh explicit final action records its own new evidence; it is not a retrospective certification of the old click.
-- Already matched historical records retain their previous admin-release eligibility and disclosure history. Approval retries do not retroactively certify them. **Release decision required:** approve this compatibility boundary, or separately authorize a historical audit/reconfirmation policy. This implementation does not pretend all historical matches have newly informed consent.
+- Already matched historical records retain their previous admin-release eligibility and disclosure history. Approval retries do not retroactively certify them. **Safety consequence:** an unreleased legacy pending match whose brother approval came from the old initial click can still be released by an admin without a new post-bio brother final. The new source markers are required for new joins, not retroactively required by releasePairContacts for an existing match. **Explicit policy decision required before release:** either knowingly preserve this grandfathered eligibility, or separately authorize a narrowly scoped hold/reconfirmation design for unreleased legacy matches. No historic migration, hold, re-confirmation, reset, or contact release has been executed. Already disclosed contacts/history must remain preserved.
 - Accepted-but-expired brother reviews fail closed. Current admin reissue only supports the initial stage. **Separate recovery decision required** for those rows; no resets, silent token resurrection, or bulk renewal included.
 
 ## Changed deployed modules
@@ -36,4 +36,6 @@ PR148's overlapping female-reviews hunk dispatches applicant-interest-updated fo
 - Frontend/API: applicant female-review route, FemaleReviews, ReviewNextSteps, stage-aware received-interest notification helper.
 
 ## Validation boundary
-Convex-test executes real backend handlers against isolated in-memory data. Browser tests exercise real frontend components with synthetic API interception and outbound-network blocking. Hosted preview APIs remain disabled by existing preview-isolation middleware; a deployed isolated backend is still required for live-like full-stack approval testing.
+Convex-test executes real backend handlers against isolated in-memory data. Eleven initial browser cases used synthetic interception. Superseding proof: actual Chromium → unmodified Next API → actual cached local Convex backend passed on application SHA 830c4af3abc431b2db643cf066e7b2bd61788f4b, fresh synthetic SQLite/storage, no mocks. Both final-approval orders and either final decline passed; initial-only no-final/no-match and pre-release contact privacy verified. Legacy pending-match release eligibility separately proved on synthetic data. Evidence: privateops/brother-final3825-fullstack/{README.md,proof.json,legacy-proof.json,SHA256SUMS}. No paid resources or hosted backend touched; local servers stopped. Hosted Vercel preview remains UI-review-only and SSO-protected; localhost proof is not hosted end-to-end proof.
+
+Existing UI caveat preserved from live PR148: sister row is correctly Outbound, but selected review controls mount in the shared Inbound section (same FemaleReviews placement in latest live source). Actual outbound-row navigation and final controls work; relocating that shared panel is a separate UI correction, not a consent bypass.
