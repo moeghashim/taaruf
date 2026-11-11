@@ -60,7 +60,8 @@ test("older legitimate shares remain readable despite a later withdrawn recommen
 });
 test("provider cooldown persists across requests without consuming another claim",async()=>{
  const {t,matchId,male,female}=await fixture();
- await t.mutation(api.matchmakerMatching.present,{adminSecret:"review-secret",matchId});
+ await t.run(ctx=>ctx.db.insert("settings", {key:"matchmakerEmailActivationAt",value:String(Date.now()-1000)}));
+ await t.mutation(api.matchmakerMatching.present,{adminSecret:"review-secret",matchId,emailReady:true});
  const first=await t.mutation(api.matchmakerMatching.claimNotification,{adminSecret:"review-secret",matchId,recipientId:male});
  await t.mutation(api.matchmakerMatching.recordNotification,{adminSecret:"review-secret",deliveryId:first!.deliveryId,sent:false,retryAfterMs:3600000});
  expect(await t.mutation(api.matchmakerMatching.claimNotification,{adminSecret:"review-secret",matchId,recipientId:female})).toBeNull();

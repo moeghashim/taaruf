@@ -1,4 +1,5 @@
 "use client";
+import { comparisonProfileDetails } from "./comparison-profile-details";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useProfileEventPages } from "@/components/admin/hooks/use-profile-event-pages";
@@ -346,6 +347,8 @@ function ProfileComparison({
 }) {
   const renderProfile = (registration: RegistrationWithImages | null, number?: number, label?: string) => (
     <section
+      className="comparison-profile"
+      aria-label={label}
       style={{
         border: "1px solid var(--line)",
         borderRadius: 8,
@@ -356,11 +359,11 @@ function ProfileComparison({
       <div className="panel-head">
         <h3>{label}</h3>
       </div>
-      <div style={{ padding: 16, display: "grid", gap: 14 }}>
+      <div className="comparison-profile-body" style={{ padding: 16, display: "grid", gap: 14 }}>
         <ApplicantLink registration={registration} number={number} />
         {registration ? (
           <>
-            {registration.imageUrls?.length ? (
+            <div className="comparison-photos">{registration.imageUrls?.length ? (
               <div
                 style={{
                   display: "grid",
@@ -384,7 +387,7 @@ function ProfileComparison({
                   />
                 ))}
               </div>
-            ) : null}
+            ) : null}</div>
             <div className="fact-list">
               <div className="fact">
                 <div className="k">Status</div>
@@ -398,20 +401,12 @@ function ProfileComparison({
                   {registration.paymentStatus ? <StatusPill status={registration.paymentStatus} /> : "-"}
                 </div>
               </div>
-              <div className="fact">
-                <div className="k">Background</div>
-                <div className="v">{registration.ethnicity || registration.maritalStatus || "-"}</div>
-              </div>
-              <div className="fact">
-                <div className="k">Prayer</div>
-                <div className="v">{registration.prayerCommitment ? titleize(registration.prayerCommitment) : "-"}</div>
-              </div>
-              <div className="fact">
-                <div className="k">Photos</div>
-                <div className="v">
-                  {registration.photoSharingPermission ? titleize(registration.photoSharingPermission) : "-"}
+              {comparisonProfileDetails(registration).map(({ label, value }) => (
+                <div className="fact" key={label}>
+                  <div className="k">{label}</div>
+                  <div className="v">{value}</div>
                 </div>
-              </div>
+              ))}
             </div>
             <div>
               <h4 style={{ fontSize: 11, color: "var(--mute)", textTransform: "uppercase", marginBottom: 8 }}>
@@ -458,7 +453,7 @@ function ProfileComparison({
   );
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+    <div className="workbench-profile-comparison">
       {renderProfile(left, leftNumber, "Requester")}
       {renderProfile(right, rightNumber, "Target")}
     </div>

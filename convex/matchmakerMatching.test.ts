@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { modules } from "./test.setup";
 const secret = "synthetic-matchmaker";
@@ -18,7 +18,9 @@ async function fixture() {
   return {male,female,other};
  });
  const matchId = await t.mutation(api.matches.create, {adminSecret:secret, maleRegistrationId:ids.male, femaleRegistrationId:ids.female, adminNotes:"secret note"});
- const present = () => t.mutation(mm.present,{adminSecret:secret,matchId});
+ await t.mutation(internal.matchmakerMatching.prepareEmailActivation, {});
+ await t.run(async ctx => {const s = await ctx.db.query("settings").withIndex("by_key", q => q.eq("key", "matchmakerEmailActivationAt")).unique(); await ctx.db.patch(s!._id, {value: String(Date.now()-1000)});});
+ const present = () => t.mutation(mm.present,{adminSecret:secret,matchId,emailReady:true});
  const optin = async () => {for (const sessionHash of ["male","female"]) await t.mutation(mm.setConsent,{sessionHash,optedIn:true});};
  return {t,...ids,matchId,present,optin};
 }
@@ -148,4 +150,40 @@ test.each([false,true])("missing partner retains introduction history (shared=%s
  expect(await t.run(ctx=>ctx.db.get(matchId))).toEqual(before);
  expect(JSON.stringify(result)).not.toContain("woman@example.invalid");
  expect((await t.query(mm.getMine,{sessionHash:"other"})).matches).toEqual([]);
+});
+
+test("disabled presentation never becomes historical queue",async()=>{
+ const {t,optin,matchId,male}=await fixture();await optin();
+ await t.mutation(mm.present,{adminSecret:secret,matchId,emailReady:false});
+ await t.mutation(mm.present,{adminSecret:secret,matchId,emailReady:true});
+ expect(await t.mutation(mm.claimNotification,{adminSecret:secret,matchId,recipientId:male})).toBeNull();
+ expect((await t.run(ctx=>ctx.db.query("matchmakerNotifications").collect())).every(n=>n.status==="failed" && n.activationAt===undefined)).toBe(true);
+});
+test("legacy pending rows without activation stamp cannot send",async()=>{
+ const {t,optin,present,matchId,male}=await fixture();await optin();await present();
+ await t.run(async ctx=>{for(const n of await ctx.db.query("matchmakerNotifications").collect())await ctx.db.patch(n._id,{activationAt:undefined});});
+ expect(await t.mutation(mm.claimNotification,{adminSecret:secret,matchId,recipientId:male})).toBeNull();
+});
+test("activation is immutable and readiness requires admin",async()=>{
+ const {t}=await fixture();const first=await t.mutation(internal.matchmakerMatching.prepareEmailActivation,{});
+ expect(await t.mutation(internal.matchmakerMatching.prepareEmailActivation,{})).toEqual(first);
+ await expect(t.query(mm.emailReadiness,{})).rejects.toThrow("Unauthorized");
+});
+test("partner optout prevents recipient send",async()=>{
+ const {t,optin,present,matchId,male}=await fixture();await optin();await present();
+ await t.mutation(mm.setConsent,{sessionHash:"female",optedIn:false});
+ expect(await t.mutation(mm.claimNotification,{adminSecret:secret,matchId,recipientId:male})).toBeNull();
+});
+
+test('generic settings cannot create or change matching activation cutoff', async () => {
+ const t = convexTest(schema, modules);
+ const key = 'matchmakerEmailActivationAt';
+ await expect(t.mutation(api.settings.set, {adminSecret:secret,key,value:'1'})).rejects.toThrow('immutable');
+ expect(await t.query(mm.emailReadiness,{adminSecret:secret})).toEqual({activationAt:null});
+ const original = await t.mutation(internal.matchmakerMatching.prepareEmailActivation,{});
+ for (const value of ['1',String(original.activationAt+1),'invalid','0']) {
+  await expect(t.mutation(api.settings.set,{adminSecret:secret,key,value})).rejects.toThrow('immutable');
+  expect(await t.query(mm.emailReadiness,{adminSecret:secret})).toEqual(original);
+ }
+ expect(await t.mutation(internal.matchmakerMatching.prepareEmailActivation,{})).toEqual(original);
 });

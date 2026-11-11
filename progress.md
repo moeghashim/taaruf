@@ -717,3 +717,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Harden workbench New match discoverability with an explicit accessible creation group before event filters; retain existing private draft/present flow and backend gates. Hide zero-date sentinel, add action and nine-state browser regressions. Fresh live screenshot mismatch remains unexplained; no deployment.
 ## 2026-11-10 — cancellation integration
 - Preserved newest live b5320f9 and integrated only unchanged approved cancellation module/tests plus original additive audit table; no reset, sends or activation.
+
+## 2026-11-10
+- Prepare future-only matching emails: immutable activation stamps, explicit transactional transport reuse, fresh-Present-only send and readiness-gated applicant copy; no live activation.
+
+## 2026-11-10
+- Add admin workbench saved Ethnicity, Education and applicable Hijab comparison facts, responsive aligned rows, mapping and synthetic browser/auth regressions. No backend/public profile changes or live deployment.
+
+## 2026-11-10 — matching integration3430
+- Integrated cancellation94db707 with frontend120, future-only email121 and comparison122 in an isolated candidate; protected matching cutoff from generic settings mutation after independent review and added readiness regressions. Portal119 still pending; no live/config/email writes. <!-- project: github.com/moeghashim/clawscrewskill -->
