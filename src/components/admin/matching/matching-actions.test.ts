@@ -22,6 +22,20 @@ test("female requester action uses authenticated review creation, never prioriti
   expect(button).toBeDefined(); await button.props.onClick!();
   expect(fetchMock).toHaveBeenCalledWith("/api/admin/female-review", expect.objectContaining({ body: JSON.stringify({ action: "create", interestId: "interest" }) }));
 });
+test("private documented omits the redundant label without an empty row or losing its action", () => {
+  const tree = FemaleWorkflowActions({ interestId: "interest", state: "private_documented" });
+  const markup = renderToStaticMarkup(tree);
+  expect(markup).not.toContain("private documented");
+  expect(markup).not.toContain("<span");
+  expect(markup).toContain("Share requester profile");
+  expect(tree.props.children.filter(Boolean)).toHaveLength(1);
+});
+test("other workflow status labels and controls remain visible", () => {
+  const markup = renderToStaticMarkup(FemaleWorkflowActions({ interestId: "interest", state: "awaiting_brother_review" }));
+  expect(markup).toContain("awaiting brother review");
+  expect(markup).toContain("Reissue review link");
+  expect(markup).toContain("Revoke review");
+});
 test("contact release renders only for an approved official match", () => {
   for (const invalid of [null, { ...match, interestId: undefined }, { ...match, contactGate: undefined }, { ...match, status: "closed" }, { ...match, status: "contact_shared" }, { ...match, testResetAt: 1 }]) {
     expect(renderToStaticMarkup(createElement(ContactRelease, { match: invalid as Doc<"matches"> | null, onMessage: vi.fn() }))).not.toContain("Share contacts");

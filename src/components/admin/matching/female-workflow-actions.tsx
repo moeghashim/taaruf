@@ -27,7 +27,7 @@ export function FemaleWorkflowActions({ interestId, state, compact = false }: { 
     finally { setBusy(false); }
   }
   return <div style={{ display: "grid", gap: 8 }}>
-    <span>{state.replaceAll("_", " ")}</span>
+    {state !== "private_documented" && <span>{state.replaceAll("_", " ")}</span>}
     <div className="action-row">
       {state === "private_documented" && <button type="button" className={compact ? "btn btn-sm btn-primary" : "btn btn-primary"} disabled={busy} onClick={() => void act("create")}>{busy ? "Creating…" : "Share requester profile"}</button>}
       {state === "awaiting_brother_review" && <button type="button" className="btn" disabled={busy} onClick={() => void act("create")}>Reissue review link</button>}
