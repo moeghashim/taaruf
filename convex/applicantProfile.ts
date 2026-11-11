@@ -1,3 +1,4 @@
+import { currentAge, ownerDateOfBirth, saveDateOfBirth } from "./birthdays";
 import { sessionAllowed } from "./capabilitySecurity";
 import { assertImageOwnership } from "./imageAuthorization";
 import { validateEducationUpdate } from "../src/lib/education";
@@ -132,6 +133,8 @@ export const getProfile = query({
 
     return {
       registration: {
+        age: await currentAge(ctx, registration),
+        dateOfBirth: await ownerDateOfBirth(ctx, registration._id),
         name: registration.name,
         gender: registration.gender,
         email: registration.email,
@@ -159,6 +162,7 @@ export const getProfile = query({
 export const updateProfile = mutation({
   args: {
     sessionHash: v.string(),
+    dateOfBirth: v.optional(v.string()),
     education: v.optional(v.string()),
     ethnicity: v.string(),
     imageStorageIds: v.array(v.id("_storage")),
@@ -177,6 +181,7 @@ export const updateProfile = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
 
     await assertImageOwnership(ctx, registration._id, args.imageStorageIds);
+    await saveDateOfBirth(ctx, registration._id, args.dateOfBirth);
     validateEducationUpdate(args.education, registration.education);
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {

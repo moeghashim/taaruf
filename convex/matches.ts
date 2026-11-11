@@ -1,3 +1,4 @@
+import { withCurrentAge } from "./birthdays";
 import { paginationOptsValidator } from "convex/server";
 import { sessionAllowed } from "./capabilitySecurity";
 import { assertMatchInterest, releasePairContacts, setPairPaused, assertParticipantsAvailable } from "./contactGate";
@@ -89,8 +90,8 @@ export const getAll = query({
 
         return {
           ...match,
-          maleRegistration,
-          femaleRegistration,
+          maleRegistration: await withCurrentAge(ctx, maleRegistration),
+          femaleRegistration: await withCurrentAge(ctx, femaleRegistration),
           interest,
         };
       })
@@ -588,8 +589,8 @@ export const workbenchPage = query({
 
         return {
           ...match,
-          maleRegistration,
-          femaleRegistration,
+          maleRegistration: await withCurrentAge(ctx, maleRegistration),
+          femaleRegistration: await withCurrentAge(ctx, femaleRegistration),
           interest,
         };
       })

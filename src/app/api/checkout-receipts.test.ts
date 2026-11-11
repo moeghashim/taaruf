@@ -60,7 +60,7 @@ for (const kind of ["checkout", "paid webhook", "expired webhook", "payment repa
   mocks.mutation.mockRejectedValue(failure);
   if (kind === "checkout") {
     mocks.query.mockResolvedValue(null);
-    expect((await checkout(new NextRequest("https://example.invalid", { method: "POST", body: JSON.stringify({ name: "Synthetic", age: 30, gender: "male", maritalStatus: "single", education: "College", job: "Test", email: "synthetic@example.invalid", phone: "synthetic", ethnicity: "Test", prayerCommitment: "always_five", hijabResponse: "no", spouseRequirement1: "one", spouseRequirement2: "two", spouseRequirement3: "three", shareableBio: "Synthetic", photoSharingPermission: "ask_me_first", imageStorageIds: ["synthetic-image"] }) }))).status).toBe(500);
+    expect((await checkout(new NextRequest("https://example.invalid", { method: "POST", body: JSON.stringify({ name: "Synthetic", dateOfBirth: "1996-01-01", gender: "male", maritalStatus: "single", education: "College", job: "Test", email: "synthetic@example.invalid", phone: "synthetic", ethnicity: "Test", prayerCommitment: "always_five", hijabResponse: "no", spouseRequirement1: "one", spouseRequirement2: "two", spouseRequirement3: "three", shareableBio: "Synthetic", photoSharingPermission: "ask_me_first", imageStorageIds: ["synthetic-image"] }) }))).status).toBe(500);
   } else if (kind === "interest") {
     expect((await interest(new NextRequest("https://example.invalid", { method: "POST", body: JSON.stringify({ action: "submit_number", applicantNumber: 42, applicantName: "Synthetic", expectedEventId: "synthetic", photoConsent: "no" }) }))).status).toBe(500);
   } else if (kind === "payment repair") {
