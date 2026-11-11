@@ -670,3 +670,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Clarify sister final-approval notice in female-reviews.tsx using the existing prominent invitation style; add scoped wrapping CSS and synthetic 320/390/1280 consent/navigation/stale-state regression coverage. No backend or workflow changes.
+
+- Review click3226: preserve decision button identity/geometry during focus revalidation, hide sensitive profile until revalidated, reject stale access responses, guard duplicate submissions and expose pending feedback; add synthetic mouse/touch/decision/error regression tests. No backend changes.
