@@ -138,3 +138,39 @@ test("legacy unattempted notices never send retroactively and status requires ad
  await expect(t.query(api.profileRejectionNotice.status, {registrationId: id})).rejects.toThrow("Unauthorized");
  expect(await t.query(api.profileRejectionNotice.status, {registrationId: id, adminSecret: secret})).toEqual({state: "cancelled", notBefore: null, attempted: false});
 });
+
+// Shared login-link transport is authorized; rejection authorization is independent.
+test("shared transactional credential uses existing sender and frozen retries", async () => {
+ vi.stubEnv("PROFILE_REJECTION_NOTICE_RESEND_API_KEY", "");
+ vi.stubEnv("PROFILE_REJECTION_NOTICE_FROM", "");
+ vi.stubEnv("RESEND_API_KEY", "synthetic-shared");
+ const {t,update,rows}=await setup(); await update("rejected");
+ vi.setSystemTime(Date.now()+GRACE_MS);
+ const fetcher=vi.fn().mockRejectedValueOnce(new Error("timeout")).mockResolvedValueOnce(new Response(JSON.stringify({id:"shared-accepted"}),{status:200}));
+ vi.stubGlobal("fetch",fetcher);
+ await t.action(internal.profileRejectionNotice.drain,{});
+ expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer synthetic-shared");
+ expect(JSON.parse(fetcher.mock.calls[0][1].body).from).toBe("1Plus1 Match <contact@1plus1match.com>");
+ const row=(await rows())[0];await t.run(ctx=>ctx.db.patch(row._id,{nextAttemptAt:0}));
+ vi.stubEnv("PROFILE_REJECTION_NOTICE_FROM","changed@example.invalid");
+ await t.action(internal.profileRejectionNotice.drain,{});
+ expect(fetcher.mock.calls[1][1].body).toBe(fetcher.mock.calls[0][1].body);
+ expect(fetcher.mock.calls[1][1].headers["Idempotency-Key"]).toBe(fetcher.mock.calls[0][1].headers["Idempotency-Key"]);
+});
+test.each(["approval", "credential"])("shared transport fails closed without %s", async missing => {
+ vi.stubEnv("PROFILE_REJECTION_NOTICE_RESEND_API_KEY", "");vi.stubEnv("PROFILE_REJECTION_NOTICE_FROM", "");
+ vi.stubEnv("RESEND_API_KEY",missing==="credential"?"":"synthetic-shared");
+ if(missing==="approval")vi.stubEnv("PROFILE_REJECTION_NOTICE_APPROVED", "false");
+ const {t,update,rows}=await setup(false);
+ await expect(t.mutation(internal.profileRejectionNotice.activate,{})).rejects.toThrow();
+ await update("rejected");expect(await rows()).toHaveLength(0);
+ expect(await t.mutation(internal.profileRejectionNotice.claim,{})).toBeNull();
+});
+test("dedicated override remains backwards compatible when shared key exists",async()=>{
+ vi.stubEnv("RESEND_API_KEY","synthetic-shared");
+ const {t,update}=await setup();await update("rejected");vi.setSystemTime(Date.now()+GRACE_MS);
+ const fetcher=vi.fn().mockResolvedValue(new Response(JSON.stringify({id:"override-accepted"}),{status:200}));vi.stubGlobal("fetch",fetcher);
+ await t.action(internal.profileRejectionNotice.drain,{});
+ expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer synthetic");
+ expect(JSON.parse(fetcher.mock.calls[0][1].body).from).toBe("Test <test@example.invalid>");
+});
