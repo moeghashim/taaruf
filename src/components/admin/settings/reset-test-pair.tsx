@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-type Preview = { fingerprint: string; count: number; submissions: number; shares: number; deliveries: number };
+type Preview = { fingerprint: string; count: number; submissions: number; shares: number; deliveries: number; warnings?: string[] };
 export function ResetTestPair() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [reason, setReason] = useState("");
@@ -15,18 +15,19 @@ export function ResetTestPair() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       if (action === "preview") { setPreview(data); setConfirmed(false); setOperationKey(crypto.randomUUID()); }
-      else { setMessage(data.alreadyReset ? "Nothing to reset. The pair is already reset." : "Test pair reset. Both applicants can submit again through the normal flow, subject to normal eligibility and remaining slots."); setPreview(null); setConfirmed(false); }
+      else { setMessage((data.alreadyReset ? "Nothing to reset. The pair is already reset." : "Test pair reset. Both applicants can submit again through the normal flow, subject to normal eligibility and remaining slots.") + (data.warnings?.length ? " " + data.warnings.join(" ") : "")); setPreview(null); setConfirmed(false); }
     } catch (error) { setMessage(error instanceof Error ? error.message : "Request failed. Retry or refresh the preview."); }
     finally { setBusy(false); }
   }
   return <section className="panel" aria-labelledby="reset-pair-title">
     <div className="panel-head"><h3 id="reset-pair-title">Reset test pair</h3></div>
     <div style={{ padding: 20, display: "grid", gap: 16, maxWidth: 720 }}>
-      <p>Only applicants <strong>#219 ↔ #220</strong>, in both directions. Retires their pair submissions, reviews and share access; cancels unsent pending deliveries and restores only the slots those submissions used.</p>
+      <p>Only applicants <strong>#219 ↔ #220</strong>, in both directions. Retires their pair submissions, reviews and share access; retires old-cycle delivery jobs regardless of email status and restores only the slots those submissions used.</p>
       <p style={{ color: "var(--ink-2)" }}>Profiles, check-ins, event registrations, other applicants’ interactions and original history stay intact. No approvals, contact or photo consent are granted. Previously disclosed information cannot be recalled. Notification emails already being sent may still arrive; their retired links will not restore access.</p>
       <div><button className="btn" disabled={busy} onClick={() => run("preview")}>{busy ? "Working…" : preview ? "Refresh preview" : "Preview reset"}</button></div>
       {preview && (preview.count === 0 ? <p>Nothing to reset for this pair.</p> : <>
-        <p>{preview.submissions} submissions · {preview.shares} share grants · {preview.deliveries} pending deliveries</p>
+        <p>{preview.submissions} submissions · {preview.shares} share grants · {preview.deliveries} delivery records to retire</p>
+        {preview.warnings?.map(warning => <p key={warning} role="note">{warning}</p>)}
         <label htmlFor="pair-reset-reason">Reason (10–500 characters)</label>
         <textarea id="pair-reset-reason" value={reason} maxLength={500} rows={3} onChange={e => setReason(e.target.value)} disabled={busy} style={{ width: "100%", padding: 12, border: "1px solid var(--line)", borderRadius: 6, background: "var(--panel)", color: "var(--ink)" }} />
         <label style={{ display: "flex", alignItems: "start", gap: 10 }}><input type="checkbox" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)} />I confirm that only the test pair #219 and #220 should be reset. History will be retained.</label>

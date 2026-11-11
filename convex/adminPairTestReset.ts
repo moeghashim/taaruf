@@ -49,8 +49,6 @@ async function snapshot(ctx: QueryCtx) {
   const deliveries = (await bounded("femaleWorkflowDeliveries")).filter(d => ids.has(d.interestId));
   for (const d of deliveries) {
     if (!pair.has(d.recipientId)) throw new Error("Foreign delivery recipient");
-    // A network request may already be in flight even after its lease expires.
-    if (d.status === "sending" || d.leaseUntil !== undefined || ((d.status === "pending" || d.status === "failed") && (d.firstAttemptAt !== undefined || d.attempts !== 0 || d.providerPayload !== undefined))) throw new Error("Delivery requires manual reconciliation before reset");
   }
   // Same complete-row digest approach as repaired singleInterestTestReset: never
   // recursively embed prior snapshots; preserve every original audit untouched.
@@ -60,16 +58,20 @@ async function snapshot(ctx: QueryCtx) {
   const activeFlows = flows.filter(f => !["closed", "declined"].includes(f.flowStatus) || f.bioVisibleAt !== undefined || f.photosVisibleAt !== undefined || f.contactSharedAt !== undefined || f.photoDecision === "approved");
   const activeMatches = matches.filter(m => m.status !== "closed" || m.testResetAt === undefined);
   const activeShares = shares.filter(s => s.status !== "closed" || s.revokedAt === undefined || s.includeImages);
-  const pending = deliveries.filter(d => d.status === "pending" || d.status === "failed");
+  // The audit ID is an irreversible retirement epoch. New submissions get new
+  // interest/job IDs; no retired job can ever enter a later cycle.
+  const pending = deliveries.filter(d => d.resetAuditId === undefined);
+  const warnings = deliveries.some(d => d.sentAt !== undefined || d.status === "sent" || d.status === "sending" || d.firstAttemptAt !== undefined || d.providerPayload !== undefined || d.leaseUntil !== undefined)
+    ? ["Previously sent or in-flight email cannot be recalled and may arrive after reset. Old delivery evidence is retained; retired links cannot restore access."] : [];
   const pointers = registrations.filter(r => pair.has(r._id) && r.activeMatchId && matchIds.has(r.activeMatchId));
   const count = activeInterests.length + activeFlows.length + activeMatches.length + activeShares.length + pending.length + pointers.length;
   if (count > 500) throw new Error("Reset write limit exceeded; manual review required");
-  return { state, fingerprint: digest(state), activeInterests, activeFlows, activeMatches, activeShares, pending, pointers, count };
+  return { state, fingerprint: digest(state), activeInterests, activeFlows, activeMatches, activeShares, pending, pointers, count, warnings };
 }
 export const preview = query({ args: { adminSecret: v.string() }, handler: async (ctx, args) => {
   requireAdmin(args.adminSecret);
   const s = await snapshot(ctx);
-  return { fingerprint: s.fingerprint, count: s.count, submissions: s.activeInterests.length, shares: s.activeShares.length, deliveries: s.pending.length };
+  return { fingerprint: s.fingerprint, count: s.count, submissions: s.activeInterests.length, shares: s.activeShares.length, deliveries: s.pending.length, warnings: s.warnings };
 }});
 export const reset = mutation({ args: { adminSecret: v.string(), expectedFingerprint: v.string(), operationKey: v.string(), reason: v.string(), confirmPair: v.literal("219-220") }, handler: async (ctx, args) => {
   requireAdmin(args.adminSecret);
@@ -77,7 +79,7 @@ export const reset = mutation({ args: { adminSecret: v.string(), expectedFingerp
   const { adminSecret: _secret, ...safeArgs } = args; void _secret;
   const request = canonical({ helper: "adminPairTestReset/v1", ...safeArgs });
   const prior = await ctx.db.query("pairTestResetAudits").withIndex("by_operationKey", q => q.eq("operationKey", args.operationKey)).unique();
-  if (prior) { if (prior.request !== request) throw new Error("Operation key reused with different request"); return { alreadyReset: true, auditId: prior._id }; }
+  if (prior) { if (prior.request !== request) throw new Error("Operation key reused with different request"); return { alreadyReset: true, auditId: prior._id, warnings: ["Previously sent or in-flight email cannot be recalled. Retired delivery evidence is preserved."] }; }
   const s = await snapshot(ctx);
   if (s.fingerprint !== args.expectedFingerprint) throw new Error("Preview changed; review a fresh preview");
   if (!s.count) return { alreadyReset: true, auditId: null };
@@ -95,7 +97,7 @@ export const reset = mutation({ args: { adminSecret: v.string(), expectedFingerp
   }
   for (const m of s.activeMatches) await ctx.db.patch(m._id, { status: "closed", closedReason: "admin_pair_test_reset", testResetAt: now, updatedAt: now });
   for (const share of s.activeShares) await ctx.db.patch(share._id, { status: "closed", revokedAt: now, includeImages: false, updatedAt: now });
-  for (const d of s.pending) await ctx.db.patch(d._id, { status: "cancelled", error: "Admin reset test pair" });
+  for (const d of s.pending) await ctx.db.patch(d._id, { resetAuditId: auditId, resetAt: now, ...(["pending", "sending", "failed"].includes(d.status) ? { status: "cancelled" as const } : {}) });
   for (const r of s.pointers) await ctx.db.patch(r._id, { activeMatchId: undefined });
-  return { alreadyReset: false, auditId };
+  return { alreadyReset: false, auditId, warnings: s.warnings };
 }});

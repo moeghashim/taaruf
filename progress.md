@@ -757,3 +757,7 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Removed duplicate Profile reviews ribbon and promoted otherwise unique updates to primary notices; added actionable inbound banners with per-interest focus/scroll routing for both portals. Added synthetic production-build responsive regression coverage; no backend or production changes.
 
 - Extended3554/3557 scope per3561/3568: unified top notifications across portal pages for both directions, authorized private legacy reviews, event confirmations and matchmaker introductions; guarded freshness and exact pending-admin contact copy.
+
+## 2026-11-11 — independent test-pair reset3603
+- Decoupled fixed-pair reset from historical delivery state; audit-ID retirement epochs fence claims/retries/pre-send authorization and confine late results to old-job evidence. Preserved original provider payload/errors and immutable reset snapshots, token/share revocation, auth/fingerprint/idempotency and unrelated pairs. Updated admin warning and repeat/race tests; isolated synthetic runtime verifies four actual resubmission/reset cycles. No live operation or release. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Independent review follow-up: preserve every retired provider callback in append-only `retiredDeliveryResults` (including stale attempts), retain old-job summary separately, and recheck kind/token/current-recipient immediately before send. Deterministic interleaving and callback-isolation regressions added. <!-- project: github.com/moeghashim/clawscrewskill -->

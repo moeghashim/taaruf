@@ -199,7 +199,7 @@ export const listDeliveriesPage = query({ args: { adminSecret: v.optional(v.stri
 }});
 export const retryDelivery = mutation({ args: { adminSecret: v.optional(v.string()), deliveryId: v.id("femaleWorkflowDeliveries") }, handler: async (ctx, args) => {
   requireAdmin(args.adminSecret); const row = await ctx.db.get(args.deliveryId);
-  if (!row || row.status !== "failed") throw new Error("Only failed delivery can retry");
+  if (!row || row.resetAuditId !== undefined || row.status !== "failed") throw new Error("Only failed delivery can retry");
   if (!await deliveryAuthorized(ctx, row)) throw new Error("Delivery unavailable: not authorized by activation boundary/kind");
   const interest = await ctx.db.get(row.interestId);
   if (interest?.femaleWorkflow) {

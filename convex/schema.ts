@@ -251,7 +251,16 @@ export default defineSchema({
     .index("by_stripeSessionId", ["stripeSessionId"])
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
+  // Append-only provider callbacks for retired jobs; no workflow authority.
+  retiredDeliveryResults: defineTable({
+    deliveryId: v.id("femaleWorkflowDeliveries"), resetAuditId: v.id("pairTestResetAudits"),
+    attempt: v.number(), success: v.boolean(), receivedAt: v.number(),
+    error: v.optional(v.string()), rateLimited: v.optional(v.boolean()), retryAfterMs: v.optional(v.number()),
+  }).index("by_deliveryId", ["deliveryId"]),
   femaleWorkflowDeliveries: defineTable({
+    resetAuditId: v.optional(v.id("pairTestResetAudits")),
+    resetAt: v.optional(v.number()),
+    lateResult: v.optional(v.object({ attempt: v.number(), success: v.boolean(), receivedAt: v.number(), error: v.optional(v.string()) })),
     interestId: v.id("interests"), recipientId: v.id("registrations"),
     kind: v.union(v.literal("brother_review"), v.literal("sister_confirmation"), v.literal("pending_review"), v.literal("contacts_ready")),
     key: v.string(), status: v.union(v.literal("pending"), v.literal("sending"), v.literal("sent"), v.literal("failed"), v.literal("cancelled")),
