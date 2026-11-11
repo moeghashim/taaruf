@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as birthdays from "../birthdays.js";
 import type * as adminAuthorization from "../adminAuthorization.js";
 import type * as adminEmailChange from "../adminEmailChange.js";
 import type * as adminPairTestReset from "../adminPairTestReset.js";
@@ -31,10 +32,12 @@ import type * as interestRules from "../interestRules.js";
 import type * as interestTestReset from "../interestTestReset.js";
 import type * as interests from "../interests.js";
 import type * as matches from "../matches.js";
+import type * as matchmakerMatching from "../matchmakerMatching.js";
 import type * as migrations_profileCompletion from "../migrations/profileCompletion.js";
 import type * as migrations_publicApplicantNumbers from "../migrations/publicApplicantNumbers.js";
 import type * as pairTestReset from "../pairTestReset.js";
 import type * as photoUploads from "../photoUploads.js";
+import type * as profileRejectionNotice from "../profileRejectionNotice.js";
 import type * as profileShares from "../profileShares.js";
 import type * as registrationNumbers from "../registrationNumbers.js";
 import type * as registrations from "../registrations.js";
@@ -49,6 +52,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  birthdays: typeof birthdays;
   adminAuthorization: typeof adminAuthorization;
   adminEmailChange: typeof adminEmailChange;
   adminPairTestReset: typeof adminPairTestReset;
@@ -72,10 +76,12 @@ declare const fullApi: ApiFromModules<{
   interestTestReset: typeof interestTestReset;
   interests: typeof interests;
   matches: typeof matches;
+  matchmakerMatching: typeof matchmakerMatching;
   "migrations/profileCompletion": typeof migrations_profileCompletion;
   "migrations/publicApplicantNumbers": typeof migrations_publicApplicantNumbers;
   pairTestReset: typeof pairTestReset;
   photoUploads: typeof photoUploads;
+  profileRejectionNotice: typeof profileRejectionNotice;
   profileShares: typeof profileShares;
   registrationNumbers: typeof registrationNumbers;
   registrations: typeof registrations;

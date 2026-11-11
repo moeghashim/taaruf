@@ -1,3 +1,4 @@
+import { withCurrentAge } from "./birthdays";
 import { paginationOptsValidator } from "convex/server";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
@@ -46,8 +47,8 @@ export const getAll = query({
 
         return {
           ...interest,
-          fromRegistration: withoutCapabilities(fromRegistration),
-          toRegistration: withoutCapabilities(toRegistration),
+          fromRegistration: withoutCapabilities(await withCurrentAge(ctx, fromRegistration)),
+          toRegistration: withoutCapabilities(await withCurrentAge(ctx, toRegistration)),
           match,
           event,
         };
@@ -308,8 +309,8 @@ export const getByRegistration = query({
       const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
       return {
         ...interest,
-        fromRegistration: withoutCapabilities(await ctx.db.get(interest.fromRegistrationId)),
-        toRegistration: withoutCapabilities(await ctx.db.get(interest.toRegistrationId)),
+        fromRegistration: withoutCapabilities(await withCurrentAge(ctx, await ctx.db.get(interest.fromRegistrationId))),
+        toRegistration: withoutCapabilities(await withCurrentAge(ctx, await ctx.db.get(interest.toRegistrationId))),
         match: match?.testResetAt !== undefined ? null : match,
       };
     };
@@ -338,8 +339,8 @@ export const workbenchPage = query({
 
         return {
           ...interest,
-          fromRegistration: withoutCapabilities(fromRegistration),
-          toRegistration: withoutCapabilities(toRegistration),
+          fromRegistration: withoutCapabilities(await withCurrentAge(ctx, fromRegistration)),
+          toRegistration: withoutCapabilities(await withCurrentAge(ctx, toRegistration)),
           match,
           event,
         };

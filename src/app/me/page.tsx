@@ -1,4 +1,6 @@
 "use client";
+import { DateOfBirthField } from "@/components/date-of-birth-field";
+import { dateOfBirthError, changedDateOfBirth } from "@/lib/date-of-birth";
 import { educationOptionsFor, formatEducation } from "@/lib/education";
 
 import { applicantLoginHref } from "@/lib/applicant-destination";
@@ -7,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
+import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
 import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
@@ -57,6 +60,7 @@ type DashboardInterest = {
 };
 
 type DashboardData = {
+  eventLogisticsRestricted?: boolean;
   requestedConnectionId?: string | null;
   applicant: {
     status?: string;
@@ -76,6 +80,7 @@ type DashboardData = {
 };
 
 type ApplicantEventData = {
+  logisticsRestricted?: boolean;
   upcoming: Array<{
     _id: string;
     title: string;
@@ -124,6 +129,7 @@ type ProfileData = {
   name: string;
   gender: "male" | "female";
   email: string;
+  dateOfBirth?: string;
   education: string;
   ethnicity: string;
   imageStorageIds: string[];
@@ -609,6 +615,7 @@ export default function ApplicantDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
   const [message, setMessage] = useState<string | null>(null);
@@ -620,6 +627,8 @@ export default function ApplicantDashboardPage() {
   const [busy, setBusy] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const hasDashboard = Boolean(data);
+  const [portalTab, setPortalTab] = useState<"interests" | "matchmaker">("interests");
+  useEffect(() => { const sync = () => setPortalTab(window.location.hash === "#matchmaker-matching" ? "matchmaker" : "interests"); sync(); window.addEventListener("hashchange", sync); return () => window.removeEventListener("hashchange", sync); }, []);
   const [sideOpen, setSideOpen] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(false);
 
@@ -706,6 +715,7 @@ export default function ApplicantDashboardPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Failed to load profile");
       const registration = payload.registration;
+      setOriginalDateOfBirth(registration.dateOfBirth);
       setProfile({
         ...registration,
         interestSubmissionNumbers: ((registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
@@ -879,6 +889,11 @@ export default function ApplicantDashboardPage() {
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!profile) return;
+    const birthdayChange = changedDateOfBirth(profile.dateOfBirth, originalDateOfBirth);
+    if (birthdayChange !== undefined) {
+      const birthdayError = dateOfBirthError(birthdayChange);
+      if (birthdayError) { setError(birthdayError); return; }
+    }
 
     setIsSavingProfile(true);
     setMessage(null);
@@ -903,6 +918,7 @@ export default function ApplicantDashboardPage() {
         body: JSON.stringify({
           ethnicity: profile.ethnicity,
           education: profile.education,
+          ...(birthdayChange !== undefined ? { dateOfBirth: birthdayChange } : {}),
           imageStorageIds: uploadedImages.map((image) => image.storageId),
           prayerCommitment: profile.prayerCommitment,
           hijabResponse: profile.hijabResponse,
@@ -989,7 +1005,7 @@ export default function ApplicantDashboardPage() {
           <nav className="side-nav">
             <div className="nav-section">
               <h5>Portal</h5>
-              <a className="nav-item active" href="#overview" onClick={() => setSideOpen(false)}>
+              <a className={`nav-item ${portalTab === "interests" ? "active" : ""}`} href="#overview" onClick={() => setSideOpen(false)}>
                 <span className="icon">{Ico.dash}</span>
                 <span>Overview</span>
               </a>
@@ -1003,6 +1019,7 @@ export default function ApplicantDashboardPage() {
                 <span>Outbound</span>
                 <span className="count">{data.outbound.length}</span>
               </a>
+              <a className={`nav-item ${portalTab === "matchmaker" ? "active" : ""}`} href="#matchmaker-matching" onClick={() => { setPortalTab("matchmaker"); setSideOpen(false); }}><span className="icon">{Ico.heart}</span><span>Matchmaker Matching</span></a>
               <a className="nav-item" href="#profile" onClick={() => setSideOpen(false)}>
                 <span className="icon">{Ico.people}</span>
                 <span>Profile</span>
@@ -1065,6 +1082,9 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
+            <div role="tablist" aria-label="Matching" onKeyDown={event => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? "interests" : event.key === "End" ? "matchmaker" : portalTab === "interests" ? "matchmaker" : "interests"; setPortalTab(next); document.getElementById(next === "interests" ? "interests-tab" : "matchmaker-tab")?.focus(); window.history.replaceState(null, "", next === "interests" ? "#overview" : "#matchmaker-matching"); }} style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}><button role="tab" tabIndex={portalTab === "interests" ? 0 : -1} id="interests-tab" aria-controls="interests-panel" aria-selected={portalTab === "interests"} className={`btn ${portalTab === "interests" ? "btn-primary" : ""}`} onClick={() => { setPortalTab("interests"); window.history.replaceState(null, "", "#overview"); }}>Applicant interests</button><button role="tab" tabIndex={portalTab === "matchmaker" ? 0 : -1} id="matchmaker-tab" aria-controls="matchmaker-panel" aria-selected={portalTab === "matchmaker"} className={`btn ${portalTab === "matchmaker" ? "btn-primary" : ""}`} onClick={() => { setPortalTab("matchmaker"); window.history.replaceState(null, "", "#matchmaker-matching"); }}>Matchmaker Matching</button></div>
+            {portalTab === "matchmaker" && <div role="tabpanel" id="matchmaker-panel" aria-labelledby="matchmaker-tab"><MatchmakerMatching /></div>}
+            <div role="tabpanel" id="interests-panel" aria-labelledby="interests-tab" hidden={portalTab !== "interests"}>
             {data.applicant.status === "approved" && <FemaleReviews />}
 
             <div className="stats">
@@ -1096,11 +1116,13 @@ export default function ApplicantDashboardPage() {
               <div className="panel-head">
                 <div>
                   <h3>Events</h3>
-                  <p>Register for upcoming events and review your event history.</p>
+                  <p>{data.eventLogisticsRestricted || eventsData?.logisticsRestricted ? "Event details and registration are unavailable for your profile. Your registration history is retained." : "Register for upcoming events and review your event history."}</p>
                 </div>
               </div>
               <div className="interest-list">
-                {(eventsData?.upcoming || []).length ? (
+                {data.eventLogisticsRestricted || eventsData?.logisticsRestricted || eligibilityError ? (
+                  <p role="status">Event details are unavailable.</p>
+                ) : (eventsData?.upcoming || []).length ? (
                   eventsData?.upcoming.map((event) => (
                     <div key={event._id} className="interest-row" style={{ alignItems: "center" }}>
                       <div className="interest-row-main">
@@ -1145,8 +1167,8 @@ export default function ApplicantDashboardPage() {
                     {eventsData?.history.map((row) => (
                       <div key={row._id} className="interest-row">
                         <div className="interest-row-main">
-                          <h4>{row.event?.title ?? "Event"}</h4>
-                          <p>{row.event ? `${formatDate(row.event.startsAt)} · ${row.event.location}` : "-"}</p>
+                          <h4>{!data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError ? row.event?.title ?? "Event" : "Event registration"}</h4>
+                          <p>{!data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError && row.event ? `${formatDate(row.event.startsAt)} · ${row.event.location}` : "Details unavailable"}</p>
                         </div>
                         <div className="interest-row-meta">
                           <StatusBadge value={row.registrationStatus} />
@@ -1213,6 +1235,7 @@ export default function ApplicantDashboardPage() {
                   </div>
                 ) : (
                   <form onSubmit={saveProfile} className="profile-form">
+                    <DateOfBirthField originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
                     <div className="profile-grid two">
                       <div className="field">
                         <label htmlFor="education">Education level *</label>
@@ -1392,6 +1415,7 @@ export default function ApplicantDashboardPage() {
                   busy={busy}
                 />
               )}
+            </div>
             </div>
           </div>
         </div>

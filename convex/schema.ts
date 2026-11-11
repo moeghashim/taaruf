@@ -141,6 +141,15 @@ export default defineSchema({
   deliveryCancellationAudits: defineTable({
     operationKey: v.string(), authorization: v.string(), snapshot: v.string(), createdAt: v.number(),
   }).index("by_operationKey", ["operationKey"]),
+  // Kept off registration documents: raw spreads must never disclose birthdays.
+  registrationBirthdays: defineTable({ registrationId: v.id("registrations"), dateOfBirth: v.string() }).index("by_registrationId", ["registrationId"]),
+  profileRejectionNotices: defineTable({
+    registrationId: v.id("registrations"), email: v.string(),
+    state: v.union(v.literal("pending"), v.literal("sending"), v.literal("accepted"), v.literal("cancelled"), v.literal("needs_reconciliation")),
+    notBefore: v.optional(v.number()), attempts: v.number(), nextAttemptAt: v.number(), createdAt: v.number(), updatedAt: v.number(),
+    firstAttemptAt: v.optional(v.number()), providerId: v.optional(v.string()), detail: v.optional(v.string()),
+    payload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string() })),
+  }).index("by_registrationId", ["registrationId"]).index("by_state_and_nextAttemptAt", ["state", "nextAttemptAt"]),
   photoUploads: defineTable({
     storageId: v.id("_storage"),
     registrationId: v.optional(v.id("registrations")),
@@ -160,6 +169,8 @@ export default defineSchema({
     profileUrl: v.optional(v.string()),
   }).index("by_key", ["key"]),
   registrations: defineTable({
+    backgroundMatchmakingOptIn: v.optional(v.boolean()),
+    backgroundMatchmakingConsentUpdatedAt: v.optional(v.number()),
     // Legacy/internal identifier. Keep for compatibility, but human-facing
     // applicant references should use publicApplicantNumber.
     applicantNumber: v.optional(v.number()),
@@ -399,7 +410,19 @@ export default defineSchema({
     operationKey: v.string(), request: v.string(), snapshot: v.string(), createdAt: v.number(),
   }).index("by_operationKey", ["operationKey"]),
 
+  matchmakerNotifications: defineTable({
+    matchId: v.id("matches"), recipientId: v.id("registrations"), key: v.string(),
+    status: v.union(v.literal("pending"), v.literal("claimed"), v.literal("sent"), v.literal("failed")),
+    createdAt: v.number(), claimedAt: v.optional(v.number()), completedAt: v.optional(v.number()),
+  }).index("by_key", ["key"]),
   matches: defineTable({
+    matchmakerPresentedAt: v.optional(v.number()),
+    matchmakerWithdrawnAt: v.optional(v.number()),
+    matchmakerWithdrawnBy: v.optional(v.id("registrations")),
+    maleMatchmakerApprovalAt: v.optional(v.number()),
+    femaleMatchmakerApprovalAt: v.optional(v.number()),
+    maleFollowup: v.optional(v.object({status: v.union(v.literal("contact_made"), v.literal("getting_to_know"), v.literal("not_proceeding"), v.literal("engaged")), authorRegistrationId: v.id("registrations"), updatedAt: v.number()})),
+    femaleFollowup: v.optional(v.object({status: v.union(v.literal("contact_made"), v.literal("getting_to_know"), v.literal("not_proceeding"), v.literal("engaged")), authorRegistrationId: v.id("registrations"), updatedAt: v.number()})),
     contactGate: v.optional(v.union(v.literal("pending_admin_approval"), v.literal("contacts_released"))),
     adminReleasedAt: v.optional(v.number()),
     testResetAt: v.optional(v.number()),

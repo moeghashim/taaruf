@@ -1,4 +1,6 @@
 "use client";
+import { DateOfBirthField } from "@/components/date-of-birth-field";
+import { dateOfBirthError, changedDateOfBirth } from "@/lib/date-of-birth";
 import { educationOptionsFor } from "@/lib/education";
 
 import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
@@ -24,6 +26,7 @@ interface ProfileData {
   name: string;
   gender: "male" | "female";
   email: string;
+  dateOfBirth?: string;
   education: string;
   ethnicity: string;
   imageStorageIds: string[];
@@ -77,6 +80,7 @@ function uploadedImagesFromProfile(registration: {
 
 export function ProfileCompletionForm({ token }: { token: string }) {
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,6 +95,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
       if (!response.ok) {
         throw new Error(data.error || "Failed to load profile");
       }
+      setOriginalDateOfBirth(data.registration.dateOfBirth);
       setProfile({
         ...data.registration,
         interestSubmissionNumbers: ((data.registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
@@ -164,6 +169,11 @@ export function ProfileCompletionForm({ token }: { token: string }) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!profile) return;
+    const birthdayChange = changedDateOfBirth(profile.dateOfBirth, originalDateOfBirth);
+    if (birthdayChange !== undefined) {
+      const birthdayError = dateOfBirthError(birthdayChange);
+      if (birthdayError) { setError(birthdayError); return; }
+    }
 
     setIsSaving(true);
     setMessage(null);
@@ -188,6 +198,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         body: JSON.stringify({
           ethnicity: profile.ethnicity,
           education: profile.education,
+          ...(birthdayChange !== undefined ? { dateOfBirth: birthdayChange } : {}),
           imageStorageIds: uploadedImages.map((image) => image.storageId),
           prayerCommitment: profile.prayerCommitment,
           hijabResponse: profile.hijabResponse,
@@ -257,6 +268,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         </div>
       </div>
       <form onSubmit={handleSubmit} className="profile-form">
+        <DateOfBirthField originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
         {!isComplete && (
           <p className="notice warning">Complete your profile to start matching.</p>
         )}

@@ -1,4 +1,5 @@
 "use client";
+import { dateOfBirthError } from "@/lib/date-of-birth";
 import { educationOptions, isEducation } from "@/lib/education";
 
 import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
@@ -28,7 +29,7 @@ interface RegistrationEvent {
 
 interface RegistrationFormData {
   name: string;
-  age: number;
+  dateOfBirth: string;
   gender: "male" | "female" | "";
   maritalStatus: string;
   education: string;
@@ -91,7 +92,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
   const form = useForm({
     defaultValues: {
       name: "",
-      age: 0,
+      dateOfBirth: "",
       gender: "",
       maritalStatus: "",
       education: "",
@@ -124,7 +125,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: value.name,
-            age: value.age,
+            dateOfBirth: value.dateOfBirth,
             gender: value.gender,
             maritalStatus: value.maritalStatus,
             education: value.education,
@@ -266,30 +267,30 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
 
         <div className="profile-grid two">
           <form.Field
-            name="age"
+            name="dateOfBirth"
             validators={{
               onChange: ({ value }) => {
-                if (!value) return "Age is required";
-                if (value < 18 || value > 99) return "Age must be between 18 and 99";
-                return undefined;
+                return dateOfBirthError(value);
               },
             }}
           >
             {(field) => (
               <div className="field">
-                <label htmlFor={field.name}>Age *</label>
+                <label htmlFor={field.name}>Date of birth *</label>
                 <input
                   id={field.name}
-                  type="number"
-                  min="18"
-                  max="99"
+                  type="date"
+                  required
+                  autoComplete="bday"
+                  aria-describedby="birthday-help birthday-error"
+                  aria-invalid={field.state.meta.errors.length > 0}
                   value={field.state.value || ""}
-                  onChange={(e) => field.handleChange(parseInt(e.target.value) || 0)}
+                  onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  placeholder="18-99"
                 />
+                <p id="birthday-help" className="muted">You must be 18–99. Your age is shared with matches, not your date of birth.</p>
                 {field.state.meta.errors?.length > 0 && (
-                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                  <p id="birthday-error" className="field-error">{field.state.meta.errors.join(", ")}</p>
                 )}
               </div>
             )}
