@@ -595,11 +595,12 @@ export const setProfileAccessToken = mutation({
 });
 
 export const ensureProfileAccessToken = mutation({
-  args: { adminSecret: v.optional(v.string()), id: v.id("registrations"), token: v.string() },
+  args: { adminSecret: v.optional(v.string()), id: v.id("registrations"), token: v.string(), expectedEmail: v.string() },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const registration = await ctx.db.get(args.id);
     if (!registration) throw new Error("Registration not found");
+    if (registration.email !== args.expectedEmail) throw new Error("Email changed; refresh the profile");
     if (registration.profileAccessToken && await profileCapabilityAllowed(ctx, registration)) return registration.profileAccessToken;
     await issueProfileAccessToken(ctx, args.id, args.token, true);
     return args.token;
