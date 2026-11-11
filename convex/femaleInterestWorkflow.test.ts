@@ -23,7 +23,7 @@ async function fixture() {
   });
   return { t, ...ids };
 }
-async function accepted() { const f = await fixture(); await f.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId: f.interestId, reviewTokenHash: hash }); await f.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: f.interestId, reviewTokenHash: hash, decision: "accept" }); return f; }
+async function accepted() { const f = await fixture(); await f.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId: f.interestId, reviewTokenHash: hash }); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com"); vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "test@example.com"); vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "synthetic-only"); await f.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: f.interestId, reviewTokenHash: hash, decision: "accept" }); return f; }
 test("private -> authenticated read only review -> explicit accept -> one pending match -> admin contacts", async () => {
   const { t, interestId } = await fixture();
   expect(await t.query(api.femaleInterestWorkflow.getDashboard, { sessionHash: "brother" })).toEqual([]);
@@ -95,8 +95,9 @@ test("disabled email fails closed; per-recipient retry and provider idempotency"
   expect(fetchMock).not.toHaveBeenCalled();
   let rows = (await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId })).filter(row => row.kind !== "brother_review");
   expect(rows[0].status).toBe("failed");
-  await t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: rows[0]._id });
+  await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: rows[0]._id })).rejects.toThrow("activation");
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com"); vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "test@example.com"); vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "synthetic-only");
+  await t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: rows[0]._id });
   fetchMock.mockResolvedValueOnce(new Response("", { status: 500 })).mockResolvedValue(new Response("{}", { status: 200 }));
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   rows = (await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId })).filter(row => row.kind !== "brother_review"); expect(rows[0].status).toBe("pending");

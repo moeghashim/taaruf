@@ -1,3 +1,4 @@
+import { SISTER_CONFIRMATION_MODE, sisterActivation } from "./sisterConfirmationActivation";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
@@ -10,8 +11,14 @@ export async function reviewActivation(ctx: MutationCtx | QueryCtx) {
 }
 // Production invitation authorization is independent of the shared outbox switch.
 // Isolated mode retains the existing simulator-only, exact-allowlist workflow.
-export async function deliveryAuthorized(ctx: MutationCtx | QueryCtx, row: Pick<Doc<"femaleWorkflowDeliveries">, "kind" | "createdAt" | "reviewActivationAt">) {
+export async function deliveryAuthorized(ctx: MutationCtx | QueryCtx, row: Pick<Doc<"femaleWorkflowDeliveries">, "kind" | "createdAt" | "reviewActivationAt" | "sisterActivationAt">) {
   if (process.env.FEMALE_WORKFLOW_EMAIL_MODE === "isolated") return true;
+  if (row.kind === "sister_confirmation") {
+    if (process.env.FEMALE_WORKFLOW_EMAIL_MODE !== SISTER_CONFIRMATION_MODE || process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED !== "true") return false;
+    const at = await sisterActivation(ctx);
+    return at !== null && row.sisterActivationAt === at && row.createdAt > at;
+  }
+  if (process.env.FEMALE_WORKFLOW_EMAIL_MODE === SISTER_CONFIRMATION_MODE) return false;
   if (row.kind !== "brother_review") return process.env.FEMALE_WORKFLOW_EMAIL_MODE !== BROTHER_REVIEW_MODE;
   if (process.env.FEMALE_WORKFLOW_EMAIL_MODE !== BROTHER_REVIEW_MODE || process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED !== "true") return false;
   const at = await reviewActivation(ctx);
