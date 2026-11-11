@@ -328,23 +328,37 @@ export const workbenchPage = query({
     requireAdmin(args.adminSecret);
     const result = await ctx.db.query("interests").paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
     const interests = result.page;
+    // Hydrate each distinct entity once per bounded page, not once per interest.
+    const registrationIds = [...new Set(interests.flatMap(i => [i.fromRegistrationId, i.toRegistrationId]))];
+    const registrations = new Map(await Promise.all(registrationIds.map(async id => [id, await withCurrentAge(ctx, await ctx.db.get(id))] as const)));
+    const matchIds = [...new Set(interests.flatMap(i => i.matchId ? [i.matchId] : []))];
+    const matches = new Map(await Promise.all(matchIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    const primaryIds = [...new Set([...matches.values()].flatMap(m => m?.interestId ? [m.interestId] : []))];
+    const primaries = new Map(await Promise.all(primaryIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    const eventIds = [...new Set(interests.map(i => i.eventId))];
+    const events = new Map(await Promise.all(eventIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    return { ...result, page: withoutCapabilities(interests.map(interest => ({
+      ...interest,
+      fromRegistration: registrations.get(interest.fromRegistrationId) ?? null,
+      toRegistration: registrations.get(interest.toRegistrationId) ?? null,
+      match: (() => {
+        const match = interest.matchId ? matches.get(interest.matchId) : null;
+        const primary = match?.interestId ? primaries.get(match.interestId) : null;
+        return match && primary && !primary.testReset && primary.matchId === match._id && primary.eventId === interest.eventId ? match : null;
+      })(),
+      event: events.get(interest.eventId) ?? null,
+    }))) };
+  },
+});
 
-    return { ...result, page: withoutCapabilities(await Promise.all(
-      interests.map(async (interest) => {
-        const fromRegistration = await ctx.db.get(interest.fromRegistrationId);
-        const toRegistration = await ctx.db.get(interest.toRegistrationId);
-        const linkedMatch = interest.matchId ? await ctx.db.get(interest.matchId) : null;
-        const match = linkedMatch?.testResetAt !== undefined ? null : linkedMatch;
-        const event = interest.eventId ? await ctx.db.get(interest.eventId) : null;
-
-        return {
-          ...interest,
-          fromRegistration: withoutCapabilities(await withCurrentAge(ctx, fromRegistration)),
-          toRegistration: withoutCapabilities(await withCurrentAge(ctx, toRegistration)),
-          match,
-          event,
-        };
-      })
-    )) };
+/** Lean legacy disclosure scan: no per-interest flow queries or capability fields. */
+export const disclosureEvidencePage = query({
+  args: { adminSecret: v.optional(v.string()), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const result = await ctx.db.query("interestFlows").paginate({ ...args.paginationOpts, numItems: Math.min(500, args.paginationOpts.numItems) });
+    return { ...result, page: result.page.filter(f => f.contactSharedAt !== undefined).map(f => ({
+      interestId: f.interestId, fromRegistrationId: f.fromRegistrationId, toRegistrationId: f.toRegistrationId, contactSharedAt: f.contactSharedAt!,
+    })) };
   },
 });

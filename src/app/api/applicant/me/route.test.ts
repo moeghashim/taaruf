@@ -73,7 +73,7 @@ for (const source of ["platform_submission", "admin_entered", "email", "whatsapp
       expect(row.interestId).toBe(id);
       const profile = row.profile ?? row.counterparty;
       expect(profile.email).toBe(released ? `${sessionHash === "brother" ? "sister" : "brother"}@example.invalid` : null);
-      if (female && sessionHash === "sister") expect(row.femaleWorkflow).toEqual({ state: released ? "contacts_released" : "pending_admin_approval" });
+      if (female && sessionHash === "sister") expect(row.femaleWorkflow).toBe(true);
       if (sessionHash === "brother") expect(JSON.stringify(row)).not.toContain("Synthetic Sister");
       expect(JSON.stringify(row)).not.toContain("reviewTokenHash");
     }
@@ -93,7 +93,7 @@ test("old female rows serialize their discriminator independently of newer revie
   mocks.session.mockResolvedValue("sister");
   const response = await GET(new NextRequest("https://synthetic.invalid/api/applicant/me"));
   const payload = await response.json();
-  expect(payload.privateDocumented.find((row: { interestId: string }) => row.interestId === id)?.femaleWorkflow).toEqual({ state: "pending_admin_approval" });
+  expect(payload.privateDocumented.find((row: { interestId: string }) => row.interestId === id)?.femaleWorkflow).toBe(true);
   expect(mocks.query).toHaveBeenCalledTimes(1);
   expect(JSON.stringify(payload)).not.toContain("reviewTokenHash");
 });
@@ -162,7 +162,7 @@ test("both ordinary emitted notification URLs resolve their connection beyond 11
     const response = await GET(new NextRequest(`https://synthetic.invalid/api/applicant/me${url.search}`));
     expect(response.status).toBe(200);
     const payload = await response.json();
-    expect([...payload.inbound, ...payload.outbound].find((row: { interestId: string }) => row.interestId === id)?.flowStatus).toBe(expectedStatus);
+    expect([...payload.inbound, ...payload.outbound].find((row: { interestId: string }) => row.interestId === id)?.flowStatus).toBe(expectedStatus === "contact_shared" ? "contact_shared" : "in_progress");
     if (sessionHash === "brother") expect(JSON.stringify(message)).not.toContain("Synthetic Sister");
   }
   await land(0, "sister", "awaiting_inbound_response");
@@ -184,15 +184,23 @@ for (const confirmed of [false, true]) test(`selected older female review suppor
   mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
   mocks.session.mockResolvedValue("sister");
   const firstPage = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "sister", paginationOpts: { cursor: null, numItems: 50 } });
-  expect(firstPage.page).toEqual([]); expect(firstPage.isDone).toBe(false);
+  expect(firstPage.page).toHaveLength(50); expect(firstPage.isDone).toBe(false);
+  for (const row of firstPage.page) expect(row).toEqual({ interestId: expect.any(String), role: "sister", state: "closed", ownDecision: "pending", ownAction: null, paused: false, reviewExpired: false, canPause: false, canView: false });
+  expect(firstPage.page.some(row => row.interestId === id)).toBe(false);
   const get = () => reviewGET(new NextRequest(`https://synthetic.invalid/api/applicant/female-review?interestId=${id}`));
-  expect((await (await get()).json()).state).toBe("awaiting_sister_confirmation");
+  expect((await (await get()).json()).state).toBe("in_review");
   const decide = () => reviewPOST(new NextRequest("https://synthetic.invalid/api/applicant/female-review", { method: "POST", headers: { origin: "https://synthetic.invalid", host: "synthetic.invalid" }, body: JSON.stringify({ action: "confirm", interestId: id, confirmed }) }));
   mocks.session.mockResolvedValue("other"); expect((await decide()).status).toBe(401);
   mocks.session.mockResolvedValue(null); expect((await decide()).status).toBe(401);
   mocks.session.mockResolvedValue("sister"); expect((await decide()).status).toBe(200);
   if (!confirmed) { expect((await get()).status).toBe(409); return; }
-  expect((await (await get()).json()).state).toBe("pending_admin_approval");
+  expect((await (await get()).json()).state).toBe("in_review");
+  for (const paused of [true, false]) {
+    const response = await interestPOST(new NextRequest("https://synthetic.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify({ action: paused ? "pause_connection" : "resume_connection", interestId: id }) }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({error: "Pause unavailable until contact release"});
+  }
+  await t.mutation(api.femaleInterestWorkflow.releaseContacts, {adminSecret: secret, interestId: id});
   for (const paused of [true, false]) {
     const action = paused ? "pause_connection" : "resume_connection";
     expect((await interestPOST(new NextRequest("https://synthetic.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify({ action, interestId: id }) }))).status).toBe(200);

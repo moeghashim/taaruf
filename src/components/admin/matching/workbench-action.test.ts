@@ -2,6 +2,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
+vi.mock("@/components/admin/hooks/use-mutual-interests", () => ({ useMutualInterests: () => ({ rows: [], retry: vi.fn() }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams("event=manual") }));
 vi.mock("@/components/admin/hooks/use-admin-transport", () => ({ refreshAdminData: vi.fn(), useAdminMutation: () => vi.fn(), useAdminQuery: () => [] }));
 vi.mock("@/components/admin/hooks/use-profile-event-pages", () => ({ useProfileEventPages: () => ({ rows: [], retry: vi.fn() }) }));
