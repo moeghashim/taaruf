@@ -202,3 +202,14 @@ test("a later draft does not revoke a previously shared context-free bio", async
   await t.mutation(api.matches.create, args);
   expect(await t.query(api.profileShares.getByShareToken, { shareToken: "predates-draft" })).not.toBeNull();
 });
+
+test("existing non-draft match without activeMatchId returns public validation and writes nothing", async () => {
+  const { t, args } = await fixture();
+  await t.run(async ctx => {
+    const original = (await ctx.db.get(args.femaleRegistrationId))!; const { _id, _creationTime, ...profile } = original; void _id; void _creationTime; const other = await ctx.db.insert("registrations", { ...profile, email: "other@example.invalid" });
+    await ctx.db.insert("matches", { maleRegistrationId: args.maleRegistrationId, femaleRegistrationId: other, status: "new", interestType: "man_interested", initiatedBy: "interest_signal", createdAt: 1, updatedAt: 1 });
+  });
+  const before = await snapshot(t);
+  await expect(t.mutation(api.matches.create, args)).rejects.toMatchObject({ data: "An applicant already has an active match. Review it before creating another." });
+  expect(await snapshot(t)).toEqual(before);
+});
