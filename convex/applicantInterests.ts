@@ -1,3 +1,4 @@
+import { currentAge } from "./birthdays";
 import { recordPairApproval, contactsVisible, linkedFlows, assertMatchInterest } from "./contactGate";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
@@ -166,7 +167,7 @@ async function safeCounterparty(
     registrationId: showProfile ? counterparty._id : null,
     applicantNumber: counterpartyNumber ?? null,
     ...(showName ? { name: counterparty.name } : {}),
-    age: counterparty.age,
+    age: await currentAge(ctx, counterparty),
     gender: counterparty.gender,
     maritalStatus: fullProfileVisible ? counterparty.maritalStatus : null,
     education: fullProfileVisible ? counterparty.education : null,

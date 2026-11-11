@@ -138,6 +138,8 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  // Kept off registration documents: raw spreads must never disclose birthdays.
+  registrationBirthdays: defineTable({ registrationId: v.id("registrations"), dateOfBirth: v.string() }).index("by_registrationId", ["registrationId"]),
   photoUploads: defineTable({
     storageId: v.id("_storage"),
     registrationId: v.optional(v.id("registrations")),

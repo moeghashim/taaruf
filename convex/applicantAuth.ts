@@ -1,3 +1,4 @@
+import { withCurrentAge } from "./birthdays";
 import { sessionAllowed, capabilityAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
@@ -112,7 +113,7 @@ export const getSession = query({
 
     return {
       session,
-      registration,
+      registration: await withCurrentAge(ctx, registration),
     };
   },
 });

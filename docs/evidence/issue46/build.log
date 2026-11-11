@@ -1,0 +1,112 @@
+
+> taaruf-app@0.1.0 build
+> next build --turbopack
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/moeghashim/package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles:
+   * /Users/moeghashim/taaruf/.worktrees/issue46-birthday/package-lock.json
+   * /Users/moeghashim/taaruf/package-lock.json
+
+   ▲ Next.js 15.5.14 (Turbopack)
+
+   Creating an optimized production build ...
+ ✓ Finished writing to disk in 362ms
+ ✓ Compiled successfully in 2.1s
+   Linting and checking validity of types ...
+
+./src/components/admin/matching/matching-page-client.tsx
+369:19  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/components/admin/primitives/who-cell.tsx
+31:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/components/admin/profiles/profile-detail.tsx
+198:15  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+   Collecting page data ...
+   Generating static pages (0/50) ...
+   Generating static pages (12/50)
+   Generating static pages (24/50)
+   Generating static pages (37/50)
+ ✓ Generating static pages (50/50)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                    Size  First Load JS
+┌ ƒ /                                       3.41 kB         137 kB
+├ ○ /_not-found                                 0 B         133 kB
+├ ○ /admin                                      0 B         133 kB
+├ ƒ /admin/dashboard                         7.5 kB         159 kB
+├ ƒ /admin/event-attendees                      0 B         152 kB
+├ ƒ /admin/events                             13 kB         176 kB
+├ ƒ /admin/inbox                                0 B         179 kB
+├ ƒ /admin/interests                            0 B         179 kB
+├ ○ /admin/legacy                               0 B         133 kB
+├ ƒ /admin/pending                              0 B         161 kB
+├ ƒ /admin/pipeline                             0 B         179 kB
+├ ƒ /admin/profiles                             0 B         161 kB
+├ ƒ /admin/settings                         3.18 kB         155 kB
+├ ƒ /admin/workbench                            0 B         179 kB
+├ ƒ /api/admin/auth                             0 B            0 B
+├ ƒ /api/admin/backfill-profile-completion      0 B            0 B
+├ ƒ /api/admin/bridge                           0 B            0 B
+├ ƒ /api/admin/change-email                     0 B            0 B
+├ ƒ /api/admin/create-match                     0 B            0 B
+├ ƒ /api/admin/create-profile-share             0 B            0 B
+├ ƒ /api/admin/event-attendees                  0 B            0 B
+├ ƒ /api/admin/event-check-in                   0 B            0 B
+├ ƒ /api/admin/event-interests                  0 B            0 B
+├ ƒ /api/admin/event-registration               0 B            0 B
+├ ƒ /api/admin/event-registration-email         0 B            0 B
+├ ƒ /api/admin/female-review                    0 B            0 B
+├ ƒ /api/admin/fix-payments                     0 B            0 B
+├ ƒ /api/admin/interest-test-reset              0 B            0 B
+├ ƒ /api/admin/notify-decline                   0 B            0 B
+├ ƒ /api/admin/notify-match                     0 B            0 B
+├ ƒ /api/admin/reset-test-pair                  0 B            0 B
+├ ƒ /api/admin/revoke-approval                  0 B            0 B
+├ ƒ /api/admin/send-profile-link                0 B            0 B
+├ ƒ /api/admin/share-contacts                   0 B            0 B
+├ ƒ /api/applicant/events                       0 B            0 B
+├ ƒ /api/applicant/female-review                0 B            0 B
+├ ƒ /api/applicant/interest-eligibility         0 B            0 B
+├ ƒ /api/applicant/interests                    0 B            0 B
+├ ƒ /api/applicant/login                        0 B            0 B
+├ ƒ /api/applicant/login/verify                 0 B            0 B
+├ ƒ /api/applicant/logout                       0 B            0 B
+├ ƒ /api/applicant/me                           0 B            0 B
+├ ƒ /api/applicant/profile                      0 B            0 B
+├ ƒ /api/applicant/upload-url                   0 B            0 B
+├ ƒ /api/checkout-status                        0 B            0 B
+├ ƒ /api/create-checkout-session                0 B            0 B
+├ ƒ /api/photos/upload                          0 B            0 B
+├ ƒ /api/profile/[token]                        0 B            0 B
+├ ƒ /api/share/[token]                          0 B            0 B
+├ ƒ /api/webhook                                0 B            0 B
+├ ○ /apple-icon.png                             0 B            0 B
+├ ○ /dashboard                              9.25 kB         143 kB
+├ ○ /icon.svg                                   0 B            0 B
+├ ○ /login                                  6.33 kB         140 kB
+├ ○ /me                                       20 kB         153 kB
+├ ƒ /profile/[token]                         9.9 kB         143 kB
+├ ƒ /register                                   0 B         161 kB
+├ ƒ /register/[eventCode]                       0 B         161 kB
+├ ƒ /share/[token]                          8.21 kB         142 kB
+└ ○ /success                                5.51 kB         139 kB
++ First Load JS shared by all                147 kB
+  ├ chunks/0b3f0b2c45a2017e.js              17.2 kB
+  ├ chunks/74f3481551100e5c.js              13.2 kB
+  └ chunks/8fa93cbbc80375ac.js              18.4 kB
+  ├ chunks/ddda50cdc2b9a141.js              59.1 kB
+  ├ chunks/23122a68b033c758.css             12.3 kB
+  └ other shared chunks (total)               27 kB
+
+
+ƒ Middleware                                39.2 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
