@@ -1,3 +1,4 @@
+import { currentAge } from "./birthdays";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
@@ -80,7 +81,7 @@ export const getMine = query({
         myApproval: (male ? m.maleMatchmakerApprovalAt : m.femaleMatchmakerApprovalAt) !== undefined,
         partnerApproval: (male ? m.femaleMatchmakerApprovalAt : m.maleMatchmakerApprovalAt) !== undefined,
         myFollowup: publicFollowup(male ? m.maleFollowup : m.femaleFollowup), partnerFollowup: publicFollowup(male ? m.femaleFollowup : m.maleFollowup),
-        partner: p ? {publicApplicantNumber: p.publicApplicantNumber, age: p.age, gender: p.gender, maritalStatus: p.maritalStatus, education: p.education, job: p.job, ethnicity: p.ethnicity, prayerCommitment: p.prayerCommitment, hijabResponse: p.hijabResponse, spouseRequirement1: p.spouseRequirement1, spouseRequirement2: p.spouseRequirement2, spouseRequirement3: p.spouseRequirement3, shareableBio: p.shareableBio, images, ...(contactShared ? {name: p.name, email: p.email, phone: p.phone} : {})} : null});
+        partner: p ? {publicApplicantNumber: p.publicApplicantNumber, age: await currentAge(ctx, p), gender: p.gender, maritalStatus: p.maritalStatus, education: p.education, job: p.job, ethnicity: p.ethnicity, prayerCommitment: p.prayerCommitment, hijabResponse: p.hijabResponse, spouseRequirement1: p.spouseRequirement1, spouseRequirement2: p.spouseRequirement2, spouseRequirement3: p.spouseRequirement3, shareableBio: p.shareableBio, images, ...(contactShared ? {name: p.name, email: p.email, phone: p.phone} : {})} : null});
     }
     return {optedIn: owner.backgroundMatchmakingOptIn === true, consentUpdatedAt: owner.backgroundMatchmakingConsentUpdatedAt, matches};
   },
