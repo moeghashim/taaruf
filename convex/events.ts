@@ -1,3 +1,4 @@
+import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
 import { paginationOptsValidator } from "convex/server";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
@@ -655,6 +656,7 @@ export const registerForEvent = mutation({
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    requireEventMessagingEligibility(registration);
     requireCompletedProfile(registration);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
@@ -717,6 +719,7 @@ export const addRegistration = mutation({
     requireEventAdmin(args.adminSecret);
     const registration = await ctx.db.get(args.registrationId);
     if (!registration) throw new Error("Profile not found");
+    requireEventMessagingEligibility(registration);
 
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found");
@@ -867,6 +870,7 @@ export const updateRegistrationConfirmation = mutation({
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
+    if (args.confirmationStatus === "confirmed") requireEventMessagingEligibility(await ctx.db.get(row.registrationId));
     if (row.registrationStatus === "rejected" && args.confirmationStatus === "confirmed") {
       throw new Error("Rejected event registrations cannot be confirmed");
     }
@@ -925,6 +929,7 @@ export const requestConfirmation = mutation({
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
+    requireEventMessagingEligibility(await ctx.db.get(row.registrationId));
     const event = await ctx.db.get(row.eventId);
     if (!event) throw new Error("Event not found");
     if (event.status === "completed" || event.status === "cancelled") {
@@ -949,6 +954,7 @@ export const confirmParticipation = mutation({
   },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    requireEventMessagingEligibility(registration);
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
     if ((reservesCapacity(row.registrationStatus) || row.registrationStatus === "waitlisted") && confirmationStatusForRow(row) === "confirmed") {
@@ -1009,6 +1015,7 @@ export const claimRegistrationReceivedEmail = mutation({
     if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     const row = await ctx.db.get(args.eventRegistrationId);
     if (!row) throw new Error("Event registration not found");
+    requireEventMessagingEligibility(await ctx.db.get(row.registrationId));
     if (args.receiptAttempt !== undefined && args.receiptAttempt !== (row.receiptAttempt ?? 0)) return { claimed: false };
     if (row.registrationReceivedEmailSentAt || !["pending", "waitlisted"].includes(row.registrationStatus)) return { claimed: false };
     const key = "event-registration-received/" + row._id + "/" + (row.receiptAttempt ?? 0);
@@ -1051,6 +1058,7 @@ export const claimEventRegistrationEmail = mutation({
     if (!row) throw new Error("Event registration not found");
     const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(row.registrationId)]);
     if (!event || !registration) throw new Error("Event registration is missing related records");
+    requireEventMessagingEligibility(registration);
     if (event.status === "completed" || event.status === "cancelled") {
       throw new Error("Notification actions are locked for completed or cancelled events");
     }
