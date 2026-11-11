@@ -142,7 +142,7 @@ export function FemaleReviews() {
         </li>)}
       </ul>
     </section>}
-    {!!invitations.length && !selected && !loading && !listError && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
+    {!!invitations.length && !selected && !listError && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
       <div className="interest-invitation-copy">
         <h2 id="interest-invitation-heading">Your review is needed</h2>
         <p>{invitations.length === 1 ? "This connection is awaiting your review." : "You have multiple profiles to review. Take a look and respond to each invitation."}</p>
@@ -155,7 +155,7 @@ export function FemaleReviews() {
         </li>)}
       </ul>
     </section>}
-    {!!confirmations.length && !selected && !loading && !listError && <section className="interest-invitation sister-confirmation" aria-labelledby="sister-confirmation-heading">
+    {!!confirmations.length && !selected && !listError && <section className="interest-invitation sister-confirmation" aria-labelledby="sister-confirmation-heading">
       <div className="interest-invitation-copy">
         <h2 id="sister-confirmation-heading">Your review is needed</h2>
         <p>This connection is awaiting your review.</p>
