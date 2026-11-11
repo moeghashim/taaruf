@@ -1,4 +1,6 @@
 "use client";
+
+import { canReceiveEventMessages } from "../../../../convex/eventMessagingEligibility";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -360,11 +362,13 @@ export function EventsPageClient() {
   }
 
 
+  const eligibleEmailRecipients = detail?.registrations.filter(row => canReceiveEventMessages(row.registration)) ?? [];
+
   async function handleBroadcastEmail() {
-    if (!detail?._id || detail.registrations.length === 0 || isBroadcasting) return;
+    if (!detail?._id || eligibleEmailRecipients.length === 0 || isBroadcasting) return;
     if (
       !window.confirm(
-        `Broadcast ${titleize(broadcastEmailKind)} email to all ${detail.registrations.length} applicant(s) on ${detail.title}?`
+        `Broadcast ${titleize(broadcastEmailKind)} email to ${eligibleEmailRecipients.length} eligible applicant(s) on ${detail.title}?`
       )
     ) {
       return;
@@ -375,7 +379,7 @@ export function EventsPageClient() {
     let alreadySent = 0;
     let failed = 0;
 
-    for (const row of detail.registrations) {
+    for (const row of eligibleEmailRecipients) {
       try {
         const response = await fetch("/api/admin/event-registration-email", {
           method: "POST",
@@ -703,10 +707,10 @@ export function EventsPageClient() {
                 <button
                   type="button"
                   className="btn"
-                  disabled={isBroadcasting || detail.registrations.length === 0}
+                  disabled={isBroadcasting || eligibleEmailRecipients.length === 0}
                   onClick={handleBroadcastEmail}
                 >
-                  {isBroadcasting ? "Broadcasting..." : `Broadcast to All (${detail.registrations.length})`}
+                  {isBroadcasting ? "Broadcasting..." : `Broadcast to Eligible (${eligibleEmailRecipients.length})`}
                 </button>
               </div>
             </div>
@@ -985,7 +989,7 @@ export function EventsPageClient() {
                       )
                     }
                   >
-                    {confirmationStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
+                    {confirmationStatuses.map((status) => <option key={status} value={status} disabled={status === "confirmed" && !canReceiveEventMessages(row.registration)}>{titleize(status)}</option>)}
                   </select>
                   <select
                     aria-label="Event attendance status"
@@ -1000,7 +1004,7 @@ export function EventsPageClient() {
                   >
                     {attendanceStatuses.map((status) => <option key={status} value={status}>{titleize(status)}</option>)}
                   </select>
-                  {detail.status !== "completed" && detail.status !== "cancelled" && (
+                  {canReceiveEventMessages(row.registration) && detail.status !== "completed" && detail.status !== "cancelled" && (
                     <>
                       <button type="button" className="btn" onClick={() => handleRequestConfirmation(row._id)}>
                         Request Confirm
