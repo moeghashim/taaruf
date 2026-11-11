@@ -19,7 +19,7 @@ for (const role of ["brother", "sister"]) for (const width of [1280, 390, 320]) 
     return route.fulfill({ status: 400, json: {} });
   });
   const banner = page.locator(".contacts-ready");
-  await page.goto("/me");
+  await page.goto("/me#applicant-interests");
   await expect(banner.getByRole("heading")).toHaveText("Contacts are ready");
   await expect(banner).toContainText("the team has approved sharing contact details");
   const cta = banner.getByRole("link", { name: "View contact details", exact: true });
@@ -36,17 +36,17 @@ for (const role of ["brother", "sister"]) for (const width of [1280, 390, 320]) 
   done = true; await page.getByRole("button", { name: "Load more reviews", exact: true }).click();
   await expect(contacts).toBeVisible();
   permitted = false;
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(contacts).toHaveCount(0);
-  await page.goto("/me"); await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled(); await expect(banner).toHaveCount(0);
+  await page.goto("/me#applicant-interests"); await expect(page.locator("#review-notifications")).toBeVisible(); await expect(banner).toHaveCount(0);
   permitted = true; denied = true; await page.reload(); await expect(banner).toHaveCount(0);
   denied = false; paused = true; await page.reload(); await expect(banner).toHaveCount(0);
   paused = false;
   for (const unavailable of ["pending_admin_approval", "awaiting_sister_confirmation", "revoked", "closed"]) {
-    detailState = unavailable; await page.reload(); await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled(); await expect(banner).toHaveCount(0);
+    detailState = unavailable; await page.reload(); await expect(page.locator("#review-notifications")).toBeVisible(); await expect(banner).toHaveCount(0);
   }
   detailState = state; count = 2; await page.reload(); await expect(banner.getByRole("link")).toHaveCount(2);
   await expect(banner.getByRole("link", { name: "View contact details for connection 2" })).toHaveAttribute("href", "/dashboard?femaleReview=synthetic-1#contact-details");
-  state = "pending_admin_approval"; await page.getByRole("button", { name: "Refresh", exact: true }).click(); await expect(banner).toHaveCount(0);
+  state = "pending_admin_approval"; await page.evaluate(() => window.dispatchEvent(new Event("focus"))); await expect(banner).toHaveCount(0);
   expect(writes).toEqual([]);
 });
