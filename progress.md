@@ -695,3 +695,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Added isolated whole-profile rejection-notice transactional outbox, protected opt-in activation, immutable retries/reconciliation, synthetic tests, admin explanation and release documentation; no live activation.
 - Restrict applicant event logistics using current profile eligibility; retain status-only history, hide stale portal details on refresh, and add synthetic API/browser tests. No public-site, notification, live-data or deployment changes.
 - Combined rejection notice and logistics candidate: preserved lifetime dedup policy; hardened non-JSON rate-limit handling and synthetic browser external-origin blocking after independent review. Preview only, no activation or live deployment.
+
+## 2026-11-10
+- Added durable 15-minute rejection-notice grace and safe unsent re-rejection reset, authenticated admin status/reversal feedback, fake-clock/concurrency/legacy tests and synthetic browser coverage; preserved email text, bounded idempotent retries and live activation gate.

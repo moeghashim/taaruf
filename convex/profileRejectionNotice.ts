@@ -1,5 +1,6 @@
+import { requireAdmin } from "./adminAuthorization";
 import { v } from "convex/values";
-import { internalMutation, internalAction, type MutationCtx } from "./_generated/server";
+import { internalMutation, internalAction, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 
@@ -16,6 +17,7 @@ Jazakum Allahu Khairan.
 
 Regards,
 The 1 Plus 1 Team.`;
+export const GRACE_MS = 15 * 60 * 1000;
 const ACTIVATION = "profileRejectionNoticeActivatedAt";
 function configured() {
   return process.env.PROFILE_REJECTION_NOTICE_APPROVED === "true" && !!process.env.PROFILE_REJECTION_NOTICE_RESEND_API_KEY && !!process.env.PROFILE_REJECTION_NOTICE_FROM;
@@ -36,11 +38,14 @@ export async function transition(ctx: MutationCtx, previous: Doc<"registrations"
     if (existing && ["pending", "sending"].includes(existing.state)) await ctx.db.patch(existing._id, { state: existing.firstAttemptAt === undefined ? "cancelled" : "needs_reconciliation", updatedAt: Date.now(), detail: "Profile rejection reversed; any in-flight acceptance requires reconciliation" });
     return;
   }
-  // At most one notice per profile lifetime, including re-rejection. No sweep/backfill.
-  if (existing || !configured()) return;
+  // Requeue only a provably unattempted cancelled cycle; never reset attempted work.
+  if ((existing && !(existing.state === "cancelled" && existing.attempts === 0 && existing.firstAttemptAt === undefined && !existing.payload && !existing.providerId)) || !configured()) return;
   const activation = await ctx.db.query("settings").withIndex("by_key", q => q.eq("key", ACTIVATION)).unique();
   if (!activation || !Number.isSafeInteger(Number(activation.value)) || Number(activation.value) <= 0 || Number(activation.value) > Date.now()) return;
-  await ctx.db.insert("profileRejectionNotices", { registrationId: previous._id, email: previous.email, state: "pending", attempts: 0, nextAttemptAt: Date.now(), createdAt: Date.now(), updatedAt: Date.now() });
+  const now = Date.now();
+  const notice = { registrationId: previous._id, email: previous.email, state: "pending" as const, attempts: 0, notBefore: now + GRACE_MS, nextAttemptAt: now + GRACE_MS, createdAt: now, updatedAt: now, detail: "Pending: 15-minute reversal grace period" };
+  if (existing) await ctx.db.patch(existing._id, notice);
+  else await ctx.db.insert("profileRejectionNotices", notice);
 }
 export const claim = internalMutation({ args: {}, handler: async ctx => {
   if (!configured()) return null;
@@ -49,6 +54,12 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
   const abandoned = await ctx.db.query("profileRejectionNotices").withIndex("by_state_and_nextAttemptAt", q => q.eq("state", "sending").lte("nextAttemptAt", now)).first();
   const row = abandoned ?? pending;
   if (!row) return null;
+  // Cron carries no row snapshot: stale invocations read the current durable deadline.
+  // No retroactive delivery for legacy unattempted rows without a grace boundary.
+  if (row.firstAttemptAt === undefined && row.notBefore === undefined) {
+    await ctx.db.patch(row._id, { state: "cancelled", updatedAt: now, detail: "Legacy notice without grace boundary; no retroactive delivery" }); return null;
+  }
+  if (row.notBefore !== undefined && now < row.notBefore) return null;
   const profile = await ctx.db.get(row.registrationId);
   if (!profile || profile.status !== "rejected" || profile.email !== row.email) {
     await ctx.db.patch(row._id, { state: row.firstAttemptAt === undefined ? "cancelled" : "needs_reconciliation", updatedAt: now, detail: "Profile no longer rejected or recipient changed; reconcile any prior attempt" }); return null;
@@ -83,3 +94,12 @@ export const drain = internalAction({ args: {}, handler: async ctx => {
     await ctx.runMutation(internal.profileRejectionNotice.finish, { id: row.id, attempt: row.attempt });
   }
 }});
+
+export const status = query({
+  args: { adminSecret: v.optional(v.string()), registrationId: v.id("registrations") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const row = await ctx.db.query("profileRejectionNotices").withIndex("by_registrationId", q => q.eq("registrationId", args.registrationId)).unique();
+    return row ? { state: row.state, notBefore: row.notBefore ?? null, attempted: row.firstAttemptAt !== undefined || row.attempts > 0 } : null;
+  },
+});
