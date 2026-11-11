@@ -137,3 +137,45 @@ test("workflow pagination retains later actionable records and distinct matchmak
   await expect(ribbon).not.toContainText("No response is currently needed");
   await expect(page.getByRole("region", { name: "Matchmaker notifications", exact: true })).toContainText("Review introduction");
 });
+for (const role of ["brother", "sister"] as const) for (const width of [390, 1280]) {
+  test("review typography and next steps " + role + " " + width, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 }); const state = fixture(role); state.reviews = [review("same", role)];
+    await mock(page, state);
+    await page.route("**/api/applicant/female-review?interestId=*", route => route.fulfill({ json: { ...state.reviews[0], profile: { label: "Applicant #220", age: 26, education: "master", job: "Mechanical engineer", ethnicity: "Arab", shareableBio: role === "sister" ? "Authorized bio" : null, spouseRequirement1: "A thoughtful partner who values regular prayer and kindness.", spouseRequirement2: "Enjoys swimming and spending time outdoors.", spouseRequirement3: "Communicates openly and respectfully.", imageUrls: ["data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400"><rect width="800" height="400" fill="#e3ddd1"/></svg>')] } } }));
+    await page.goto("/dashboard?femaleReview=same");
+    const panel = page.getByRole("region", { name: "Selected profile review" }); const next = panel.getByRole("region", { name: "What happens next" });
+    await expect(next).toContainText(role === "brother" ? "bio becomes available after this initial acceptance" : "Confirm your interest after reviewing");
+    await expect(next).toContainText("final admin approval"); await expect(next).toContainText("Decline closes");
+    await expect(panel.getByRole("region", { name: "Requirements", exact: true }).getByRole("listitem")).toHaveCount(3);
+    await expect(panel.getByText("Authorized bio", { exact: true })).toHaveCount(role === "sister" ? 1 : 0);
+    const photo = panel.getByRole("img"); await expect(photo).toBeVisible();
+    const photoBox = (await photo.boundingBox())!; const nextBox = (await next.boundingBox())!;
+    expect(nextBox.y).toBeGreaterThanOrEqual(photoBox.y + photoBox.height);
+    const action = panel.getByRole("button", { name: role === "brother" ? "Accept" : "Confirm interest", exact: true });
+    expect((await action.boundingBox())!.y).toBeGreaterThan(nextBox.y);
+    expect(await action.evaluate(el => getComputedStyle(el).fontSize)).toBe("16px");
+    await fits(page); await page.screenshot({ path: "test-results/review3667-" + role + "-" + width + ".png", fullPage: true });
+  });
+}
+for (const final of [false, true]) test("general interest stage explanation " + final, async ({ page }) => {
+  const state = fixture("sister"); state.me.inbound = [interest("stage", "inbound", final)];
+  await mock(page, state); await page.goto("/me?connection=stage#inbound-interests");
+  const panel = page.locator("#inbound-interests .interest-detail-panel");
+  await expect(panel.getByRole("region", { name: "What happens next" })).toContainText(final ? "Confirm your interest" : "continue to the bio review stage");
+});
+for (const role of ["brother", "sister"] as const) test("review first click and denial preserve gates " + role, async ({ page }) => {
+  const state = fixture(role); state.reviews = [review("same", role)]; await mock(page, state);
+  let deny = false; let posts = 0;
+  await page.route("**/api/applicant/female-review*", async route => {
+    if (route.request().method() === "POST") { posts++; return route.fulfill({ status: 409, json: { error: "Synthetic decision denied" } }); }
+    if (new URL(route.request().url()).searchParams.has("interestId")) { await new Promise(resolve => setTimeout(resolve, 200)); return route.fulfill({ status: deny ? 403 : 200, json: deny ? { error: "Review unavailable" } : { ...state.reviews[0], profile: { label: "Authorized profile", imageUrls: [] } } }); }
+    return route.fulfill({ json: { page: state.reviews, isDone: true, continueCursor: "" } });
+  });
+  await page.goto("/dashboard?femaleReview=same");
+  const button = page.getByRole("button", { name: role === "brother" ? "Accept" : "Confirm interest", exact: true });
+  await expect(button).toBeVisible(); await page.evaluate(() => window.dispatchEvent(new Event("focus"))); await button.click();
+  await expect.poll(() => posts).toBe(1); await expect(page.getByRole("alert").filter({ hasText: "Synthetic decision denied" })).toBeVisible();
+  deny = true; await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByText("Authorized profile", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "What happens next" })).toHaveCount(0);
+});

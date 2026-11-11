@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
+import { ReviewNextSteps } from "@/components/applicant/review-next-steps";
 import { MatchmakerNotifications } from "@/components/applicant/matchmaker-notifications";
 import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
 import { ReceivedInterestRibbon } from "@/components/applicant/received-interest-ribbon";
@@ -433,6 +434,8 @@ function ProfileSideCard({
           </p>
         </div>
       )}
+
+      {(canRespond || canFinalApprove) && <ReviewNextSteps stage={canRespond ? "initial" : "final"} />}
 
       {canRespond && (
         <div className="action-row">

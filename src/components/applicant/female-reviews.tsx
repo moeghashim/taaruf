@@ -3,6 +3,8 @@ import { applicantLoginHref } from "@/lib/applicant-destination";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ProfileRequirements } from "./profile-requirements";
+import { ReviewNextSteps } from "./review-next-steps";
+import { formatEducation } from "@/lib/education";
 import { FactList } from "@/components/admin/primitives/fact-list";
 
 type Review = { paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
@@ -197,12 +199,13 @@ export function FemaleReviews() {
         {access?.canPause && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
         {reviewLoading && !access && <p role="status">Loading profile…</p>}
         {profile && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
-          <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: profile.education || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
+          <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: formatEducation(profile.education) || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
           <ProfileRequirements profile={profile} />
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
+        {!access?.paused && access?.ownAction === "review" && <ReviewNextSteps stage={access.role === "brother" ? "workflow-initial" : "final"} />}
         {!access?.paused && access?.role === "sister" && access.ownAction === "review" && <div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm interest</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>
