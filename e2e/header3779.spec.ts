@@ -48,6 +48,9 @@ for (const role of ["brother", "sister"] as const) for (const width of [390, 128
    await expect(embedded.getByText("This connection is awaiting your review.",{exact:true})).toHaveCount(0);
    await expect(panel.getByText("Profile details",{exact:true})).toBeVisible();await expect(panel.getByText("Clear communication",{exact:true})).toBeVisible();
    await expect(panel.getByAltText("Profile photo 1")).toBeVisible();await expect(panel.getByRole("button",{name:"Decline",exact:true})).toBeVisible();
+   const next=panel.getByRole("region",{name:"What happens next"});
+   if(role==="brother") await expect(next.locator("p")).toHaveText(["This applicant has expressed interest in getting to know you better.","If you accept, her full bio will become available for you to review. Accepting does not create a match and does not share any contact details.","A match is only created after you review her bio and give your final approval, she gives hers, and the admin approves.","If you decline, this connection will be closed and no contact details will be shared."]);
+   else { await expect(next.locator("p")).toHaveCount(3); await expect(next).toContainText("Confirm your interest after reviewing the profile and bio."); }
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
   await page.evaluate(()=>window.scrollTo(0,0));

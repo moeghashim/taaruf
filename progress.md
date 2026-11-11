@@ -794,3 +794,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11
 - Omar3779: remove standalone back link and ordinary review heading/subtitle only from embedded selected profiles in both portals; retain lifecycle notices and standalone routes. Added selected-state, switching, keyboard, lifecycle and standalone regression coverage. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Omar3782/3786: exact initial-review What happens next paragraphs for male/female recipients with correct counterpart pronouns; final guidance and workflow unchanged. Added exact-copy unit/browser regressions. <!-- project: github.com/moeghashim/clawscrewskill -->

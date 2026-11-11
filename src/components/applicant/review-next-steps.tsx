@@ -1,6 +1,13 @@
 type Stage = "initial" | "workflow-initial" | "final";
 /** Explain only the viewer's available action, never the other person's decision. */
-export function ReviewNextSteps({ stage }: { stage: Stage }) {
+export function ReviewNextSteps({ stage, recipientGender }: { stage: Stage; recipientGender?: string }) {
+  if (stage !== "final" && (recipientGender === "male" || recipientGender === "female")) return <section className="review-next-steps" aria-label="What happens next">
+    <h4>What happens next</h4>
+    <p>This applicant has expressed interest in getting to know you better.</p>
+    <p>{recipientGender === "male" ? "If you accept, her full bio will become available for you to review. Accepting does not create a match and does not share any contact details." : "If you accept, his full bio will become available for you to review. Accepting does not create a match and does not share any contact details."}</p>
+    <p>{recipientGender === "male" ? "A match is only created after you review her bio and give your final approval, she gives hers, and the admin approves." : "A match is only created after you review his bio and give your final approval, he gives his, and the admin approves."}</p>
+    <p>If you decline, this connection will be closed and no contact details will be shared.</p>
+  </section>;
   return <section className="review-next-steps" aria-label="What happens next">
     <h4>What happens next</h4>
     <p>{stage === "initial"
