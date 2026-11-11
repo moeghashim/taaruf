@@ -382,6 +382,12 @@ export default defineSchema({
     .index("by_registrationId", ["registrationId"])
     .index("by_eventId_and_kind", ["eventId", "kind"]),
 
+  // Private operational history: no public reader or general bridge access.
+  adminEmailChangeAudits: defineTable({
+    registrationId: v.id("registrations"), oldEmail: v.string(), newEmail: v.string(),
+    reason: v.string(), actor: v.literal("authenticated_shared_admin"), createdAt: v.number(),
+  }).index("by_registrationId", ["registrationId"]),
+
   // Restricted operational audit: intentionally no public query or mutation.
   pairTestResetAudits: defineTable({
     operationKey: v.string(), request: v.string(), snapshot: v.string(), createdAt: v.number(),
