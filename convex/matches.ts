@@ -1,7 +1,7 @@
 import { withCurrentAge } from "./birthdays";
 import { paginationOptsValidator } from "convex/server";
 import { sessionAllowed } from "./capabilitySecurity";
-import { assertMatchInterest, releasePairContacts, setPairPaused, assertParticipantsAvailable } from "./contactGate";
+import { contactsVisible, assertMatchInterest, releasePairContacts, setPairPaused, assertParticipantsAvailable } from "./contactGate";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
@@ -580,6 +580,10 @@ export const setPausedForApplicant = mutation({
     const person = await ctx.db.get(session.registrationId);
     const interest = await ctx.db.get(args.interestId);
     if (!person || person.status !== "approved" || !interest || interest.testReset || ![interest.fromRegistrationId, interest.toRegistrationId].includes(person._id) || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Unauthorized");
+    // Identical denial before/after bilateral join; never expose match existence.
+    // Admin/manual-matchmaker lifecycle operations use separate endpoints.
+    const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
+    if (!(await contactsVisible(ctx, interest, flow))) throw new Error("Pause unavailable until contact release");
     const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
     if (!match) throw new Error("Match unavailable");
     assertMatchInterest(match, interest);

@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 import { api } from '../../../../../convex/_generated/api';
 const { query, mutation } = vi.hoisted(() => ({ query: vi.fn(), mutation: vi.fn() }));
-vi.mock('@/lib/convex', () => ({ getConvexClient: () => ({ query, mutation }) }));
+vi.mock('@/lib/convex', () => ({ getConvexClient: () => ({ query, mutation }), getSnapshotConvexClient: () => ({ consistentQuery: query }) }));
 import { POST } from './route';
 const token = crypto.createHash('sha256').update('synthetic-passwordsynthetic-salt').digest('hex');
 const valid = { kind: 'query', name: 'registrations.getAll', args: {} };
@@ -73,4 +73,21 @@ test.each([new TypeError('Invalid argument synthetic-service-secret'), new Error
  const response = await POST(request());
  expect(response.status).toBe(400);
  expect(await response.json()).toEqual({ error: 'Unable to complete admin request. Refresh and try again.' });
+});
+
+test('mutual scan is admin-only and publishes no partial result on later-page failure', async () => {
+ const operation = { kind: 'query', name: 'interests.getAll', args: {} };
+ expect((await POST(request(operation, ''))).status).toBe(401);
+ expect(query).not.toHaveBeenCalled();
+ query.mockResolvedValueOnce({page: [], isDone: false, continueCursor: 'next'}).mockRejectedValueOnce(new Error('second page failed'));
+ const response = await POST(request(operation));
+ expect(response.status).toBe(400); expect(await response.json()).not.toHaveProperty('result');
+ expect(query).toHaveBeenCalledTimes(2); expect(mutation).not.toHaveBeenCalled();
+});
+test('mutual scan follows all pages without reverse per-row queries', async () => {
+ query.mockResolvedValueOnce({page: [], isDone: false, continueCursor: 'next'}).mockResolvedValueOnce({page: [], isDone: true, continueCursor: ''}).mockResolvedValueOnce({page: [], isDone: true, continueCursor: ''});
+ const response = await POST(request({kind:'query',name:'interests.getAll',args:{}}));
+ expect(response.status).toBe(200); expect(await response.json()).toEqual({result:[]});
+ expect(query).toHaveBeenCalledTimes(3);
+ expect(query.mock.calls[1][1].paginationOpts.cursor).toBe('next');
 });

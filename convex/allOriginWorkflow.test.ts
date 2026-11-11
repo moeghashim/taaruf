@@ -41,7 +41,7 @@ async function publicWorld() {
     }
   }
   async function approve(interestId: Id<"interests">, person: number) {
-    return await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: `session-${person}`, interestId, approved: true });
+    return await t.mutation(api.applicantInterests.giveFinalApproval, { adminSecret: workflowAdmin, sessionHash: `session-${person}`, interestId, approved: true });
   }
   return { t, ...ids, submit, open, approve };
 }
@@ -73,7 +73,8 @@ for (const source of sources) for (const femaleOrigin of [false, true]) test(`${
   expect(row.eventId).toBe(w.event);
   const matchId = row.matchId!;
   expect(await w.t.run(ctx => ctx.db.get(matchId))).toMatchObject({ status: "reviewing", contactGate: "pending_admin_approval" });
-  await w.t.mutation(api.matches.setPausedForApplicant, { sessionHash: "session-0", interestId, paused: true });
+  await expect(w.t.mutation(api.matches.setPausedForApplicant, { sessionHash: "session-0", interestId, paused: true })).rejects.toThrow("Pause unavailable until contact release");
+  await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "paused" });
   await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "paused", adminNotes: "Paused notes retained" });
   expect((await w.t.run(ctx => ctx.db.get(matchId)))?.adminNotes).toBe("Paused notes retained");
   await expect(w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "contact_shared" })).rejects.toThrow("not active");
@@ -186,11 +187,11 @@ for (const femaleOrigin of [false, true]) test(`new frozen notification routes t
     const interestId = url.searchParams.get(femaleOrigin ? "femaleReview" : "connection");
     expect(interestId).toBe(id);
     const sessionHash = message.to[0] === "person0@example.invalid" ? "session-0" : "session-1";
-    if (url.pathname === "/dashboard") expect((await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash, interestId: id })).state).toBe("pending_admin_approval");
+    if (url.pathname === "/dashboard") expect((await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash, interestId: id })).state).toBe("in_review");
     else {
       expect(url.pathname).toBe("/me");
       const d = await w.t.query(api.applicantInterests.getDashboard, { sessionHash });
-      expect([...d.inbound, ...d.outbound].find(row => row.interestId === interestId)).toMatchObject({ flowStatus: "awaiting_final_approvals", contactSharedAt: null });
+      expect([...d.inbound, ...d.outbound].find(row => row.interestId === interestId)).toMatchObject({ flowStatus: "in_progress", contactSharedAt: null });
     }
     expect(message.text).not.toContain("Sister Private");
     expect(message.text).not.toContain("555010");
@@ -204,11 +205,13 @@ for (const afterRelease of [false, true]) test(`female completion joins unopened
   await w.open(female, true);
   await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId: female, decision: "accept" });
   const result = await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId: female, confirmed: true });
-  if (afterRelease) await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: result.matchId!, status: "contact_shared" });
+  expect(result).toEqual({ ownDecision: "approved" });
+  const matchId = (await w.t.run(ctx => ctx.db.get(female)))!.matchId!;
+  if (afterRelease) await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "contact_shared" });
   await w.open(male);
   await w.approve(male, 0); await w.approve(male, 1);
   expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
-  expect((await w.t.run(ctx => ctx.db.get(male)))?.matchId).toBe(result.matchId);
+  expect((await w.t.run(ctx => ctx.db.get(male)))?.matchId).toBe(matchId);
   expect((await w.t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).filter(d => d.kind === "contacts_ready")).toHaveLength(afterRelease ? 2 : 0);
 });
 
@@ -278,7 +281,7 @@ for (const source of sources) for (const releaseBeforeShare of [false, true]) te
   expect((await w.t.run(ctx => ctx.db.get(female)))?.femaleWorkflow?.state).toBe("private_documented");
   await w.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret: workflowAdmin, interestId: female, reviewTokenHash: reviewHash });
   const access = await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "session-0", interestId: female });
-  expect(access.state).toBe(releaseBeforeShare ? "contacts_released" : "pending_admin_approval");
+  expect(access.state).toBe(releaseBeforeShare ? "contacts_released" : "in_review");
   expect(access.profile.imageUrls).toHaveLength(1);
   expect(access.profile.email).toBe(releaseBeforeShare ? "person1@example.invalid" : null);
   expect(JSON.stringify(access)).not.toContain("Sister Private");
@@ -305,4 +308,50 @@ test("private draft never reserves applicants or prevents ordinary consent and c
   await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: official, status: "contact_shared" });
   expect((await w.t.run(ctx => ctx.db.get(official)))?.status).toBe("contact_shared");
   expect(await w.t.run(ctx => ctx.db.get(draft))).toEqual(before);
+});
+
+for (const female of [false, true]) test("real counterpart join does not change prior approver payload or pause probes: " + female, async () => {
+  const w = await publicWorld();
+  const interestId = await w.submit("platform_submission", female ? 1 : 0, female ? 0 : 1);
+  await w.open(interestId, female);
+  if (female) await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId, decision: "accept" });
+  else await w.t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "session-0", interestId, approved: true });
+  const payload = async () => female ? {
+    list: await w.t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "session-0", paginationOpts: {numItems: 50, cursor: null} }),
+    detail: await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "session-0", interestId }),
+  } : await w.t.query(api.applicantInterests.getDashboard, { sessionHash: "session-0", connectionId: interestId });
+  const retry = () => w.t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash: female ? "session-1" : "session-0", expectedEventId: w.event, applicantNumber: female ? 1 : 2, applicantName: female ? "Brother" : "Sister" });
+  const probe = async () => {
+    for (const sessionHash of ["session-0", "session-1"]) for (const paused of [false, true])
+      await expect(w.t.mutation(api.matches.setPausedForApplicant, { sessionHash, interestId, paused })).rejects.toThrow("Pause unavailable until contact release");
+  };
+  const before = await payload();
+  const receipt = await retry();
+  expect(receipt).not.toHaveProperty("matchId");
+  await probe();
+  if (female) await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId, confirmed: true });
+  else await w.t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "session-1", interestId, approved: true });
+  const matchId = (await w.t.run(ctx => ctx.db.get(interestId)))!.matchId!;
+  expect(matchId).toBeTruthy();
+  expect(await payload()).toEqual(before);
+  expect(await retry()).toEqual(receipt);
+  await probe();
+  await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "contact_shared" });
+  for (const paused of [true, false]) await w.t.mutation(api.matches.setPausedForApplicant, { sessionHash: "session-0", interestId, paused });
+});
+
+for (const decision of ["accept", "keep_open", "decline"] as const) test("own initial receipt survives closure independently of final approval: " + decision, async () => {
+  const w = await publicWorld();
+  const interestId = await w.submit("platform_submission");
+  await w.t.mutation(api.applicantInterests.respondToInbound, { sessionHash: "session-1", interestId, decision });
+  const expected = decision === "accept" ? "accepted" : decision === "keep_open" ? "kept_open" : "declined";
+  if (decision !== "decline") {
+    const dashboard = await w.t.query(api.applicantInterests.getDashboard, {sessionHash: "session-1"});
+    expect(dashboard.inbound[0]).toMatchObject({ownInitialDecision: expected, ownFinalApproval: "pending"});
+    if (decision === "accept") await w.t.mutation(api.applicantInterests.giveFinalApproval, {sessionHash: "session-0", interestId, approved: false});
+    else await w.t.mutation(api.applicantInterests.withdrawOutbound, {sessionHash: "session-0", interestId});
+  }
+  const history = (await w.t.query(api.applicantInterests.getDashboard, {sessionHash: "session-1"})).history;
+  expect(history[0]).toMatchObject({ownInitialDecision: expected, ownFinalApproval: "pending"});
+  expect(history[0]).not.toHaveProperty("counterparty");
 });

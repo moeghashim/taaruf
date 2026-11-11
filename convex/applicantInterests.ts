@@ -1,3 +1,4 @@
+import { interestBioVisible } from "./bioVisibility";
 import { currentAge } from "./birthdays";
 import { canReceiveEventMessages } from "./eventMessagingEligibility";
 import { recordPairApproval, contactsVisible, linkedFlows, assertMatchInterest } from "./contactGate";
@@ -141,6 +142,7 @@ async function safeCounterparty(
 )
  {
   if (!counterparty) return null;
+  const bioVisible = await interestBioVisible(ctx, interest);
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
   const showName = showProfile && !(viewer.gender === "male" && counterparty.gender === "female");
   const contactShared = await contactsVisible(ctx, interest, flow);
@@ -181,7 +183,7 @@ async function safeCounterparty(
     spouseRequirement3: fullProfileVisible ? counterparty.spouseRequirement3 ?? null : null,
     photoSharingPermission: fullProfileVisible ? counterparty.photoSharingPermission ?? null : null,
     imageUrls: imageUrls.filter((url): url is string => Boolean(url)),
-    shareableBio: showProfile ? counterparty.shareableBio ?? null : null,
+    shareableBio: bioVisible ? counterparty.shareableBio ?? null : null,
     email: contactShared ? counterparty.email : null,
     phone: contactShared ? counterparty.phone : null,
     label: showName ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
@@ -220,23 +222,30 @@ async function serializeInterest(
     direction === "inbound" ? interest.fromRegistrationId : interest.toRegistrationId;
   const counterparty = await ctx.db.get(counterpartyId);
 
+  const internalStatus = flowStatus(flow, interest);
+  const ownFinalApproval = (direction === "inbound" ? flow?.recipientFinalApproval : flow?.requesterFinalApproval) ?? "pending";
+  const released = await contactsVisible(ctx, interest, flow);
+  const paused = released && interest.matchId ? (await ctx.db.get(interest.matchId))?.status === "paused" : false;
+  const closed = ["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(internalStatus);
+  const canRespond = viewer.status === "approved" && !closed && !paused && !interest.femaleWorkflow && direction === "inbound" && interest.visibility !== "internal_only" && ["awaiting_inbound_response", "kept_open"].includes(internalStatus);
+  const canFinalApprove = viewer.status === "approved" && !closed && !interest.femaleWorkflow && !paused && Boolean(flow?.bioVisibleAt) && ownFinalApproval === "pending" && !["contact_shared", "declined", "closed"].includes(internalStatus);
   return {
     interestId: interest._id,
-    ...(interest.femaleWorkflow ? { femaleWorkflow: { state: interest.femaleWorkflow.state } } : {}),
-    matchId: interest.matchId ?? null,
-    paused: interest.matchId ? (await ctx.db.get(interest.matchId))?.status === "paused" : false,
+    ...(interest.femaleWorkflow ? { femaleWorkflow: true } : {}),
+    canPause: !closed && released && Boolean(interest.matchId),
+    paused,
     direction,
-    status: interest.status,
-    flowStatus: flowStatus(flow, interest),
+    status: closed ? "closed" : internalStatus === "contact_shared" ? "contact_shared" : "in_progress",
+    flowStatus: closed ? "closed" : internalStatus === "contact_shared" ? "contact_shared" : "in_progress",
+    canRespond,
+    canFinalApprove,
+    canWithdraw: !interest.femaleWorkflow && (direction === "outbound" || direction === "private") && ["awaiting_inbound_response", "kept_open", "private_documented"].includes(internalStatus),
+    ownInitialDecision: direction === "inbound" ? flow?.recipientDecision ?? "pending" : null,
+    ownFinalApproval,
     visibility: interest.visibility,
-    adminStatus: interest.adminStatus ?? "pending",
     createdAt: interest.createdAt,
-    updatedAt: interest.updatedAt,
-    keepOpenExpiresAt: flow?.keepOpenExpiresAt ?? null,
-    bioVisibleAt: flow?.bioVisibleAt ?? null,
+    keepOpenExpiresAt: direction === "inbound" ? flow?.keepOpenExpiresAt ?? null : null,
     contactSharedAt: await contactsVisible(ctx, interest, flow) ? flow?.contactSharedAt ?? null : null,
-    requesterFinalApproval: flow?.requesterFinalApproval ?? "pending",
-    recipientFinalApproval: flow?.recipientFinalApproval ?? "pending",
     photoDecision: flow?.photoDecision ?? "pending",
     senderPhotoConsent: viewer._id === interest.fromRegistrationId ? interest.senderPhotoConsent ?? null : null,
     senderPhotoConsentRevokedAt: viewer._id === interest.fromRegistrationId ? interest.senderPhotoConsentRevokedAt ?? null : null,
@@ -255,7 +264,7 @@ export const getInterestEligibility = query({
     return {
       eventLogisticsRestricted: !canReceiveEventMessages(registration),
       interestSubmissionEventId: event?._id ?? null,
-      interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
+      interestSubmissions: submissions.map(row => ({ interestId: row._id, status: ["closed", "declined", "withdrawn"].includes(row.status) ? "closed" : "submitted" })),
       canSubmitInterest: Boolean(event) && ["pending", "approved"].includes(registration.status) && registration.profileCompletionStatus === "completed",
       interestSubmissionLimit: 3,
     };
@@ -305,7 +314,7 @@ export const getDashboard = query({
       eventLogisticsRestricted: !canReceiveEventMessages(registration),
       requestedConnectionId: args.connectionId ?? null,
       interestSubmissionEventId: eligibleEvent?._id ?? null,
-      interestSubmissions: submissions.map(row => ({ interestId: row._id, status: row.status })),
+      interestSubmissions: submissions.map(row => ({ interestId: row._id, status: ["closed", "declined", "withdrawn"].includes(row.status) ? "closed" : "submitted" })),
       applicant: {
         registrationId: registration._id,
         name: registration.name,
@@ -321,6 +330,15 @@ export const getDashboard = query({
       outbound: await Promise.all(
         visibleOutbound.map((interest) => serializeInterest(ctx, registration, interest, byId, "outbound"))
       ),
+      // Closed rows carry only the viewer's own receipt, never restored profile access.
+      history: await Promise.all([...inboundRows, ...outboundRows].filter(row => !row.testReset && !row.femaleWorkflow && !isVisibleInApplicantDashboard(row) && (row.fromRegistrationId === registration._id || row.visibility !== "internal_only")).map(async row => {
+        const flow = await ensureFlowForQuery(ctx, row);
+        return { interestId: row._id, status: "closed",
+          ownInitialDecision: row.toRegistrationId === registration._id ? flow?.recipientDecision ?? "pending" : null,
+          ownFinalApproval: (row.fromRegistrationId === registration._id ? flow?.requesterFinalApproval : flow?.recipientFinalApproval) ?? "pending",
+          ownDecision: row.fromRegistrationId === registration._id && row.status === "withdrawn" ? "withdrawn" : null,
+        };
+      })),
       privateDocumented: await Promise.all(
         privateDocumented.map((interest) => serializeInterest(ctx, registration, interest, byId, "private"))
       ),
@@ -359,7 +377,7 @@ export const submitInterestNumber = mutation({
     const retry = previous.find(row => row.toRegistrationId === target._id);
     if (retry) {
       if (!isVisibleInApplicantDashboard(retry)) throw new Error("Interest already submitted for this event");
-      return { interestId: retry._id, matchId: retry.matchId ?? null, private: retry.visibility === "internal_only", inboundInterestNotification: null };
+      return { interestId: retry._id, private: retry.visibility === "internal_only", inboundInterestNotification: null };
     }
 
     const result = await createApplicantInterestWithRules(ctx, {
@@ -396,7 +414,6 @@ export const submitInterestNumber = mutation({
 
     return {
       interestId: result.interestId,
-      matchId: result.matchId,
       private: interest.visibility === "internal_only",
       inboundInterestNotification: shouldNotifyInboundRecipient
         ? { interestId: interest._id }
@@ -593,8 +610,11 @@ export const giveFinalApproval = mutation({
     sessionHash: v.string(),
     interestId: v.id("interests"),
     approved: v.boolean(),
+    adminSecret: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const serverDelivery = args.adminSecret !== undefined;
+    if (serverDelivery) requireAdmin(args.adminSecret);
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
@@ -608,7 +628,7 @@ export const giveFinalApproval = mutation({
     // Already-disclosed historical rows are immutable consent history.
     if (flow.contactSharedAt) {
       if (!args.approved) throw new Error("Final approval has already been recorded for this interest");
-      return { flowId: flow._id, matchId: interest.matchId ?? null, finalApprovalNotification: null, contactSharedNotification: null, alreadyRecorded: true };
+      return { flowId: serverDelivery ? flow._id : null, matchId: serverDelivery ? interest.matchId ?? null : null, finalApprovalNotification: null, contactSharedNotification: null, alreadyRecorded: true };
     }
 
     if (["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(flow.flowStatus)) {
@@ -626,8 +646,8 @@ export const giveFinalApproval = mutation({
       if (existingViewerFinalApproval === requestedFinalApproval) {
         const matchId = args.approved ? await recordPairApproval(ctx, interest, registration._id, true) : interest.matchId;
         return {
-          flowId: flow._id,
-          matchId: matchId ?? null,
+          flowId: serverDelivery ? flow._id : null,
+          matchId: serverDelivery ? matchId ?? null : null,
           finalApprovalNotification: null,
           alreadyRecorded: true,
         };
@@ -639,7 +659,7 @@ export const giveFinalApproval = mutation({
     const updatedFlow = (await ctx.db.get(flow._id))!;
     const shouldNotify = args.approved && !matchId && !updatedFlow.finalApprovalNotificationSentAt;
     if (shouldNotify) await ctx.db.patch(flow._id, { finalApprovalNotificationSentAt: now, finalApprovalNotificationError: undefined });
-    return { flowId: flow._id, matchId, finalApprovalNotification: shouldNotify ? { interestId: interest._id } : null, contactSharedNotification: null, alreadyRecorded: false };
+    return { flowId: serverDelivery ? flow._id : null, matchId: serverDelivery ? matchId : null, finalApprovalNotification: serverDelivery && shouldNotify ? { interestId: interest._id } : null, contactSharedNotification: null, alreadyRecorded: false };
   },
 });
 

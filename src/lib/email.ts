@@ -486,12 +486,12 @@ export async function sendFinalApprovalRequestedEmail({
       from: defaultFrom,
       to: email,
       subject: "Final approval requested for your 1 Plus 1 match",
-      text: `Assalamu Alaikum ${name},\n\nThe bio-review step is ready for your final decision.\n\nPlease log in to review the bio and choose whether you want to give final approval.\n\nReview final approval: ${applicantPortalUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      text: `Assalamu Alaikum ${name},\n\nThis connection is awaiting your review.\n\nPlease log in to review the bio and choose whether you want to give final approval.\n\nReview final approval: ${applicantPortalUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
           <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
           <p style="line-height: 1.6;">
-            The bio-review step is ready for your final decision.
+            This connection is awaiting your review.
           </p>
           <p style="line-height: 1.6;">
             Please log in to review the bio and choose whether you want to give final approval.
@@ -542,12 +542,12 @@ export async function sendContactSharedEmail({
       from: defaultFrom,
       to: email,
       subject: "Contact information is available for your 1 Plus 1 match",
-      text: `Assalamu Alaikum ${name},\n\nBoth final approvals are complete. Contact information is now available in your 1 Plus 1 applicant portal.\n\nOpen your portal: ${applicantPortalUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      text: `Assalamu Alaikum ${name},\n\nContact information is now available in your 1 Plus 1 applicant portal.\n\nOpen your portal: ${applicantPortalUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
           <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
           <p style="line-height: 1.6;">
-            Both final approvals are complete. Contact information is now available in your 1 Plus 1 applicant portal.
+            Contact information is now available in your 1 Plus 1 applicant portal.
           </p>
           <p style="margin: 24px 0;">
             <a href="${applicantPortalUrl}" style="display: inline-block; background: #0f766e; color: white; text-decoration: none; padding: 12px 18px; border-radius: 8px; font-weight: 600;">

@@ -1,5 +1,7 @@
 "use client";
 import { comparisonProfileDetails } from "./comparison-profile-details";
+import { useMutualInterests } from "@/components/admin/hooks/use-mutual-interests";
+import type { MutualEvidence } from "../../../../convex/mutualInterest";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
 import { useProfileEventPages } from "@/components/admin/hooks/use-profile-event-pages";
@@ -31,6 +33,7 @@ type PipelineStage = MatchStatus;
 type ShareStatus = Doc<"profileShares">["status"];
 
 type InterestRecord = Doc<"interests"> & {
+  mutual?: MutualEvidence | null;
   fromRegistration: RegistrationWithImages | null;
   toRegistration: RegistrationWithImages | null;
   match: Doc<"matches"> | null;
@@ -88,11 +91,10 @@ function pipelineStageForMatch(match: MatchRecord): PipelineStage {
 }
 
 function useMatchingData(workbench = false) {
-  const interestsLegacy = useQuery("interests.getAll", workbench ? "skip" : {});
+  const mutualInterests = useMutualInterests();
   const matchesLegacy = useQuery("matches.getAll", workbench ? "skip" : {});
-  const interestPages = useProfileEventPages("interests.workbenchPage", workbench ? {} : "skip");
   const matchPages = useProfileEventPages("matches.workbenchPage", workbench ? {} : "skip");
-  const interestsRaw = workbench ? interestPages.rows : interestsLegacy;
+  const interestsRaw = mutualInterests.rows;
   const matchesRaw = workbench ? matchPages.rows : matchesLegacy;
   const profileSharesRaw = useQuery("profileShares.getAll");
   const registrationsData = useRegistrations();
@@ -117,8 +119,8 @@ function useMatchingData(workbench = false) {
     registrationsData.isLoading;
 
   return {
-    error: interestPages.error || matchPages.error,
-    retry: () => { interestPages.retry(); matchPages.retry(); },
+    error: mutualInterests.error || matchPages.error,
+    retry: () => { mutualInterests.retry(); matchPages.retry(); },
     isLoading,
     interests,
     matches,
@@ -643,6 +645,7 @@ function InterestRow({
       </td>
       <td>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          <MutualBadge interest={interest} />
           <Pill tone="plain">{interestLifecycle(interest)}</Pill>
           <Pill tone={interest.visibility === "internal_only" ? "blue" : "plain"}>
             {titleize(interest.visibility)}
@@ -676,10 +679,24 @@ function InterestRow({
   );
 }
 
+function MutualBadge({ interest }: { interest?: InterestRecord | null }) {
+  const evidence = interest?.mutual;
+  if (!interest || !evidence) return null;
+  const number = (id: string) => id === interest.fromRegistrationId ? interest.fromRegistration?.publicApplicantNumber : interest.toRegistration?.publicApplicantNumber;
+  return <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+    <Pill tone={evidence.state === "open" ? "green" : "plain"}>{evidence.state === "open" ? "Mutual interest · Open" : "Mutual interest · Completed"}</Pill>
+    <details><summary style={{ cursor: "pointer" }}>Both submissions</summary>
+      <p>{interest.event?.title ?? "Recorded event"}{evidence.state === "completed" ? " · Contacts shared — historical evidence, not an open request." : " · Same-event reciprocal submissions."}</p>
+      <ul>{evidence.submissions.map(s => <li key={s.id}>#{number(s.fromRegistrationId) ?? "?"} → #{number(s.toRegistrationId) ?? "?"} · {s.source === "platform_submission" ? "Applicant submission" : titleize(s.source)} · {formatDateTime(s.createdAt)}</li>)}</ul>
+    </details>
+  </div>;
+}
+
 export function InterestsPageClient() {
   const data = useMatchingData();
   const [resetSelection, setResetSelection] = useState<{ id: string; pair: string; event: string } | null>(null);
   const [visibility, setVisibility] = useState<"all" | "internal_only" | "admin_actionable">("all");
+  const [mutualOnly, setMutualOnly] = useState(false);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -695,6 +712,7 @@ export function InterestsPageClient() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.interests
+      .filter((interest) => !mutualOnly || !!interest.mutual)
       .filter((interest) => visibility === "all" || interest.visibility === visibility)
       .filter((interest) => eventFilter === "all" || interest.eventId === eventFilter)
       .filter((interest) => {
@@ -712,7 +730,7 @@ export function InterestsPageClient() {
           .some((value) => value!.toLowerCase().includes(q));
       })
       .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [data.interests, eventFilter, search, visibility]);
+  }, [data.interests, eventFilter, search, visibility, mutualOnly]);
 
   return (
     <>
@@ -722,6 +740,7 @@ export function InterestsPageClient() {
       />
       <Notice text={message} />
       {resetSelection && <TestResetDialog key={resetSelection.id} selection={resetSelection} onClose={() => setResetSelection(null)} onSuccess={setMessage} />}
+      {data.error && <div role="alert">{data.error} Last loaded data may be outdated. Unsaved notes are retained. <button className="btn" onClick={data.retry}>Retry</button></div>}
       {data.isLoading ? (
         <LoadingPanel />
       ) : (
@@ -741,6 +760,7 @@ export function InterestsPageClient() {
                 {item === "all" ? "All visibility" : titleize(item)}
               </button>
             ))}
+            <label className="filt"><input type="checkbox" checked={mutualOnly} onChange={e => setMutualOnly(e.target.checked)} /> Mutual only</label>
             <select
               value={eventFilter}
               onChange={(event) => setEventFilter(event.target.value)}
@@ -1006,7 +1026,10 @@ export function WorkbenchPageClient() {
   const data = useMatchingData(true);
   const catalog = useProfileEventPages("events.profileFilterCatalog", {});
   const [eventScope, setEventScope] = useState(searchParams.get("event") ?? "all");
-  const { interests, matches } = scopedWorkbenchRecords(data.interests, data.matches, eventScope);
+  const [mutualOnly, setMutualOnly] = useState(false);
+  const scoped = scopedWorkbenchRecords(data.interests, data.matches, eventScope);
+  const interests = scoped.interests.filter(i => !mutualOnly || !!i.mutual);
+  const matches = scoped.matches.filter(m => !mutualOnly || interests.some(i => i._id === m.interestId && !!i.mutual));
   const notifyDecline = useNotifyDecline();
   const [selectedInterestId, setSelectedInterestId] = useState<string>("");
   const [selectedMatchId, setSelectedMatchId] = useState<string>("");
@@ -1055,7 +1078,8 @@ export function WorkbenchPageClient() {
         <NewMatchDialog />
         <p style={{ color: "var(--mute)", fontSize: 14 }}>Start a private draft, then present it after both applicants opt in.</p>
       </div>
-      {data.error || catalog.error ? <div role="alert">Workbench data unavailable. <button className="btn" onClick={() => { data.retry(); catalog.retry(); }}>Retry</button></div> : data.isLoading || !catalog.rows ? (
+      {(data.error || catalog.error) && <div role="alert">Workbench data unavailable. Last loaded data may be outdated. <button className="btn" onClick={() => { data.retry(); catalog.retry(); }}>Retry</button></div>}
+      {data.isLoading || !catalog.rows ? (
         <LoadingPanel />
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
@@ -1067,6 +1091,7 @@ export function WorkbenchPageClient() {
               {catalog.rows.map(event => <option key={event._id} value={event._id}>{workbenchEventLabel(event)}</option>)}
               {eventScope !== "all" && eventScope !== "unscoped" && !catalog.rows.some(e => e._id === eventScope) && <option value={eventScope}>Unavailable event</option>}
             </select>
+            <label><input type="checkbox" checked={mutualOnly} onChange={e => { setMutualOnly(e.target.checked); setSelectedInterestId(""); setSelectedMatchId(""); }} /> Mutual only · includes completed history</label>
             <p aria-live="polite">{interests.length} interests · {matches.length} matches. Global conflict and consent checks still apply.</p>
             {eventScope === "unscoped" && <p>Matches without a valid linked interest have no recorded event. They are excluded from named events.</p>}
           </section>
@@ -1106,12 +1131,12 @@ export function WorkbenchPageClient() {
             <div style={{ padding: 16 }}>
               {!selectedInterest && !selectedMatch && <p role="status">{interests.length || matches.length ? "Select an interest or match to review." : "No interests or matches in this event filter."}</p>}
               <p><strong>{mode === "interest" ? "Interest review" : "Match review"}</strong> · Requester {left?.name ?? "—"} → Target {right?.name ?? "—"}</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              {(() => { const interest = selectedInterest ?? interests.find(i => i._id === selectedMatch?.interestId); return interest?.mutual ? <MutualBadge interest={interest} /> : <p>No reciprocal submissions recorded for this event.</p>; })()}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 16 }}>
                 {[left, right].map((person) => person && <section key={person._id}>
                   <h4>{person.name}: other interests and workflows in this filter</h4>
                   {data.matches.some(m => m._id !== selectedMatch?._id && [m.maleRegistrationId, m.femaleRegistrationId].includes(person._id) && !["closed", "declined", "paused"].includes(m.status) && !inEventScope(matchEventId(m), eventScope)) && <p><strong>Another active match exists outside this filter.</strong> Global safety checks still apply.</p>}
                   <p>{person.activeMatchId ? "Contacts already released in an active connection. A second release is blocked." : "No released active connection"}</p>
-                  <p>{interests.some((i) => i.fromRegistrationId === right?._id && i.toRegistrationId === left?._id && isOpenInterest(i.status)) && interests.some((i) => i.fromRegistrationId === left?._id && i.toRegistrationId === right?._id && isOpenInterest(i.status)) || selectedMatch?.interestType === "mutual_interest" ? "Mutual interest" : "No reciprocal open interest recorded"}</p>
                   {interests.filter((i) => (i.fromRegistrationId === person._id || i.toRegistrationId === person._id) && i._id !== selectedInterest?._id && i._id !== selectedMatch?.interestId).map((i) => <p key={i._id} style={{ opacity: isOpenInterest(i.status) ? 1 : 0.5 }}>#{i.fromRegistration?.publicApplicantNumber} {i.fromRegistration?.name} → #{i.toRegistration?.publicApplicantNumber} {i.toRegistration?.name} · {interestLifecycle(i)}</p>)}
                   {matches.filter((m) => m._id !== selectedMatch?._id && [m.maleRegistrationId, m.femaleRegistrationId].includes(person._id) && !["closed", "declined", "paused"].includes(m.status)).map((m) => <p key={m._id}><strong>Other active match:</strong> {m.maleRegistration?.name} + {m.femaleRegistration?.name} · {titleize(m.status)}</p>)}
                 </section>)}

@@ -738,3 +738,14 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11
 - Hardened rejection claim against absent/invalid activation and preactivation queued work, including attempted rows; added six synthetic no-send/immutable-cutoff regressions.
+- Added fixed-scope audited #315→#217 Nov14 submission reopen backend/API and regression tests; preview only, no operational data changes. Existing profile shares and notification history remain unchanged.
+- Layla3472: applicant-only neutral decision notices and DTOs across event interests, female reviews, matchmaker introductions, and future email copy; own decisions/admin detail retained, progression/contact/bio gates unchanged. Preview-only; frozen email retries and workflow timing can still reveal historical/progression information.
+
+- Layla3477 supersedes earlier unchanged-bio scope: exact-interest initial acceptance now gates bios in applicant list/detail, female review, and linked shares. Existing context-free share grants and manual matchmaker lifecycle remain separate; no migration or progression change. Read-only email audit found zero frozen payloads.
+- Draft mutual-interest3455: server-complete reciprocal evidence, explicit open/completed badges and mutual filters; preview gate remains closed pending legacy evidence review and final validation.
+- Review fixes: legacy disclosure provenance, request-scoped consistent snapshots, linear evidence payload, and draft-preserving background refresh. Full1122tests/types/lint/serial build passed; no live writes.
+## 2026-11-11 — public event code badge
+- Removed only the homepage internal event-code badge; kept registration routing, event title/date/location and availability pills. Added all-four-status regression checks; 1097 tests, types, lint (8 existing warnings), production build pass. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — preserve3539
+- Preserve latest live public-event badge removal in release candidate; retain both histories and independent share issuance/access without changing consent or revocation gates. No deployment or data changes. <!-- project: github.com/moeghashim/clawscrewskill -->
