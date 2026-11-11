@@ -290,3 +290,19 @@ for (const source of sources) for (const releaseBeforeShare of [false, true]) te
   const row = (await w.t.run(ctx => ctx.db.get(female)))!;
   expect(row.source).toBe("platform_submission"); expect(row.eventId).toBe(w.event); expect(row.senderPhotoConsent).toBe("yes");
 });
+
+
+test("private draft never reserves applicants or prevents ordinary consent and contact release", async () => {
+  const w = await publicWorld();
+  const draft = await w.t.mutation(api.matches.create, { adminSecret: workflowAdmin, maleRegistrationId: w.people[0], femaleRegistrationId: w.people[1] });
+  const before = await w.t.run(ctx => ctx.db.get(draft));
+  const interestId = await w.submit("platform_submission");
+  await w.open(interestId);
+  await w.approve(interestId, 0);
+  await w.approve(interestId, 1);
+  const official = (await w.t.run(ctx => ctx.db.get(interestId)))!.matchId!;
+  expect(official).not.toBe(draft);
+  await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: official, status: "contact_shared" });
+  expect((await w.t.run(ctx => ctx.db.get(official)))?.status).toBe("contact_shared");
+  expect(await w.t.run(ctx => ctx.db.get(draft))).toEqual(before);
+});

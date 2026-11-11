@@ -1,3 +1,4 @@
+import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { capabilityAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
@@ -6,11 +7,23 @@ import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 
 type ShareScope = Pick<Doc<"profileShares">, "ownerRegistrationId" | "recipientRegistrationId" | "interestId" | "matchId">;
-async function resolvedInterest(ctx: QueryCtx, share: ShareScope): Promise<Doc<"interests"> | null | false> {
+async function resolvedInterest(ctx: QueryCtx, share: ShareScope & { createdAt?: number }): Promise<Doc<"interests"> | null | false> {
   if (share.ownerRegistrationId === share.recipientRegistrationId) return false;
+  // Only context-free shares need the pair guard; preserve legitimate linked history.
+  if (!share.interestId && !share.matchId) {
+  // Lifecycle shares must bind to matchId so withdrawal remains enforceable.
+  // Preserve genuinely older shares; never infer their origin from a later match.
+  for await (const match of ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", share.ownerRegistrationId))) {
+    if (match.femaleRegistrationId === share.recipientRegistrationId && (isManualMatchDraft(match) || match.matchmakerPresentedAt !== undefined) && (share.createdAt === undefined || share.createdAt >= match.createdAt)) return false;
+  }
+  for await (const match of ctx.db.query("matches").withIndex("by_femaleRegistrationId", q => q.eq("femaleRegistrationId", share.ownerRegistrationId))) {
+    if (match.maleRegistrationId === share.recipientRegistrationId && (isManualMatchDraft(match) || match.matchmakerPresentedAt !== undefined) && (share.createdAt === undefined || share.createdAt >= match.createdAt)) return false;
+  }
+  }
   let interestId = share.interestId;
   if (share.matchId) {
     const match = await ctx.db.get(share.matchId);
+    if (isManualMatchDraft(match)) return false;
     if (!match || match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) return false;
     if (![match.maleRegistrationId, match.femaleRegistrationId].includes(share.ownerRegistrationId) ||
         ![match.maleRegistrationId, match.femaleRegistrationId].includes(share.recipientRegistrationId)) return false;

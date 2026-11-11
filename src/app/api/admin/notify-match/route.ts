@@ -1,3 +1,4 @@
+import { isManualMatchDraft } from "@/lib/manual-match-draft";
 import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -40,6 +41,8 @@ export async function POST(request: NextRequest) {
     if (!match) {
       return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
+
+    if (isManualMatchDraft(match) || (!match.interestId && (match.interestType === "admin_suggested" || match.initiatedBy === "admin_recommendation"))) return NextResponse.json({ error: "Use the explicit matchmaker presentation workflow. This endpoint cannot notify matchmaker matches." }, { status: 409 });
 
     const male = await convexClient.query(api.registrations.getById, { adminSecret: getAdminSecret(),  id: match.maleRegistrationId });
     const female = await convexClient.query(api.registrations.getById, { adminSecret: getAdminSecret(),  id: match.femaleRegistrationId });

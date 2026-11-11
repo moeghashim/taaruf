@@ -673,3 +673,9 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Request3176: ported education editing, shared options and validation from PR42 onto verified PR93 live baseline; preserved capability/image security and added synthetic persistence/API/browser coverage. Preview only; no live writes.
 - Event capacity controls: allow lowering caps without changing existing registrations, add explicit authenticated one-person waitlist force-to-Pending with warning, preserve ordinary capacity/FIFO/auth rules. Added backend and bridge regressions; 744 tests, root/Convex types, scoped lint, production build and real synthetic local-backend/browser checks pass. Preview-only; no live cap/data/deployment changes. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Independent capacity review follow-up: preserve save feedback across data refresh; explicitly explain and test mixed decrease/increase all-row preservation, both genders and expired reservations. No backend behavioral change from reviewed implementation. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Restore workbench New match as private Save draft; block draft bearer disclosure/notifications and availability reservation; preserve legacy contact-release provenance. Synthetic regression/browser checks; preview-only, no live deployment.
+
+## 2026-11-10
+- Implemented issue97 background matchmaking in convex lifecycle/schema, applicant tab/API, admin Present/release/followups and dedicated gated notification sender; added privacy/withdrawal/idempotency/race/mobile regression coverage. Preview only; no live backend/data/email changes.

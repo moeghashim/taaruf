@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
+import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
 import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
@@ -620,6 +621,8 @@ export default function ApplicantDashboardPage() {
   const [busy, setBusy] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const hasDashboard = Boolean(data);
+  const [portalTab, setPortalTab] = useState<"interests" | "matchmaker">("interests");
+  useEffect(() => { const sync = () => setPortalTab(window.location.hash === "#matchmaker-matching" ? "matchmaker" : "interests"); sync(); window.addEventListener("hashchange", sync); return () => window.removeEventListener("hashchange", sync); }, []);
   const [sideOpen, setSideOpen] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(false);
 
@@ -989,7 +992,7 @@ export default function ApplicantDashboardPage() {
           <nav className="side-nav">
             <div className="nav-section">
               <h5>Portal</h5>
-              <a className="nav-item active" href="#overview" onClick={() => setSideOpen(false)}>
+              <a className={`nav-item ${portalTab === "interests" ? "active" : ""}`} href="#overview" onClick={() => setSideOpen(false)}>
                 <span className="icon">{Ico.dash}</span>
                 <span>Overview</span>
               </a>
@@ -1003,6 +1006,7 @@ export default function ApplicantDashboardPage() {
                 <span>Outbound</span>
                 <span className="count">{data.outbound.length}</span>
               </a>
+              <a className={`nav-item ${portalTab === "matchmaker" ? "active" : ""}`} href="#matchmaker-matching" onClick={() => { setPortalTab("matchmaker"); setSideOpen(false); }}><span className="icon">{Ico.heart}</span><span>Matchmaker Matching</span></a>
               <a className="nav-item" href="#profile" onClick={() => setSideOpen(false)}>
                 <span className="icon">{Ico.people}</span>
                 <span>Profile</span>
@@ -1065,6 +1069,9 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
+            <div role="tablist" aria-label="Matching" onKeyDown={event => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? "interests" : event.key === "End" ? "matchmaker" : portalTab === "interests" ? "matchmaker" : "interests"; setPortalTab(next); document.getElementById(next === "interests" ? "interests-tab" : "matchmaker-tab")?.focus(); window.history.replaceState(null, "", next === "interests" ? "#overview" : "#matchmaker-matching"); }} style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}><button role="tab" tabIndex={portalTab === "interests" ? 0 : -1} id="interests-tab" aria-controls="interests-panel" aria-selected={portalTab === "interests"} className={`btn ${portalTab === "interests" ? "btn-primary" : ""}`} onClick={() => { setPortalTab("interests"); window.history.replaceState(null, "", "#overview"); }}>Applicant interests</button><button role="tab" tabIndex={portalTab === "matchmaker" ? 0 : -1} id="matchmaker-tab" aria-controls="matchmaker-panel" aria-selected={portalTab === "matchmaker"} className={`btn ${portalTab === "matchmaker" ? "btn-primary" : ""}`} onClick={() => { setPortalTab("matchmaker"); window.history.replaceState(null, "", "#matchmaker-matching"); }}>Matchmaker Matching</button></div>
+            {portalTab === "matchmaker" && <div role="tabpanel" id="matchmaker-panel" aria-labelledby="matchmaker-tab"><MatchmakerMatching /></div>}
+            <div role="tabpanel" id="interests-panel" aria-labelledby="interests-tab" hidden={portalTab !== "interests"}>
             {data.applicant.status === "approved" && <FemaleReviews />}
 
             <div className="stats">
@@ -1392,6 +1399,7 @@ export default function ApplicantDashboardPage() {
                   busy={busy}
                 />
               )}
+            </div>
             </div>
           </div>
         </div>
