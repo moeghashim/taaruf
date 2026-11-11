@@ -11,7 +11,7 @@ describe("workbench event labels", () => {
   it.each([undefined, null, NaN, Infinity])("handles missing/invalid date %s", startsAt => {
     expect(workbenchEventLabel({ title: "Real Talk", startsAt })).toBe("Real Talk — Date unavailable");
   });
-  it("accepts epoch zero rather than treating it as missing", () => {
-    expect(workbenchEventLabel({ title: "Event", startsAt: 0 })).toBe("Event — Dec 31, 1969");
+  it("does not present the manual/admin zero sentinel as a 1969 event", () => {
+    expect(workbenchEventLabel({ title: "Event", startsAt: 0 })).toBe("Event — Date unavailable");
   });
 });

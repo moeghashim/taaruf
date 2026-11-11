@@ -713,3 +713,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Applicant copy3395: removed internal draft explanation; kept match presentation guidance. No admin draft behavior change.
 
 - Integrated PR118 b5320f9 live rejection/logistics baseline into four-view portal; added all-view privacy regression while retaining correction3403. Preview only. <!-- project: github.com/moeghashim/clawscrewskill -->
+## 2026-11-10
+- Harden workbench New match discoverability with an explicit accessible creation group before event filters; retain existing private draft/present flow and backend gates. Hide zero-date sentinel, add action and nine-state browser regressions. Fresh live screenshot mismatch remains unexplained; no deployment.

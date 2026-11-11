@@ -1054,9 +1054,12 @@ export function WorkbenchPageClient() {
       <PageHead
         title={<>Match <em>workbench</em></>}
         subtitle="Compare profiles side by side and take the next matching action without returning to legacy."
-        actions={<NewMatchDialog />}
       />
       <Notice text={message} />
+      <div role="group" aria-label="Match creation" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <NewMatchDialog />
+        <p style={{ color: "var(--mute)", fontSize: 14 }}>Start a private draft, then present it after both applicants opt in.</p>
+      </div>
       {data.error || catalog.error ? <div role="alert">Workbench data unavailable. <button className="btn" onClick={() => { data.retry(); catalog.retry(); }}>Retry</button></div> : data.isLoading || !catalog.rows ? (
         <LoadingPanel />
       ) : (
