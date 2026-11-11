@@ -764,3 +764,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — archive placement3582
 - Moved unchanged participant archive/restore card to the final portal content position for both roles; added responsive all-view last-position, duplicate and confirmation-cancel no-write tests. No backend or live operations. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — workbench focus-click3639
+- Same-query paginated refresh now retains the last complete snapshot until success/failure; changed queries and failed/auth-denied reads still clear. Baseline mouse/touch Close interest lost POST on focus refresh; candidate preserves one POST. Added synthetic pointer/touch/keyboard/auth-denial regression script; no production/backend/data operations. <!-- project: github.com/moeghashim/clawscrewskill -->
