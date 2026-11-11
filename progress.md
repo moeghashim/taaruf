@@ -726,3 +726,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10 — matching integration3430
 - Integrated cancellation94db707 with frontend120, future-only email121 and comparison122 in an isolated candidate; protected matching cutoff from generic settings mutation after independent review and added readiness regressions. Portal119 still pending; no live/config/email writes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Draft failure3445: map known shared availability validation to public ConvexErrors, preserving active-match guard and unknown-error redaction; add zero-write regression for missing activeMatchId.

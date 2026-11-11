@@ -59,7 +59,15 @@ export const create = mutation({
         if (interest.toRegistrationId === to && !interest.testReset && !["closed", "declined", "withdrawn"].includes(interest.status)) throw new ConvexError("Use participant final approvals for an interest-backed pair; manual creation cannot substitute consent.");
       }
     }
-    await assertParticipantsAvailable(ctx, male._id, female._id);
+    try {
+      await assertParticipantsAvailable(ctx, male._id, female._id);
+    } catch (error) {
+      // Shared availability checks also serve other workflows. Only these known
+      // validation failures are public; never forward transport errors or stacks.
+      if (error instanceof Error && error.message === "Applicant already has an active match") throw new ConvexError("An applicant already has an active match. Review it before creating another.");
+      if (error instanceof Error && error.message === "Match history requires manual review") throw new ConvexError("An applicant’s match history requires manual review. Contact support before creating another match.");
+      throw error;
+    }
     const now = Date.now();
     return await ctx.db.insert("matches", { maleRegistrationId: male._id, femaleRegistrationId: female._id, status: "new", interestType: "admin_suggested", initiatedBy: "admin_recommendation", adminNotes: args.adminNotes?.trim() || undefined, createdAt: now, updatedAt: now });
   },
