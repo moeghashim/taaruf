@@ -729,3 +729,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Draft failure3445: map known shared availability validation to public ConvexErrors, preserving active-match guard and unknown-error redaction; add zero-write regression for missing activeMatchId.
+
+## 2026-11-10 — matching release3445
+- Reconciled approved matching and draft validation onto exact live portal; 1097 tests, build/types and portal/comparison/New match browser checks pass. Production remains unchanged pending final gates. <!-- project: github.com/moeghashim/clawscrewskill -->
