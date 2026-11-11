@@ -782,3 +782,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11
 - Partial correction for Omar3710: generic outbound heading returns to exact Interest Update after own final approval; added unit/browser regression. Literal any-admin/user approval condition remains blocked by private public projections; no backend/data/deploy/certification.
+
+- Superseding Omar3715: exact You Have Sent An Interest until recipient acceptance unlocks the sender review; real female workflow waiting and post-review headings corrected using existing ownAction/ownDecision fields, no new backend disclosure. Added real Convex API lifecycle tests for both directions and real female projection browser coverage.
