@@ -750,9 +750,14 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-11 — preserve3539
 - Preserve latest live public-event badge removal in release candidate; retain both histories and independent share issuance/access without changing consent or revocation gates. No deployment or data changes. <!-- project: github.com/moeghashim/clawscrewskill -->
 
+<<<<<<< HEAD
 ## 2026-11-11 — archive3480 integration
 - Integrated approved archive/availability-only restore onto verified live54af1ab, preserving newer privacy/mutual-interest/public-event work. Archive cancels future bookings with genuine FIFO Pending promotion, suppresses old access/sends, and retains in-flight provider evidence. 1280 tests pass; root/Convex types, lint and build pass; isolated runtime and independent final review recorded privately. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 ## 2026-11-11 — independent test-pair reset3603
 - Decoupled fixed-pair reset from historical delivery state; audit-ID retirement epochs fence claims/retries/pre-send authorization and confine late results to old-job evidence. Preserved original provider payload/errors and immutable reset snapshots, token/share revocation, auth/fingerprint/idempotency and unrelated pairs. Updated admin warning and repeat/race tests; isolated synthetic runtime verifies four actual resubmission/reset cycles. No live operation or release. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Independent review follow-up: preserve every retired provider callback in append-only `retiredDeliveryResults` (including stale attempts), retain old-job summary separately, and recheck kind/token/current-recipient immediately before send. Deterministic interleaving and callback-isolation regressions added. <!-- project: github.com/moeghashim/clawscrewskill -->
+=======
+## 2026-11-11 — requests 3554/3557
+- Removed duplicate Profile reviews ribbon and promoted otherwise unique updates to primary notices; added actionable inbound banners with per-interest focus/scroll routing for both portals. Added synthetic production-build responsive regression coverage; no backend or production changes.
+>>>>>>> b61ab0f (fix: streamline interest notifications and surface inbound reviews)

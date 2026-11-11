@@ -287,6 +287,7 @@ function InterestRow({
       className={`interest-row ${selected ? "selected" : ""}`}
       onClick={onSelect}
       aria-pressed={selected}
+      data-interest-id={interest.interestId}
     >
       <div className="interest-row-main">
         <h4>{counterparty?.label ?? "Unknown applicant"}</h4>
@@ -545,6 +546,14 @@ function Section({
       setSelectedInterestId(requestedConnectionId ? interests.find(row => row.interestId === requestedConnectionId)?.interestId ?? null : interests[0].interestId);
     }
   }, [interests, selectedInterestId, requestedConnectionId]);
+
+  useEffect(() => {
+    if (!requestedConnectionId || selectedInterest?.interestId !== requestedConnectionId) return;
+    const section = document.getElementById(sectionId(title));
+    const target = Array.from(section?.querySelectorAll<HTMLButtonElement>("[data-interest-id]") ?? []).find(button => button.dataset.interestId === requestedConnectionId);
+    target?.focus();
+    target?.scrollIntoView({ block: "center" });
+  }, [requestedConnectionId, selectedInterest?.interestId, title]);
 
   return (
     <section id={sectionId(title)} className="panel applicant-section">
@@ -999,6 +1008,7 @@ export default function ApplicantDashboardPage() {
     .toUpperCase();
   const completedProfile = data.applicant.profileCompletionStatus === "completed";
   const hijabLabel = hijabQuestion(profile?.gender);
+  const actionableInbound = data.inbound.filter(interest => !interest.paused && (interest.canRespond || interest.canFinalApprove));
 
   return (
     <main data-admin>
@@ -1177,7 +1187,23 @@ export default function ApplicantDashboardPage() {
             <p className="portal-next"><a href="#applicant-interests">Review applicant interests</a> · <a href="#profile">Update my profile</a></p>
             </div>
             <div hidden={view !== "interests"} id="applicant-interests">
+<<<<<<< HEAD
             {!archived && data.applicant.status === "approved" && <FemaleReviews />}
+=======
+            {actionableInbound.length > 0 && <section className="interest-invitation" aria-labelledby="inbound-action-heading">
+              <div className="interest-invitation-copy">
+                <h2 id="inbound-action-heading">You have {actionableInbound.length === 1 ? "an interest to review" : "interests to review"}</h2>
+                <p>Review and respond to your incoming interests. Contact details remain private until sharing is approved.</p>
+              </div>
+              <ul className="interest-invitation-actions">
+                {actionableInbound.map((interest, index, actionable) => <li key={interest.interestId}>
+                  {actionable.length > 1 && <span>Interest {index + 1}</span>}
+                  <a className="btn btn-primary" href={"/me?connection=" + encodeURIComponent(interest.interestId) + "#inbound-interests"} aria-label={actionable.length > 1 ? "View interest " + (index + 1) : undefined}>View interest</a>
+                </li>)}
+              </ul>
+            </section>}
+            {data.applicant.status === "approved" && <FemaleReviews />}
+>>>>>>> b61ab0f (fix: streamline interest notifications and surface inbound reviews)
             <div className="panel interest-submit-panel">
               <div className="panel-head">
                 <div>
