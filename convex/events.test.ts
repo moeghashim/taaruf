@@ -553,3 +553,20 @@ describe("explicit capacity controls", () => {
     expect(await t.run(ctx => ctx.db.get(waitlisted))).toMatchObject({ registrationStatus: "waitlisted" });
   });
 });
+
+test.each(["male", "female"] as const)("%s reduction preserves expired and opposite-gender rows, including mixed increases", async gender => {
+  vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "test-admin");
+  const t = convexTest(schema, modules);
+  const eventId = await t.run(async ctx => {
+    const eventId = await insertEvent(ctx, "Mixed limits", "mixed-limits", Date.now() + 86400000, 2);
+    for (const g of ["male", "female"] as const) {
+      const id = await insertRegistration(ctx, "Mixed " + g, g);
+      const row = await insertEventRegistration(ctx, eventId, id, g, g === gender ? "pending" : "waitlisted");
+      if (g === gender) await ctx.db.patch(row, { confirmationExpiresAt: Date.now() - 1000 });
+    }
+    return eventId;
+  });
+  const before = await t.run(ctx => ctx.db.query("eventRegistrations").collect());
+  await t.mutation(api.events.update, { adminSecret: "test-admin", eventId, maleCapacity: gender === "male" ? 1 : 3, femaleCapacity: gender === "female" ? 1 : 3 });
+  expect(await t.run(ctx => ctx.db.query("eventRegistrations").collect())).toEqual(before);
+});

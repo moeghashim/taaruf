@@ -101,7 +101,7 @@ function EventCapacityEditor({ event, onSave }: {
       finally { setSaving(false); }
     }}>
       <h4 style={{ marginBottom: 8 }}>Event capacity</h4>
-      <p style={{ marginBottom: 12 }}>Lowering capacity keeps everyone already registered. New applicants stay waitlisted and automatic promotion pauses while reserved places meet or exceed the limit. Increasing capacity can promote the waitlist.</p>
+      <p style={{ marginBottom: 12 }}>Lowering capacity keeps everyone already registered. New applicants stay waitlisted and automatic promotion pauses while reserved places meet or exceed the limit. Increasing capacity can promote the waitlist. When lowering either limit, this save preserves all rows; save any increase separately to promote that waitlist immediately.</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "end" }}>
         <label className="field"><span>Male capacity</span><input type="number" min="1" step="1" required value={male} disabled={saving} onChange={e => setMale(e.target.value)} /></label>
         <label className="field"><span>Female capacity</span><input type="number" min="1" step="1" required value={female} disabled={saving} onChange={e => setFemale(e.target.value)} /></label>
@@ -578,7 +578,7 @@ export function EventsPageClient() {
               </button>
             </div>
           </div>
-          <EventCapacityEditor key={`${detail._id}-${detail.maleCapacity}-${detail.femaleCapacity}`} event={detail} onSave={updateEvent} />
+          <EventCapacityEditor key={detail._id} event={detail} onSave={updateEvent} />
           {detail.series === "1plus1_match" && detail.eventCode !== "manual-admin" && (
             <InterestSubmissionsToggle key={detail._id} eventId={detail._id} enabled={detail.interestSubmissionsEnabled === true} />
           )}
