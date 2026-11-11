@@ -661,3 +661,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Added prominent applicant review invitations and a deduplicated brother-review email stage in the existing outbox, with synthetic provider/browser regressions; preview-only, no live deployment or email.
+
+- PR91 release3068: merge the src alias into convex/tsconfig.json for API bridge test typechecking; all existing compiler settings preserved. Convex/root typechecks, 731 tests and enabled-typecheck backend dry-run pass; 51 candidate runtime modules byte-identical before/after repair, 50 live modules unchanged. Independent review approved. Fresh exact-SHA DCO certification required before deployment; no production/config/email changes. <!-- project: github.com/moeghashim/clawscrewskill -->
