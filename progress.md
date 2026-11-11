@@ -667,3 +667,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Task3043: event ribbon, explicit provenance normalization, separate No recorded event, complete paginated workbench reads, stale-selection clearing and scoped detail actions; added unit/browser regressions and workflow documentation. Preview-only; global gates and prior reset/copy/email behavior preserved. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Profile3052/3055: unified review Age facts, explicit full-text Requirements and responsive uncropped photos; frontend-only atop verified live PR92. Independent static review and 735 tests/root+Convex types/Turbopack build pass. Browser harness initially sampled lazy images before decode; corrected test waits, no application fix. Screenshot visual-inspection tool denied project paths; computed-layout and saved screenshots available. No production/data/email/config changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Request3176: ported education editing, shared options and validation from PR42 onto verified PR93 live baseline; preserved capability/image security and added synthetic persistence/API/browser coverage. Preview only; no live writes.
