@@ -236,3 +236,66 @@ test.each([true,false])("archive preserves attempted outbox result without retri
  const fetcher=vi.fn();vi.stubGlobal("fetch",fetcher);await t.action(internal.femaleWorkflowDelivery.drain,{});expect(fetcher).not.toHaveBeenCalled();
  expect(await t.mutation(internal.femaleWorkflowDelivery.claim,{})).toEqual([]);
 });
+
+// Reset audit IDs are irreversible job epochs, never cleared/reused by a new cycle.
+for (const phase of ["queued", "claimed", "frozen"] as const) test("retired " + phase + " epoch cannot claim, freeze, authorize or retry; zero provider fetch", async () => {
+  const { t } = await accepted(); isolated();
+  const provider = vi.fn(); vi.stubGlobal("fetch", provider);
+  const row = phase === "queued" ? (await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").withIndex("by_status_and_nextAttemptAt", q => q.eq("status", "pending")).first()))! : (await t.mutation(internal.femaleWorkflowDelivery.claim, {}))[0];
+  if (phase === "frozen") expect(await t.mutation(internal.femaleWorkflowDelivery.markAttempt, { id: row._id, attempt: row.attempts })).toBeTruthy();
+  await t.run(async ctx => {
+    const auditId = await ctx.db.insert("pairTestResetAudits", { operationKey: "synthetic-retirement", request: "{}", snapshot: "{}", createdAt: Date.now() });
+    await ctx.db.patch(row._id, { resetAuditId: auditId, resetAt: Date.now(), status: "cancelled" });
+  });
+  expect(await t.mutation(internal.femaleWorkflowDelivery.markAttempt, { id: row._id, attempt: row.attempts })).toBe(false);
+  expect(await t.mutation(internal.femaleWorkflowDelivery.authorizeSend, { id: row._id, attempt: row.attempts })).toBe(false);
+  await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: row._id })).rejects.toThrow();
+  // Defense in depth even if a historical row's status is accidentally restored.
+  await t.run(ctx => ctx.db.patch(row._id, { status: "pending", nextAttemptAt: 0 }));
+  expect(await t.mutation(internal.femaleWorkflowDelivery.claim, {})).toEqual([]);
+  await t.action(internal.femaleWorkflowDelivery.drain, {}); expect(provider).not.toHaveBeenCalled();
+});
+test("old in-flight late failure/429 then success preserve evidence without changing new cycle or sibling; zero fetch", async () => {
+  const { t } = await accepted(); isolated();
+  const provider = vi.fn(); vi.stubGlobal("fetch", provider);
+  const [row] = await t.mutation(internal.femaleWorkflowDelivery.claim, {});
+  await t.mutation(internal.femaleWorkflowDelivery.markAttempt, { id: row._id, attempt: row.attempts });
+  expect(await t.mutation(internal.femaleWorkflowDelivery.authorizeSend, { id: row._id, attempt: row.attempts })).toBe(true);
+  const newer = await t.run(async ctx => {
+    const auditId = await ctx.db.insert("pairTestResetAudits", { operationKey: "synthetic-inflight", request: "{}", snapshot: "{}", createdAt: Date.now() });
+    await ctx.db.patch(row._id, { resetAuditId: auditId, resetAt: Date.now(), status: "cancelled", error: "original evidence" });
+    const old = (await ctx.db.get(row._id))!;
+    const { _id, _creationTime, resetAuditId, resetAt, ...copy } = old;
+    void _id; void _creationTime; void resetAuditId; void resetAt;
+    return ctx.db.insert("femaleWorkflowDeliveries", { ...copy, key: "new-cycle-key", status: "sending", attempts: 1 });
+  });
+  const before = await t.run(ctx => ctx.db.get(row._id)); const newBefore = await t.run(ctx => ctx.db.get(newer));
+  await t.mutation(internal.femaleWorkflowDelivery.finish, { id: row._id, attempt: row.attempts + 1, success: true, retry: false });
+  expect(await t.run(ctx => ctx.db.get(row._id))).toEqual(before);
+  await t.mutation(internal.femaleWorkflowDelivery.finish, { id: row._id, attempt: row.attempts, success: false, retry: true, rateLimited: true, retryAfterMs: 600000, error: "late HTTP429" });
+  expect((await t.run(ctx => ctx.db.get(row._id)))?.lateResult).toMatchObject({ success: false, error: "late HTTP429" });
+  await t.mutation(internal.femaleWorkflowDelivery.finish, { id: row._id, attempt: row.attempts, success: true, retry: false });
+  const after = (await t.run(ctx => ctx.db.get(row._id)))!;
+  expect(after).toEqual({ ...before, lateResult: { attempt: row.attempts, success: true, receivedAt: after.lateResult!.receivedAt } });
+  expect(await t.run(ctx => ctx.db.get(newer))).toEqual(newBefore);
+  await t.mutation(internal.femaleWorkflowDelivery.finish, { id: row._id, attempt: row.attempts, success: false, retry: true });
+  expect(await t.run(ctx => ctx.db.get(row._id))).toEqual(after); expect(provider).not.toHaveBeenCalled();
+});
+
+test("reset between payload freeze and final pre-send check prevents external fetch", async () => {
+  const { t } = await accepted(); isolated(); const provider = vi.fn(); vi.stubGlobal("fetch", provider);
+  const drainHandler = (await import("./femaleWorkflowDelivery")).drain as unknown as { _handler: (ctx: { runMutation: (ref: unknown, args: unknown) => Promise<unknown> }, args: Record<string, never>) => Promise<unknown> };
+  let calls = 0;
+  await drainHandler._handler({ runMutation: async (ref, args) => {
+    // Exercise the real action order and real mutations with a deterministic reset
+    // interleaving after markAttempt has frozen a payload, before authorizeSend.
+    const result = await t.mutation(ref as Parameters<typeof t.mutation>[0], args as never);
+    calls++;
+    if (calls === 2) await t.run(async ctx => {
+      const auditId = await ctx.db.insert("pairTestResetAudits", { operationKey: "synthetic-pre-send", request: "{}", snapshot: "{}", createdAt: Date.now() });
+      for (const row of await ctx.db.query("femaleWorkflowDeliveries").collect()) await ctx.db.patch(row._id, { resetAuditId: auditId, resetAt: Date.now(), status: "cancelled" });
+    });
+    return result;
+  } }, {});
+  expect(calls).toBe(3); expect(provider).not.toHaveBeenCalled();
+});

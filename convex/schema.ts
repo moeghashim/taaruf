@@ -252,6 +252,9 @@ export default defineSchema({
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
   femaleWorkflowDeliveries: defineTable({
+    resetAuditId: v.optional(v.id("pairTestResetAudits")),
+    resetAt: v.optional(v.number()),
+    lateResult: v.optional(v.object({ attempt: v.number(), success: v.boolean(), receivedAt: v.number(), error: v.optional(v.string()) })),
     interestId: v.id("interests"), recipientId: v.id("registrations"),
     kind: v.union(v.literal("brother_review"), v.literal("sister_confirmation"), v.literal("pending_review"), v.literal("contacts_ready")),
     key: v.string(), status: v.union(v.literal("pending"), v.literal("sending"), v.literal("sent"), v.literal("failed"), v.literal("cancelled")),
