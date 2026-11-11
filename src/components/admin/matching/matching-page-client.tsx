@@ -1,6 +1,8 @@
 "use client";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
+import { useProfileEventPages } from "@/components/admin/hooks/use-profile-event-pages";
+import { matchEventId, inEventScope, scopedWorkbenchRecords } from "@/lib/workbench-event-filter";
 import Link from "next/link";
 import { canReleaseContacts, interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
 import { FemaleWorkflowActions, FemaleWorkflowOutbox } from "./female-workflow-actions";
@@ -80,9 +82,13 @@ function pipelineStageForMatch(match: MatchRecord): PipelineStage {
   return match.status;
 }
 
-function useMatchingData() {
-  const interestsRaw = useQuery("interests.getAll");
-  const matchesRaw = useQuery("matches.getAll");
+function useMatchingData(workbench = false) {
+  const interestsLegacy = useQuery("interests.getAll", workbench ? "skip" : {});
+  const matchesLegacy = useQuery("matches.getAll", workbench ? "skip" : {});
+  const interestPages = useProfileEventPages("interests.workbenchPage", workbench ? {} : "skip");
+  const matchPages = useProfileEventPages("matches.workbenchPage", workbench ? {} : "skip");
+  const interestsRaw = workbench ? interestPages.rows : interestsLegacy;
+  const matchesRaw = workbench ? matchPages.rows : matchesLegacy;
   const profileSharesRaw = useQuery("profileShares.getAll");
   const registrationsData = useRegistrations();
 
@@ -106,6 +112,8 @@ function useMatchingData() {
     registrationsData.isLoading;
 
   return {
+    error: interestPages.error || matchPages.error,
+    retry: () => { interestPages.retry(); matchPages.retry(); },
     isLoading,
     interests,
     matches,
@@ -995,7 +1003,10 @@ function ShareProfileAction({
 
 export function WorkbenchPageClient() {
   const searchParams = useSearchParams();
-  const data = useMatchingData();
+  const data = useMatchingData(true);
+  const catalog = useProfileEventPages("events.profileFilterCatalog", {});
+  const [eventScope, setEventScope] = useState(searchParams.get("event") ?? "all");
+  const { interests, matches } = scopedWorkbenchRecords(data.interests, data.matches, eventScope);
   const notifyDecline = useNotifyDecline();
   const [selectedInterestId, setSelectedInterestId] = useState<string>("");
   const [selectedMatchId, setSelectedMatchId] = useState<string>("");
@@ -1003,17 +1014,20 @@ export function WorkbenchPageClient() {
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
+    setEventScope(searchParams.get("event") ?? "all");
     setSelectedInterestId(searchParams.get("interest") ?? "");
     setSelectedMatchId(searchParams.get("match") ?? "");
   }, [searchParams]);
 
   const [mode, setMode] = useState<"interest" | "match">("interest");
   useEffect(() => { setMode(searchParams.has("match") && !searchParams.has("interest") ? "match" : "interest"); }, [searchParams]);
-  const selectedInterest = mode === "match" ? null :
-    data.interests.find((interest) => interest._id === selectedInterestId) ??
-    (selectedMatchId ? null : data.interests.find((interest) => isOpenInterest(interest.status)) ?? data.interests[0]) ??
-    null;
-  const selectedMatch = mode === "interest" ? null : data.matches.find((match) => match._id === selectedMatchId) ?? (!selectedInterest ? data.matches[0] : null) ?? null;
+  const selectedInterest = mode === "match" ? null : interests.find(i => i._id === selectedInterestId) ?? null;
+  const selectedMatch = mode === "interest" ? null : matches.find(m => m._id === selectedMatchId) ?? null;
+  useEffect(() => {
+    if (data.isLoading) return;
+    if (selectedInterestId && !interests.some(i => i._id === selectedInterestId)) setSelectedInterestId("");
+    if (selectedMatchId && !matches.some(m => m._id === selectedMatchId)) setSelectedMatchId("");
+  }, [data.isLoading, interests, matches, selectedInterestId, selectedMatchId]);
   const requesterIsFemale = selectedMatch?.interest?.fromRegistrationId === selectedMatch?.femaleRegistrationId;
   const left = (requesterIsFemale ? selectedMatch?.femaleRegistration : selectedMatch?.maleRegistration) ?? selectedInterest?.fromRegistration ?? null;
   const right = (requesterIsFemale ? selectedMatch?.maleRegistration : selectedMatch?.femaleRegistration) ?? selectedInterest?.toRegistration ?? null;
@@ -1037,36 +1051,47 @@ export function WorkbenchPageClient() {
         subtitle="Compare profiles side by side and take the next matching action without returning to legacy."
       />
       <Notice text={message} />
-      {data.isLoading ? (
+      {data.error || catalog.error ? <div role="alert">Workbench data unavailable. <button className="btn" onClick={() => { data.retry(); catalog.retry(); }}>Retry</button></div> : data.isLoading || !catalog.rows ? (
         <LoadingPanel />
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
+          <section className="panel" aria-label="Event filter" style={{ padding: 16, background: "var(--bg-tint)", display: "grid", gap: 10 }}>
+            <label htmlFor="workbench-event" style={{ fontWeight: 600 }}>Filter workbench by event</label>
+            <select id="workbench-event" value={eventScope} onChange={event => { setEventScope(event.target.value); setSelectedInterestId(""); setSelectedMatchId(""); setMessage(null); }} style={{ width: "100%", minWidth: 0, minHeight: 44, background: "var(--panel)", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 6, padding: 8 }}>
+              <option value="all">All events</option>
+              <option value="unscoped">No recorded event</option>
+              {catalog.rows.map(event => <option key={event._id} value={event._id}>{event.title}</option>)}
+              {eventScope !== "all" && eventScope !== "unscoped" && !catalog.rows.some(e => e._id === eventScope) && <option value={eventScope}>Unavailable event</option>}
+            </select>
+            <p aria-live="polite">{interests.length} interests · {matches.length} matches. Global conflict and consent checks still apply.</p>
+            {eventScope === "unscoped" && <p>Matches without a valid linked interest have no recorded event. They are excluded from named events.</p>}
+          </section>
           <div className="panel">
             <div className="filters">
-              <label style={{ display: "grid", gap: 4, minWidth: 260, flex: 1 }}>
+              <label style={{ display: "grid", gap: 4, minWidth: 0, width: "100%", flex: "1 1 260px" }}>
                 <span className="mono" style={{ color: "var(--mute)", fontSize: 10 }}>Interest</span>
                 <select
                   value={selectedInterest?._id ?? ""}
                   onChange={(event) => { setSelectedInterestId(event.target.value); setSelectedMatchId(""); setMode("interest"); setMessage(null); }}
-                  style={{ height: 36, border: "1px solid var(--line)", borderRadius: 6, padding: "0 10px" }}
+                  style={{ width: "100%", minWidth: 0, height: 36, border: "1px solid var(--line)", borderRadius: 6, padding: "0 10px" }}
                 >
                   <option value="" disabled>Select an interest</option>
-                  {[...data.interests].sort((a,b) => Number(!isOpenInterest(a.status)) - Number(!isOpenInterest(b.status))).map((interest) => (
+                  {[...interests].sort((a,b) => Number(!isOpenInterest(a.status)) - Number(!isOpenInterest(b.status))).map((interest) => (
                     <option key={interest._id} value={interest._id} style={{ color: isOpenInterest(interest.status) ? undefined : "gray" }}>
                       #{interest.fromRegistration ? data.registrationNumbers.get(interest.fromRegistration._id) : "-"} {interest.fromRegistration?.name ?? "Unknown"} to #{interest.toRegistration ? data.registrationNumbers.get(interest.toRegistration._id) : "-"} {interest.toRegistration?.name ?? "Unknown"} · {interestLifecycle(interest)}
                     </option>
                   ))}
                 </select>
               </label>
-              <label style={{ display: "grid", gap: 4, minWidth: 260, flex: 1 }}>
+              <label style={{ display: "grid", gap: 4, minWidth: 0, width: "100%", flex: "1 1 260px" }}>
                 <span className="mono" style={{ color: "var(--mute)", fontSize: 10 }}>Match</span>
                 <select
                   value={selectedMatch?._id ?? ""}
                   onChange={(event) => { setSelectedMatchId(event.target.value); setSelectedInterestId(""); setMode("match"); setMessage(null); }}
-                  style={{ height: 36, border: "1px solid var(--line)", borderRadius: 6, padding: "0 10px" }}
+                  style={{ width: "100%", minWidth: 0, height: 36, border: "1px solid var(--line)", borderRadius: 6, padding: "0 10px" }}
                 >
                   <option value="" disabled>Select a match</option>
-                  {[...data.matches].sort((a,b) => Number(["closed", "declined"].includes(a.status)) - Number(["closed", "declined"].includes(b.status))).map((match) => (
+                  {[...matches].sort((a,b) => Number(["closed", "declined"].includes(a.status)) - Number(["closed", "declined"].includes(b.status))).map((match) => (
                     <option key={match._id} value={match._id} style={{ color: ["closed", "declined"].includes(match.status) ? "gray" : undefined }}>
                       #{match.maleRegistration ? data.registrationNumbers.get(match.maleRegistration._id) : "-"} {match.maleRegistration?.name ?? "Unknown"} + #{match.femaleRegistration ? data.registrationNumbers.get(match.femaleRegistration._id) : "-"} {match.femaleRegistration?.name ?? "Unknown"} · {titleize(match.status)}
                     </option>
@@ -1075,14 +1100,16 @@ export function WorkbenchPageClient() {
               </label>
             </div>
             <div style={{ padding: 16 }}>
+              {!selectedInterest && !selectedMatch && <p role="status">{interests.length || matches.length ? "Select an interest or match to review." : "No interests or matches in this event filter."}</p>}
               <p><strong>{mode === "interest" ? "Interest review" : "Match review"}</strong> · Requester {left?.name ?? "—"} → Target {right?.name ?? "—"}</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 {[left, right].map((person) => person && <section key={person._id}>
-                  <h4>{person.name}: other interests and workflows</h4>
+                  <h4>{person.name}: other interests and workflows in this filter</h4>
+                  {data.matches.some(m => m._id !== selectedMatch?._id && [m.maleRegistrationId, m.femaleRegistrationId].includes(person._id) && !["closed", "declined", "paused"].includes(m.status) && !inEventScope(matchEventId(m), eventScope)) && <p><strong>Another active match exists outside this filter.</strong> Global safety checks still apply.</p>}
                   <p>{person.activeMatchId ? "Contacts already released in an active connection. A second release is blocked." : "No released active connection"}</p>
-                  <p>{data.interests.some((i) => i.fromRegistrationId === right?._id && i.toRegistrationId === left?._id && isOpenInterest(i.status)) && data.interests.some((i) => i.fromRegistrationId === left?._id && i.toRegistrationId === right?._id && isOpenInterest(i.status)) || selectedMatch?.interestType === "mutual_interest" ? "Mutual interest" : "No reciprocal open interest recorded"}</p>
-                  {data.interests.filter((i) => (i.fromRegistrationId === person._id || i.toRegistrationId === person._id) && i._id !== selectedInterest?._id && i._id !== selectedMatch?.interestId).map((i) => <p key={i._id} style={{ opacity: isOpenInterest(i.status) ? 1 : 0.5 }}>#{i.fromRegistration?.publicApplicantNumber} {i.fromRegistration?.name} → #{i.toRegistration?.publicApplicantNumber} {i.toRegistration?.name} · {interestLifecycle(i)}</p>)}
-                  {data.matches.filter((m) => m._id !== selectedMatch?._id && [m.maleRegistrationId, m.femaleRegistrationId].includes(person._id) && !["closed", "declined", "paused"].includes(m.status)).map((m) => <p key={m._id}><strong>Other active match:</strong> {m.maleRegistration?.name} + {m.femaleRegistration?.name} · {titleize(m.status)}</p>)}
+                  <p>{interests.some((i) => i.fromRegistrationId === right?._id && i.toRegistrationId === left?._id && isOpenInterest(i.status)) && interests.some((i) => i.fromRegistrationId === left?._id && i.toRegistrationId === right?._id && isOpenInterest(i.status)) || selectedMatch?.interestType === "mutual_interest" ? "Mutual interest" : "No reciprocal open interest recorded"}</p>
+                  {interests.filter((i) => (i.fromRegistrationId === person._id || i.toRegistrationId === person._id) && i._id !== selectedInterest?._id && i._id !== selectedMatch?.interestId).map((i) => <p key={i._id} style={{ opacity: isOpenInterest(i.status) ? 1 : 0.5 }}>#{i.fromRegistration?.publicApplicantNumber} {i.fromRegistration?.name} → #{i.toRegistration?.publicApplicantNumber} {i.toRegistration?.name} · {interestLifecycle(i)}</p>)}
+                  {matches.filter((m) => m._id !== selectedMatch?._id && [m.maleRegistrationId, m.femaleRegistrationId].includes(person._id) && !["closed", "declined", "paused"].includes(m.status)).map((m) => <p key={m._id}><strong>Other active match:</strong> {m.maleRegistration?.name} + {m.femaleRegistration?.name} · {titleize(m.status)}</p>)}
                 </section>)}
               </div>
               <ProfileComparison

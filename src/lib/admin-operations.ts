@@ -3,6 +3,8 @@ import { api } from '../../convex/_generated/api';
 export const adminQueries = {
  'registrations.getAll': api.registrations.getAll,
  'interests.getAll': api.interests.getAll,
+ 'matches.workbenchPage': api.matches.workbenchPage,
+ 'interests.workbenchPage': api.interests.workbenchPage,
  'matches.getAll': api.matches.getAll,
  'profileShares.getAll': api.profileShares.getAll,
  'settings.get': api.settings.get,
