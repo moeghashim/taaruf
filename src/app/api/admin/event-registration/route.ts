@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     switch (action) {
       case "create": result = await client.mutation(api.events.create, args); break;
       case "deleteEvent": result = await client.mutation(api.events.deleteEvent, args); break;
+      case "forceRegisterWaitlisted": result = await client.mutation(api.events.forceRegisterWaitlisted, args); break;
       case "updateRegistrationStatus": result = await client.mutation(api.events.updateRegistrationStatus, args); break;
       case "updateRegistrationConfirmation": result = await client.mutation(api.events.updateRegistrationConfirmation, args); break;
       case "requestConfirmation": result = await client.mutation(api.events.requestConfirmation, args); break;
