@@ -706,3 +706,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Prepared rejection3391 additive release above feature97 and corrected birthday28b8aed; full1021 tests/types/lint/build plus9 synthetic browser and joined route gates passed; dedicated sender variables absent; production untouched pending parent slot. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Applicant copy3395: removed internal draft explanation; kept match presentation guidance. No admin draft behavior change.
