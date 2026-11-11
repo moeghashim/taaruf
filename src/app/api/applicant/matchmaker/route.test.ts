@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const { mutation, query, session, config } = vi.hoisted(() => ({ mutation: vi.fn(), query: vi.fn(), session: vi.fn(), config: vi.fn() }));
