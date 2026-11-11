@@ -183,7 +183,6 @@ function ProfileDetailBody({
 
   return (
     <div style={{ padding: 20 }}>
-      <ArchiveParticipant key={profile._id} archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} registrationId={profile._id} name={profile.name} onArchived={at => { setLocalArchive({ id: profile._id, at }); refreshAdminData(); }} onRestored={() => { setLocalArchive({ id: profile._id, at: null }); refreshAdminData(); }} />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <StatusPill status={profile.status} />
         {profile.paymentStatus && <StatusPill status={profile.paymentStatus} />}
@@ -469,6 +468,7 @@ function ProfileDetailBody({
           {busyAction === "delete" ? "Deleting…" : "Delete profile"}
         </button>
       </div>
+      <ArchiveParticipant key={profile._id} archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} registrationId={profile._id} name={profile.name} onArchived={at => { setLocalArchive({ id: profile._id, at }); refreshAdminData(); }} onRestored={() => { setLocalArchive({ id: profile._id, at: null }); refreshAdminData(); }} />
     </div>
   );
 }

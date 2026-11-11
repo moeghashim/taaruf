@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
+import { MatchmakerNotifications } from "@/components/applicant/matchmaker-notifications";
 import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
 import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
@@ -287,6 +288,7 @@ function InterestRow({
       className={`interest-row ${selected ? "selected" : ""}`}
       onClick={onSelect}
       aria-pressed={selected}
+      data-interest-id={interest.interestId}
     >
       <div className="interest-row-main">
         <h4>{counterparty?.label ?? "Unknown applicant"}</h4>
@@ -359,8 +361,8 @@ function ProfileSideCard({
       )}
 
       {interest.ownInitialDecision && interest.ownInitialDecision !== "pending" && <p className="notice">Your initial response: {titleize(interest.ownInitialDecision)}.</p>}
-      {viewerFinalApproval === "approved" && interest.flowStatus !== "contact_shared" && (
-        <p className="notice success">Your final approval is recorded. Contact details remain private.</p>
+      {viewerFinalApproval === "approved" && !interest.contactSharedAt && !["contact_shared", "closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) && (
+        <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>
       )}
 
       {(canRespond || canFinalApprove) && (
@@ -546,6 +548,14 @@ function Section({
     }
   }, [interests, selectedInterestId, requestedConnectionId]);
 
+  useEffect(() => {
+    if (!requestedConnectionId || selectedInterest?.interestId !== requestedConnectionId) return;
+    const section = document.getElementById(sectionId(title));
+    const target = Array.from(section?.querySelectorAll<HTMLButtonElement>("[data-interest-id]") ?? []).find(button => button.dataset.interestId === requestedConnectionId);
+    target?.focus();
+    target?.scrollIntoView({ block: "center" });
+  }, [requestedConnectionId, selectedInterest?.interestId, title]);
+
   return (
     <section id={sectionId(title)} className="panel applicant-section">
       <div className="panel-head">
@@ -601,6 +611,10 @@ export default function ApplicantDashboardPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+  const dashboardRequest = useRef(0);
+  const eventsRequest = useRef(0);
+  const [eventsFresh, setEventsFresh] = useState(false);
+  const [dashboardFresh, setDashboardFresh] = useState(false);
   const hasDashboard = Boolean(data);
   const [view, setView] = useState<PortalView>("overview");
   const [savedProfile, setSavedProfile] = useState("");
@@ -644,25 +658,31 @@ export default function ApplicantDashboardPage() {
   }, [router]);
 
   const load = useCallback(async () => {
+    const request = ++dashboardRequest.current;
+    setDashboardFresh(false);
     setIsLoading(true);
     try {
       const requested = new URLSearchParams(window.location.search).get("connection");
       const response = await applicantFetch("/api/applicant/me" + (requested !== null ? "?connection=" + encodeURIComponent(requested) : ""), { cache: "no-store" });
-      if (response.status === 401) {
-        return;
-      }
+      if (request !== dashboardRequest.current) return;
+      if (response.status === 401) return;
       const payload = await response.json();
-      if (!response.ok) { setData(null); throw new Error(payload.error || "Failed to load dashboard"); }
+      if (request !== dashboardRequest.current) return;
+      if (!response.ok) throw new Error(payload.error || "Failed to load dashboard");
       setData({ ...payload, requestedConnectionId: requested });
+      setDashboardFresh(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (request === dashboardRequest.current) { setError(err instanceof Error ? err.message : String(err)); }
     } finally {
-      setIsLoading(false);
+      if (request === dashboardRequest.current) setIsLoading(false);
     }
   }, [applicantFetch]);
 
   useEffect(() => {
     void load();
+    const refresh = () => { if (!document.hidden) void load(); };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [load]);
 
   useEffect(() => {
@@ -740,6 +760,8 @@ export default function ApplicantDashboardPage() {
   }, [loadProfile]);
 
   const loadEvents = useCallback(async () => {
+    const request = ++eventsRequest.current;
+    setEventsFresh(false);
     try {
       const response = await applicantFetch("/api/applicant/events", { cache: "no-store" });
       if (response.status === 401) {
@@ -747,20 +769,25 @@ export default function ApplicantDashboardPage() {
       }
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Failed to load events");
-      setEventsData(payload);
+      if (request !== eventsRequest.current) return;
+      setEventsData(payload); setEventsFresh(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (request === eventsRequest.current) { setEventsData(null); setError(err instanceof Error ? err.message : String(err)); }
     }
   }, [applicantFetch]);
 
   useEffect(() => {
     void loadEvents();
+    const refresh = () => { if (!document.hidden) void loadEvents(); };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [loadEvents]);
 
 
 
   async function runAction(body: Record<string, unknown>) {
-    if (archived) return false;
+    if (archived || !dashboardFresh) return false;
+    ++dashboardRequest.current; ++eventsRequest.current;
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -772,17 +799,16 @@ export default function ApplicantDashboardPage() {
       });
       const payload = await response.json();
       if (!response.ok) {
-        if (response.status === 409) await load();
         throw new Error(payload.error || "Action failed");
       }
       setMessage(body.action === "submit_number" && data?.applicant.gender === "female"
         ? "Your interest has been submitted for admin review. An admin will review it before sharing it with the brother."
         : typeof payload.message === "string" ? payload.message : "Updated.");
-      await Promise.all([load(), loadEvents()]);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      await Promise.all([load(), loadEvents()]);
       setBusy(false);
     }
   }
@@ -985,7 +1011,7 @@ export default function ApplicantDashboardPage() {
     return (
       <main data-admin className="min-h-screen">
         <div className="content">
-          <p className="notice error">{error ?? "Unable to load dashboard."}</p>
+          <p className="notice error">{error ?? "Unable to load dashboard."}</p><button type="button" className="btn" onClick={() => void load()}>Retry refresh</button>
         </div>
       </main>
     );
@@ -999,6 +1025,9 @@ export default function ApplicantDashboardPage() {
     .toUpperCase();
   const completedProfile = data.applicant.profileCompletionStatus === "completed";
   const hijabLabel = hijabQuestion(profile?.gender);
+  const visibleInterests = [...data.inbound, ...data.outbound, ...data.privateDocumented].filter((interest, index, items) => !interest.femaleWorkflow && items.findIndex(item => item.interestId === interest.interestId) === index);
+  const actionableInbound = visibleInterests.filter(interest => !interest.paused && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && (interest.canRespond || interest.canFinalApprove));
+  const interestUpdates = visibleInterests.filter(interest => !actionableInbound.includes(interest));
 
   return (
     <main data-admin>
@@ -1070,14 +1099,27 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
-            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
             <nav className="portal-pages" aria-label="Applicant pages">
               {portalViews.map(item => <a key={item.id} href={item.href} className={`btn ${view === item.id ? "btn-primary" : ""}`} aria-current={view === item.id ? "page" : undefined}>{item.label}</a>)}
             </nav>
             {expiredLogin && <p role="alert" className="notice error">Your session expired. Your unsaved changes remain on this page. <a href={expiredLogin}>Sign in again</a> before continuing; leaving this page will discard unsaved changes.</p>}
             {profileDirty && view !== "profile" && <p className="notice">Your unsaved profile changes are kept here. <a href="#profile">Return to My Profile</a> to save.</p>}
             <div role="status" aria-live="polite" aria-atomic="true">{message && <p className="notice success">{message}</p>}</div>
-            {error && <p role="alert" className="notice error">{error}</p>}
+            {error && <p role="alert" className="notice error">{error} <button type="button" className="btn" onClick={() => { setError(null); void load(); void loadEvents(); }}>Retry refresh</button></p>}
+            {!archived && dashboardFresh && <section aria-label="Your notifications" className="applicant-section">
+              {(eventsData?.upcoming || []).filter(event => eventsFresh && !busy && !data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError && event.registration && canConfirmEventRegistration(event.registration)).map(event => <section className="interest-invitation" key={event._id}><div className="interest-invitation-copy"><h2>Event response requested</h2><p>Please review your event registration. Responding does not grant event approval.</p></div><a className="btn btn-primary" href="#events">Review event registration</a></section>)}
+              {!!data.history?.length && <section className="interest-invitation"><div className="interest-invitation-copy"><h2>Connection updates</h2><p>{data.history.length} closed connection{data.history.length === 1 ? "" : "s"}. No further response is needed.</p></div><a className="btn" href="#applicant-interests">View connection history</a></section>}
+              {!isLoading && !busy && actionableInbound.length > 0 && <section className="interest-invitation" aria-labelledby="inbound-action-heading">
+                <div className="interest-invitation-copy"><h2 id="inbound-action-heading">You have {actionableInbound.length === 1 ? "an interest to review" : "interests to review"}</h2><p>{actionableInbound.length} awaiting your response. Contact details remain private until sharing is approved.</p></div>
+                <ul className="interest-invitation-actions">{actionableInbound.map((interest, index) => <li key={interest.interestId}><span>Interest {index + 1}</span><a className="btn btn-primary" href={"/me?connection=" + encodeURIComponent(interest.interestId) + (interest.direction === "private" ? "#private-documented-interests" : interest.direction === "outbound" ? "#outbound-interests" : "#inbound-interests")} aria-label={actionableInbound.length > 1 ? "View interest " + (index + 1) : undefined}>View interest</a></li>)}</ul>
+              </section>}
+              {!isLoading && !busy && interestUpdates.map((interest, index) => {
+                const closed = ["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) || ["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus);
+                const ready = !closed && !interest.paused && Boolean(interest.contactSharedAt && (interest.counterparty?.email || interest.counterparty?.phone));
+                return <section className="interest-invitation" key={interest.interestId} aria-label={"Interest update " + (index + 1)}><div className="interest-invitation-copy"><h2>{ready ? "Contacts are ready" : closed ? "Connection closed" : interest.paused ? "Connection paused" : "Interest update"}</h2><p>{closed ? "This connection is no longer available. No further response is needed." : ready ? "Open your connection to see the contact details available to you." : interest.ownFinalApproval === "approved" && !interest.contactSharedAt && interest.flowStatus !== "contact_shared" ? "Contact details will be shared after the admin reviews and approves the match." : "No response is currently needed from you. You can review your connection."}</p></div>{!closed && interest.counterparty && <a className="btn btn-primary" href={"/me?connection=" + encodeURIComponent(interest.interestId) + (interest.direction === "private" ? "#private-documented-interests" : interest.direction === "outbound" ? "#outbound-interests" : "#inbound-interests")}>{ready ? "View contact details" : "View interest"}</a>}</section>;
+              })}
+              {data.applicant.status === "approved" && <><FemaleReviews /><MatchmakerNotifications /></>}
+            </section>}
             {view === "matchmaker" && <MatchmakerMatching archived={archived} onSessionExpired={onMatchmakerSessionExpired} />}
             <div hidden={view !== "overview"} id="overview">
             <div className="stats">
@@ -1177,7 +1219,7 @@ export default function ApplicantDashboardPage() {
             <p className="portal-next"><a href="#applicant-interests">Review applicant interests</a> · <a href="#profile">Update my profile</a></p>
             </div>
             <div hidden={view !== "interests"} id="applicant-interests">
-            {!archived && data.applicant.status === "approved" && <FemaleReviews />}
+
             <div className="panel interest-submit-panel">
               <div className="panel-head">
                 <div>
@@ -1188,7 +1230,7 @@ export default function ApplicantDashboardPage() {
                 </div>
               </div>
               {eligibilityError && <p role="status" className="notice error">{eligibilityError}</p>}
-              {!archived && data.canSubmitInterest && [0, 1, 2].map(index => {
+              {!archived && dashboardFresh && data.canSubmitInterest && [0, 1, 2].map(index => {
                 const submitted = data.interestSubmissions?.[index];
                 return <form key={index} onSubmit={event => submitNumber(event, index)} className="applicant-number-form" aria-label={`Interest ${index + 1}`}>
                   <div className="field">
@@ -1390,29 +1432,30 @@ export default function ApplicantDashboardPage() {
                 title="Inbound Interests"
                 description="People who expressed interest in you."
                 requestedConnectionId={data.requestedConnectionId}
-                interests={data.inbound}
+                interests={dashboardFresh ? data.inbound : []}
                 onAction={async body => { await runAction(body); }}
-                busy={busy || archived}
+                busy={busy || archived || !dashboardFresh}
               />
               <Section
                 title="Outbound Interests"
                 description="Visible interests you sent."
                 requestedConnectionId={data.requestedConnectionId}
-                interests={data.outbound}
+                interests={dashboardFresh ? data.outbound : []}
                 onAction={async body => { await runAction(body); }}
-                busy={busy || archived}
+                busy={busy || archived || !dashboardFresh}
               />
               {data.applicant.gender === "female" && (
                 <Section
                   title="Private Documented Interests"
                   description="Interests you documented for yourself and the admin team. These remain private until the team creates a recipient-specific review."
                   requestedConnectionId={data.requestedConnectionId}
-                  interests={data.privateDocumented}
+                  interests={dashboardFresh ? data.privateDocumented : []}
                   onAction={async body => { await runAction(body); }}
-                  busy={busy || archived}
+                  busy={busy || archived || !dashboardFresh}
                 />
               )}
             </div>
+            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
           </div>
         </div>
       </div>

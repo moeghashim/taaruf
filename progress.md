@@ -756,3 +756,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-11 — independent test-pair reset3603
 - Decoupled fixed-pair reset from historical delivery state; audit-ID retirement epochs fence claims/retries/pre-send authorization and confine late results to old-job evidence. Preserved original provider payload/errors and immutable reset snapshots, token/share revocation, auth/fingerprint/idempotency and unrelated pairs. Updated admin warning and repeat/race tests; isolated synthetic runtime verifies four actual resubmission/reset cycles. No live operation or release. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Independent review follow-up: preserve every retired provider callback in append-only `retiredDeliveryResults` (including stale attempts), retain old-job summary separately, and recheck kind/token/current-recipient immediately before send. Deterministic interleaving and callback-isolation regressions added. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — banners and archive placement3616
+- Integrated reviewed unified notices onto live reset baseline; preserved archive restrictions and moved existing archive controls after portal/profile content.
+
+- Final review fixes preserve unsaved profile edits on failed refresh while suppressing stale third-party details, settle mutation reloads, and keep archive confirmations above the admin drawer. Verified 1298 tests, root/Convex types, scoped lint/build, 85 banner and12 archive-bottom browser checks at1280/390/320; no backend/data/config/deploy changes.
