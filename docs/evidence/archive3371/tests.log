@@ -1,0 +1,104 @@
+
+> taaruf-app@0.1.0 test
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.6 [39m[90m/Users/moeghashim/taaruf/.worktrees/archive-3371[39m
+
+ [32m✓[39m convex/eventLifecycleVisibility.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 265[2mms[22m[39m
+ [32m✓[39m convex/femaleDeliveryRegression.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 294[2mms[22m[39m
+ [32m✓[39m convex/pairTestReset.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 422[2mms[22m[39m
+ [32m✓[39m convex/workbenchPagination.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 429[2mms[22m[39m
+   [33m[2m✓[22m[39m workbench scans every page beyond 1000 and enforces admin auth [33m 428[2mms[22m[39m
+ [32m✓[39m convex/waitlistExpiration.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 559[2mms[22m[39m
+ [32m✓[39m convex/profileEventFilter.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 182[2mms[22m[39m
+ [32m✓[39m convex/allOriginWorkflow.test.ts [2m([22m[2m52 tests[22m[2m)[22m[33m 679[2mms[22m[39m
+ [32m✓[39m convex/brotherReviewInvitation.test.ts [2m([22m[2m46 tests[22m[2m)[22m[32m 197[2mms[22m[39m
+ [32m✓[39m convex/femaleInterestWorkflow.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 212[2mms[22m[39m
+ [32m✓[39m convex/events.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 245[2mms[22m[39m
+ [32m✓[39m convex/sisterConfirmationInvitation.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 172[2mms[22m[39m
+ [32m✓[39m convex/matchmakerMatching.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 132[2mms[22m[39m
+ [32m✓[39m convex/applicantAttendance.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 168[2mms[22m[39m
+ [32m✓[39m convex/submissionPhotoConsent.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 183[2mms[22m[39m
+ [32m✓[39m convex/interestSelection.test.ts [2m([22m[2m29 tests[22m[2m)[22m[32m 99[2mms[22m[39m
+ [32m✓[39m convex/education.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 119[2mms[22m[39m
+ [32m✓[39m convex/archive.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 135[2mms[22m[39m
+ [32m✓[39m convex/interests.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 105[2mms[22m[39m
+ [32m✓[39m convex/matchingWorkflow.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 135[2mms[22m[39m
+ [32m✓[39m convex/eventMessagingEligibility.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 92[2mms[22m[39m
+ [32m✓[39m src/app/api/applicant/me/route.test.ts [2m([22m[2m45 tests[22m[2m)[22m[33m 1182[2mms[22m[39m
+ [32m✓[39m convex/capabilitySecurity.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 106[2mms[22m[39m
+ [32m✓[39m convex/newMatch.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 132[2mms[22m[39m
+ [32m✓[39m convex/adminAuthorization.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 84[2mms[22m[39m
+ [32m✓[39m convex/manualEventInterests.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 73[2mms[22m[39m
+ [32m✓[39m convex/clearAprilLegacy.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 83[2mms[22m[39m
+ [32m✓[39m convex/receiptDelivery.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 75[2mms[22m[39m
+ [32m✓[39m convex/matchingArchive.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 82[2mms[22m[39m
+ [32m✓[39m convex/hijab.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+ [32m✓[39m convex/issue97IndependentReview.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+ [32m✓[39m convex/combinedReviewEmail.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 67[2mms[22m[39m
+ [32m✓[39m convex/singleInterestTestReset.test.ts [2m([22m[2m79 tests[22m[2m)[22m[33m 1718[2mms[22m[39m
+   [33m[2m✓[22m[39m large opaque legacy audits stay intact; repeated resets grow linearly, not recursively [33m 684[2mms[22m[39m
+ [32m✓[39m convex/photoUploads.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+ [32m✓[39m convex/registrations.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+ [32m✓[39m convex/matchmakerArchive.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 58[2mms[22m[39m
+ [32m✓[39m convex/profileSharesArchive.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 88[2mms[22m[39m
+ [32m✓[39m convex/adminEmailChange.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 61[2mms[22m[39m
+ [32m✓[39m convex/migrationsAuthorization.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 53[2mms[22m[39m
+ [32m✓[39m convex/eventProfileScope.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32m✓[39m convex/interestTestReset.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 1936[2mms[22m[39m
+   [33m[2m✓[22m[39m more than 100 retained reset rows cannot hide a fresh submission or defeat cap [33m 1771[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/create-match/route.test.ts [2m([22m[2m29 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+ [32m✓[39m convex/profileArchiveList.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m convex/waitlistConfirmation.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+ [32m✓[39m src/app/api/archive.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/app/api/restore.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/event-registration-email/route.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m convex/eventEmailBridge.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/matchmaker/route.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/lib/matchmaker-delivery.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m src/app/public-event-availability.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m src/app/api/checkout-receipts.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m convex/eventDate.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/app/api/applicant/female-review/route.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/lib/workbench-event-label.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m convex/eventCheckInBridge.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m convex/profileCompletion.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m src/app/api/photos/upload/route.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/app/api/applicant/interests/route.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/components/admin/matching/separation-presentation.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 34[2mms[22m[39m
+ [32m✓[39m convex/eventInterestsBridge.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/change-email/route.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/app/api/matching-notification-bookkeeping.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/app/api/checkout-status/route.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/notify-match/route.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m convex/adminPairTestReset.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 34[2mms[22m[39m
+ [32m✓[39m src/app/api/applicant/interest-eligibility/route.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/components/admin/matching/matching-actions.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/bridge/route.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+ [32m✓[39m src/app/api/archive-notifications.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/interest-test-reset/route.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/app/api/applicant/auth-recovery.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/bridge/upstream.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m src/app/api/profile/[token]/route.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/female-review/route.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/app/api/applicant/matchmaker/route.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m convex/eventRegistrationBridge.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m src/app/api/admin/profile-link-recovery.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m convex/eventLifecycleBridge.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/lib/event-registration-receipt.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m convex/educationApi.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/app/api/share/[token]/route.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m convex/previewIsolation.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/lib/applicant-destination.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m convex/adminSearch.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/lib/profile-archive-filter.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m convex/interestIdentity.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/lib/workbench-event-filter.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/lib/manual-match-draft.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m src/lib/email.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m89 passed[39m[22m[90m (89)[39m
+[2m      Tests [22m [1m[32m1019 passed[39m[22m[90m (1019)[39m
+[2m   Start at [22m 22:04:23
+[2m   Duration [22m 3.29s[2m (transform 2.50s, setup 0ms, import 5.89s, tests 11.64s, environment 2.36s)[22m

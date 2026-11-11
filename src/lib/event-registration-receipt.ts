@@ -11,6 +11,13 @@ export async function sendEventReceipt(convex: ConvexHttpClient, eventRegistrati
   const claim = await convex.mutation(api.events.claimRegistrationReceivedEmail, { eventRegistrationId, adminSecret, token, receiptAttempt });
   if (!claim.claimed) return { sent: false, ...(claim.error ? { error: claim.error } : {}) };
   if (!claim.name || !claim.email || !claim.eventTitle || !claim.registrationStatus || !claim.key) throw new Error("Incomplete event receipt claim");
+  try {
+    await convex.mutation(api.events.validateRegistrationReceivedEmail, { eventRegistrationId, adminSecret, token, key: claim.key });
+  } catch (cause) {
+    const error = cause instanceof Error ? cause.message : String(cause);
+    await convex.mutation(api.events.recordRegistrationReceivedEmailFailure, { eventRegistrationId, adminSecret, token, key: claim.key, error });
+    return { sent: false, error };
+  }
   const result = await sendEventRegistrationReceivedEmail({ name: claim.name, email: claim.email, eventTitle: claim.eventTitle, registrationStatus: claim.registrationStatus, eventRegistrationId, idempotencyKey: claim.key });
   await convex.mutation(api.events.recordRegistrationReceivedEmailFailure, {
     eventRegistrationId, adminSecret, token, key: claim.key,
