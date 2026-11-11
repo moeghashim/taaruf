@@ -27,6 +27,7 @@ const stateLabels: Record<string, string> = {
 };
 const reviewExpired = (item: Review) => item.state === "awaiting_brother_review" && item.reviewExpiresAt !== undefined && item.reviewExpiresAt <= Date.now();
 const needsBrotherReview = (item: Review) => item.role === "brother" && item.state === "awaiting_brother_review" && !item.paused && !reviewExpired(item);
+const needsSisterConfirmation = (item: Review) => item.role === "sister" && item.state === "awaiting_sister_confirmation" && !item.paused && !item.matchId;
 export function FemaleReviews() {
   const [loginHref, setLoginHref] = useState("/login");
   const [rows, setRows] = useState<Review[]>([]);
@@ -98,7 +99,8 @@ export function FemaleReviews() {
   }
   const profile = access?.profile || access?.counterparty;
   const invitations = rows.filter(needsBrotherReview);
-  const history = rows.filter(item => !needsBrotherReview(item));
+  const confirmations = rows.filter(needsSisterConfirmation);
+  const history = rows.filter(item => !needsBrotherReview(item) && !needsSisterConfirmation(item));
   return <section id="review-notifications" aria-label="Profile reviews" className="panel applicant-section">
     {!!invitations.length && !selected && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
       <div className="interest-invitation-copy">
@@ -110,6 +112,19 @@ export function FemaleReviews() {
         {invitations.map((item, index) => <li key={item.interestId}>
           {invitations.length > 1 && <span>Invitation {index + 1}</span>}
           <a className="btn btn-primary" aria-label={invitations.length > 1 ? "Review profile for invitation " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>Review profile</a>
+        </li>)}
+      </ul>
+    </section>}
+    {!!confirmations.length && !selected && <section className="interest-invitation sister-confirmation" aria-labelledby="sister-confirmation-heading">
+      <div className="interest-invitation-copy">
+        <h2 id="sister-confirmation-heading">{confirmations.length === 1 ? "The brother has accepted — your final approval is needed" : "Brothers have accepted — your final approval is needed"}</h2>
+        <p>{confirmations.length === 1 ? "He has accepted your interest. Review his profile and confirm whether you would like to proceed." : "They have accepted your interest. Review each profile and confirm whether you would like to proceed."} A match will only be created after you confirm.</p>
+        <p className="interest-invitation-privacy">You can confirm or decline after reviewing. Contact details stay private until final admin approval.</p>
+      </div>
+      <ul className="interest-invitation-actions">
+        {confirmations.map((item, index) => <li key={item.interestId}>
+          {confirmations.length > 1 && <span>Review {index + 1}</span>}
+          <a className="btn btn-primary" aria-label={confirmations.length > 1 ? "Review profile and respond for review " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>Review profile and respond</a>
         </li>)}
       </ul>
     </section>}
