@@ -1,3 +1,4 @@
+import { sisterActivation } from "./sisterConfirmationActivation";
 import { deliveryAuthorized, reviewActivation } from "./brotherReviewActivation";
 import { deliveryConfig } from "./femaleWorkflowDelivery";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -9,11 +10,13 @@ export async function enqueueContactDelivery(ctx: MutationCtx, interestId: Id<"i
   if (await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_key", q => q.eq("key", key)).unique()) return;
   const createdAt = Date.now();
   const reviewActivationAt = kind === "brother_review" ? await reviewActivation(ctx) : null;
-  const authorized = await deliveryAuthorized(ctx, { kind, createdAt, reviewActivationAt: reviewActivationAt ?? undefined });
-  const recipient = kind === "brother_review" ? await ctx.db.get(recipientId) : null;
-  const ready = kind !== "brother_review" || (authorized && !!recipient && !!deliveryConfig(recipient.email));
+  const sisterActivationAt = kind === "sister_confirmation" ? await sisterActivation(ctx) : null;
+  const interest = kind === "sister_confirmation" ? await ctx.db.get(interestId) : null;
+  const authorized = await deliveryAuthorized(ctx, { kind, createdAt, reviewActivationAt: reviewActivationAt ?? undefined, sisterActivationAt: sisterActivationAt ?? undefined });
+  const recipient = ["brother_review", "sister_confirmation"].includes(kind) ? await ctx.db.get(recipientId) : null;
+  const ready = !["brother_review", "sister_confirmation"].includes(kind) || (authorized && !!recipient && !!deliveryConfig(recipient.email));
   // Record ineligible shares too: reissue must not turn a preactivation share into a future send.
-  await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId, kind, key, status: ready ? "pending" : "failed", attempts: 0, nextAttemptAt: createdAt, createdAt, ...(ready && reviewActivationAt !== null ? { reviewActivationAt } : {}), ...(ready ? {} : { error: "Review notification not activated/configured at share time; no backfill" }) });
+  await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId, kind, key, status: ready ? "pending" : "failed", attempts: 0, nextAttemptAt: createdAt, createdAt, ...(kind === "sister_confirmation" ? { sisterAcceptedAt: interest?.femaleWorkflow?.brotherAcceptedAt, sisterRecipientEmail: recipient?.email } : {}), ...(ready && sisterActivationAt !== null ? { sisterActivationAt } : {}), ...(ready && reviewActivationAt !== null ? { reviewActivationAt } : {}), ...(ready ? {} : { error: "Review notification not activated/configured at share time; no backfill" }) });
 }
 /** Validate both directions of the link before trusting any consent metadata. */
 export function assertMatchInterest(match: Doc<"matches">, interest: Doc<"interests">) {

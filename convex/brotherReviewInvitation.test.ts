@@ -1,10 +1,11 @@
 import { convexTest } from "convex-test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { modules } from "./test.setup";
 const adminSecret = "synthetic-female-admin";
 const hash = "a".repeat(64);
+describe.each(["brother-review-production", "brother-sister-review-production"])("%s", productionMode => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 async function fixture(general = false) {
   vi.stubEnv("ATTENDANCE_ADMIN_SECRET", adminSecret);
@@ -101,7 +102,7 @@ for (const invalid of ["revoked", "closed"]) test("failed invitation cannot retr
 
 function production() {
   isolated();
-  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "brother-review-production");
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", productionMode);
   vi.stubEnv("FEMALE_WORKFLOW_PRODUCTION_APPROVED", "true");
   vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://www.1plus1match.com");
 }
@@ -159,7 +160,7 @@ test("dedicated activation leaves all other kinds untouched even beyond batch si
   const { t, interestId, sister } = await fixture(); await activate(t);
   const ids = await t.run(async ctx => {
     const ids = [];
-    for (let n = 0; n < 30; n++) for (const kind of ["sister_confirmation", "pending_review", "contacts_ready"] as const) ids.push(await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId: sister, kind, key: kind + n, status: n === 0 ? "failed" : "pending", attempts: 0, nextAttemptAt: 0, createdAt: 1 }));
+    for (let n = 0; n < 30; n++) for (const kind of ["pending_review", "contacts_ready"] as const) ids.push(await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId: sister, kind, key: kind + n, status: n === 0 ? "failed" : "pending", attempts: 0, nextAttemptAt: 0, createdAt: 1 }));
     return ids;
   });
   const before = await t.run(ctx => Promise.all(ids.map(id => ctx.db.get(id))));
@@ -167,7 +168,7 @@ test("dedicated activation leaves all other kinds untouched even beyond batch si
   await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   expect(provider).toHaveBeenCalledTimes(1);
-  for (const id of ids.slice(0, 3)) await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: id })).rejects.toThrow("kind");
+  for (const id of ids.slice(0, 2)) await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: id })).rejects.toThrow("kind");
   expect(await t.run(ctx => Promise.all(ids.map(id => ctx.db.get(id))))).toEqual(before);
 });
 
@@ -179,4 +180,6 @@ test("future failed production invitation cannot manually retry after expiry", a
   const row = (await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").first()))!;
   await t.run(async ctx => { const i = (await ctx.db.get(interestId))!; await ctx.db.patch(interestId, { femaleWorkflow: { ...i.femaleWorkflow!, reviewExpiresAt: Date.now() - 1 } }); });
   await expect(t.mutation(api.femaleInterestWorkflow.retryDelivery, { adminSecret, deliveryId: row._id })).rejects.toThrow("unavailable");
+});
+
 });

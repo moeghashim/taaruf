@@ -8,12 +8,17 @@ import { FactList } from "@/components/admin/primitives/fact-list";
 type Review = { paused?: boolean; interestId: string; state: string; role: string; reviewExpiresAt?: number; matchId?: string };
 type Profile = { name?: string; label?: string; applicantNumber?: number; publicApplicantNumber?: number; age?: number; shareableBio?: string; education?: string; job?: string; ethnicity?: string; imageUrls?: string[]; email?: string; phone?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string };
 type Access = { paused?: boolean; matchId?: string | null; state: string; role: string; profile?: Profile; counterparty?: Profile };
+// List status is not authorization: only the existing detail GET supplies contacts.
+const contactsReady = (value: Access | null) => {
+  const profile = value?.profile || value?.counterparty;
+  return value?.state === "contacts_released" && !value.paused && !!(profile?.email?.trim() || profile?.phone?.trim());
+};
 const stateCopy: Record<string, string> = {
   private_documented: "Your interest is private with the team. The brother has not been notified.",
   awaiting_brother_review: "A profile is ready for the brother’s review. Accepting does not share contact details.",
   awaiting_sister_confirmation: "The brother accepted. The sister must explicitly confirm before a match is created.",
   pending_admin_approval: "You both agreed. Your match is pending final admin approval. Contact details remain private.",
-  contacts_released: "Final admin approval is complete. Contact details are available in your portal.",
+  contacts_released: "Open this review to check the contact details available to your account.",
   declined: "This review was declined. No further response is needed.",
   revoked: "The team revoked this review. Its link is no longer available.",
 };
@@ -22,7 +27,7 @@ const stateLabels: Record<string, string> = {
   awaiting_brother_review: "Waiting for a response",
   awaiting_sister_confirmation: "Waiting for confirmation",
   pending_admin_approval: "Waiting for the team’s approval",
-  contacts_released: "Contact details available",
+  contacts_released: "Contact sharing update",
   declined: "Review declined", revoked: "Review withdrawn", closed: "Review closed",
 };
 const reviewExpired = (item: Review) => item.state === "awaiting_brother_review" && item.reviewExpiresAt !== undefined && item.reviewExpiresAt <= Date.now();
@@ -34,6 +39,7 @@ export function FemaleReviews() {
   const [selected, setSelected] = useState<string | null>(null);
   const [token, setToken] = useState<string | undefined>();
   const [access, setAccess] = useState<Access | null>(null);
+  const [readyIds, setReadyIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [cursor, setCursor] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -42,11 +48,12 @@ export function FemaleReviews() {
   const [listError, setListError] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const actionInFlight = useRef(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const load = useCallback(async (next: string | null = null) => {
     const requestId = ++listRequest.current;
-    setLoading(true); setListError("");
+    setLoading(true); setListError(""); setReadyIds([]);
     try {
       const response = await fetch("/api/applicant/female-review" + (next ? "?cursor=" + encodeURIComponent(next) : ""), { cache: "no-store" });
       const payload = await response.json();
@@ -68,8 +75,14 @@ export function FemaleReviews() {
     return () => window.removeEventListener("focus", refresh);
   }, [load]);
   const row = rows.find(item => item.interestId === selected);
+  // Retain the current view during revalidation so a focus event cannot
+  // unmount a pressed button before its click. A changed selection is cleared.
+  const accessSelection = useRef<string | null>(null);
+  const accessRequest = useRef(0);
   useEffect(() => {
-    setAccess(null);
+    const requestId = ++accessRequest.current;
+    if (accessSelection.current !== selected) setAccess(null);
+    accessSelection.current = selected;
     if (!selected) return;
     let stopped = false;
     setReviewLoading(true);
@@ -78,12 +91,36 @@ export function FemaleReviews() {
     void fetch("/api/applicant/female-review?" + params, { cache: "no-store" }).then(async response => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Review unavailable.");
-      if (!stopped) { setAccess(payload); setError(""); }
-    }).catch(error => { if (!stopped) setError(error.message); }).finally(() => { if (!stopped) setReviewLoading(false); });
+      if (!stopped && requestId === accessRequest.current) { setAccess(payload); setError(""); }
+    }).catch(error => { if (!stopped && requestId === accessRequest.current) { setAccess(null); setError(error.message); } }).finally(() => { if (!stopped && requestId === accessRequest.current) setReviewLoading(false); });
     return () => { stopped = true; };
   }, [selected, token, row?.role, row?.state, row?.paused, accessVersion]);
+  useEffect(() => {
+    setReadyIds([]);
+    if (loading || listError || selected) return;
+    const controller = new AbortController();
+    // Serial reads bound load; notification state never retains contact values.
+    void (async () => {
+      for (const item of rows.filter(item => item.state === "contacts_released" && !item.paused)) {
+        try {
+          const response = await fetch("/api/applicant/female-review?" + new URLSearchParams({ interestId: item.interestId }), { cache: "no-store", signal: controller.signal });
+          if (!response.ok) continue;
+          const payload: Access = await response.json();
+          if (!controller.signal.aborted && contactsReady(payload)) setReadyIds(previous => [...previous, item.interestId]);
+        } catch { /* Fail closed. Refresh retries unavailable contact checks. */ }
+      }
+    })();
+    return () => controller.abort();
+  }, [rows, loading, listError, selected, accessVersion]);
+  useEffect(() => {
+    if (contactsReady(access) && window.location.hash === "#contact-details") {
+      document.getElementById("contact-details")?.focus();
+    }
+  }, [access]);
   async function act(body: Record<string, unknown>) {
-    if (busy) return;
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    ++accessRequest.current;
     setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch(["pause", "resume"].includes(String(body.action)) ? "/api/applicant/interests" : "/api/applicant/female-review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(["pause", "resume"].includes(String(body.action)) ? { ...body, action: body.action === "pause" ? "pause_connection" : "resume_connection" } : body) });
@@ -94,14 +131,26 @@ export function FemaleReviews() {
       setAccessVersion(value => value + 1);
       if (body.decision === "decline" || body.confirmed === false) { setSelected(null); setToken(undefined); }
       await load();
-    } catch (error) { setError(error instanceof Error ? error.message : "Unable to record your decision."); }
-    finally { setBusy(false); }
+    } catch (error) { ++accessRequest.current; setReviewLoading(false); setAccess(null); setError(error instanceof Error ? error.message : "Unable to record your decision."); }
+    finally { actionInFlight.current = false; setBusy(false); }
   }
   const profile = access?.profile || access?.counterparty;
   const invitations = rows.filter(needsBrotherReview);
   const confirmations = rows.filter(needsSisterConfirmation);
   const history = rows.filter(item => !needsBrotherReview(item) && !needsSisterConfirmation(item));
   return <section id="review-notifications" aria-label="Profile reviews" className="panel applicant-section">
+    {!!readyIds.length && !selected && !loading && !listError && <section className="interest-invitation contacts-ready" aria-labelledby="contacts-ready-heading">
+      <div className="interest-invitation-copy">
+        <h2 id="contacts-ready-heading">Contacts are ready</h2>
+        <p>You both agreed to proceed, and the team has approved sharing contact details. Open your review to see the contact details available to you.</p>
+      </div>
+      <ul className="interest-invitation-actions">
+        {readyIds.map((id, index) => <li key={id}>
+          {readyIds.length > 1 && <span>Connection {index + 1}</span>}
+          <a className="btn btn-primary" aria-label={readyIds.length > 1 ? "View contact details for connection " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(id) + "#contact-details"}>View contact details</a>
+        </li>)}
+      </ul>
+    </section>}
     {!!invitations.length && !selected && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
       <div className="interest-invitation-copy">
         <h2 id="interest-invitation-heading">A sister is interested in you</h2>
@@ -131,9 +180,10 @@ export function FemaleReviews() {
     <div className="panel-head"><div><h3>Profile reviews</h3><p>Review invitations and confirmations. Only you can respond from your account.</p></div><button type="button" className="btn" disabled={busy || loading} onClick={() => { void load(); setAccessVersion(value => value + 1); }}>Refresh</button></div>
     <div style={{ padding: 16, display: "grid", gap: 16 }}>
       {error && <p className="notice error" role="alert">{error} <a href={loginHref}>Sign in</a> or refresh your portal.</p>}
+      {busy && <p role="status">Recording your decision…</p>}
       {message && <p className="notice success" role="status">{message}</p>}
       {listError && <p className="notice error" role="alert">{listError} <a href={loginHref}>Sign in</a>, use Refresh or try Load more again.</p>}
-      {loading ? <p role="status">Loading reviews…</p> : !rows.length && <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>}
+      {!rows.length && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
       {(selected ? rows : history).map(item => <div key={item.interestId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 16 }}>
         {item.paused && <p>Paused</p>}
         <h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p>
@@ -143,14 +193,14 @@ export function FemaleReviews() {
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
       {selected && <section aria-label="Selected profile review" className="selected-profile-review">
         {access?.matchId && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
-        {reviewLoading && <p role="status">Loading profile…</p>}
-        {profile && <><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
+        {reviewLoading && !access && <p role="status">Loading profile…</p>}
+        {profile && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
           <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: profile.education || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
           <ProfileRequirements profile={profile} />
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
-          {access?.state === "contacts_released" && <div className="contact-box"><h4>Contact details</h4><p>{profile.email}</p><p>{profile.phone}</p></div>}
-        </>}
+          {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
+        </div>}
         {!access?.paused && access?.role === "sister" && access.state === "awaiting_sister_confirmation" && <div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm mutual interest</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>

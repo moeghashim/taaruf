@@ -673,3 +673,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Request3176: ported education editing, shared options and validation from PR42 onto verified PR93 live baseline; preserved capability/image security and added synthetic persistence/API/browser coverage. Preview only; no live writes.
 - Event capacity controls: allow lowering caps without changing existing registrations, add explicit authenticated one-person waitlist force-to-Pending with warning, preserve ordinary capacity/FIFO/auth rules. Added backend and bridge regressions; 744 tests, root/Convex types, scoped lint, production build and real synthetic local-backend/browser checks pass. Preview-only; no live cap/data/deployment changes. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Independent capacity review follow-up: preserve save feedback across data refresh; explicitly explain and test mixed decrease/increase all-row preservation, both genders and expired reservations. No backend behavioral change from reviewed implementation. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Contacts-ready3218: preserve latest serving ffe260e ancestry; show both portals a prominent notice only after authorized detail GET returns permitted contact fields; focus reauthorized details CTA, fail closed, add six synthetic responsive/privacy/pagination tests. No backend/config/email/production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Integrated authorized contact notice c14e265 and scoped focus-click e154e8c onto serving ffe260e in female-reviews.tsx; preserved contact gates and revalidation geometry, added stale-response/pending-POST browser coverage. No backend/config/email/live changes.
+## 2026-11-10
+- Add separately gated future-only sister final-approval email, recipient/acceptance freshness checks and synthetic tests; no production send, activation or deployment.
+
+## 2026-11-10
+- Added narrowly scoped combined brother/sister notification mode with independent cutoffs, stale recipient/sender retry cancellation, coexistence/security tests and activation checklist; no production changes.

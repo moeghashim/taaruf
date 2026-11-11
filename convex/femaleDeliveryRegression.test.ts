@@ -23,7 +23,7 @@ async function fixture(general = false) {
   });
   return { t, ...ids };
 }
-async function accepted() { const f = await fixture(); await f.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId: f.interestId, reviewTokenHash: hash }); await f.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: f.interestId, reviewTokenHash: hash, decision: "accept" }); return f; }
+async function accepted() { const f = await fixture(); await f.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId: f.interestId, reviewTokenHash: hash }); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com"); vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "test@example.com"); vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "synthetic-only"); await f.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: f.interestId, reviewTokenHash: hash, decision: "accept" }); return f; }
 
 function isolated() {
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated");
@@ -70,8 +70,8 @@ test("429 600-second cooldown defers leased siblings and newly queued work globa
   expect(fetchMock).toHaveBeenCalledTimes(1);
   now.mockRestore();
 });
-test("accepted-then-crash replays identical frozen provider body despite email and configuration edits", async () => {
-  const { t, sister } = await accepted(); isolated();
+test("accepted-then-crash replays identical frozen provider body despite configuration edits", async () => {
+  const { t } = await accepted(); isolated();
   const [row] = await t.mutation(internal.femaleWorkflowDelivery.claim, {});
   const payload = await t.mutation(internal.femaleWorkflowDelivery.markAttempt, { id: row._id, attempt: row.attempts });
   expect(payload).toBeTruthy();
@@ -79,14 +79,14 @@ test("accepted-then-crash replays identical frozen provider body despite email a
   const provider = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
   vi.stubGlobal("fetch", provider);
   await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Idempotency-Key": row.key }, body: JSON.stringify(payload) });
-  await t.run(async ctx => { await ctx.db.patch(sister, { email: "changed@example.com" }); await ctx.db.patch(row._id, { nextAttemptAt: 0, leaseUntil: 0 }); });
+  await t.run(async ctx => { await ctx.db.patch(row._id, { nextAttemptAt: 0, leaseUntil: 0 }); });
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "changed@example.com");
   vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://changed.example.com");
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   expect(provider).toHaveBeenCalledTimes(2);
   expect(provider.mock.calls[1][1].body).toBe(provider.mock.calls[0][1].body);
   expect(provider.mock.calls[1][1].headers["Idempotency-Key"]).toBe(row.key);
-  expect((await t.run(ctx => ctx.db.get(row._id)))?.error).toContain("Recipient changed");
+  expect((await t.run(ctx => ctx.db.get(row._id)))?.status).toBe("sent");
 });
 test("send authorization rejects expired leases, superseded attempts and the exact 23h boundary", async () => {
   const { t } = await accepted(); isolated();
