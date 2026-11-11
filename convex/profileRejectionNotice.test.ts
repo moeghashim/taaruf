@@ -83,3 +83,10 @@ test("ambiguous reversal requires reconciliation; stale success remains evidence
  await t.mutation(internal.profileRejectionNotice.finish,{id:first!.id,attempt:first!.attempt,providerId:"late-evidence"});
  expect((await rows())[0].providerId).toBe("late-evidence");
 });
+test("non-JSON rate limit preserves provider Retry-After",async()=>{
+ const {t,update,rows}=await setup(); await update("rejected");
+ vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response("rate limited",{status:429,headers:{"Retry-After":"600"}})));
+ const before=Date.now(); await t.action(internal.profileRejectionNotice.drain,{});
+ expect((await rows())[0]).toMatchObject({state:"pending",attempts:1});
+ expect((await rows())[0].nextAttemptAt).toBeGreaterThanOrEqual(before+600000);
+});

@@ -74,7 +74,8 @@ export const drain = internalAction({ args: {}, handler: async ctx => {
   if (!row) return;
   try {
     const response = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: "Bearer " + process.env.PROFILE_REJECTION_NOTICE_RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": "profile-rejection-notice/" + row.id }, body: JSON.stringify(row.payload), signal: AbortSignal.timeout(30000) });
-    const data = await response.json() as { id?: string };
+    // Gateways can return HTML/text errors; preserve Retry-After even then.
+    const data = await response.json().catch(() => ({})) as { id?: string };
     const retryAfter = response.headers.get("retry-after");
     const delay = retryAfter ? (/^\d+$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now()) : 0;
     await ctx.runMutation(internal.profileRejectionNotice.finish, { id: row.id, attempt: row.attempt, providerId: response.ok && typeof data.id === "string" && data.id ? data.id : undefined, permanent: !response.ok && response.status !== 429 && response.status < 500, retryAfterMs: Number.isFinite(delay) ? Math.max(0, delay) : 0 });

@@ -3,7 +3,8 @@ for (const width of [1280, 390, 320]) test("event privacy and live eligibility r
  page.on("pageerror", error => console.error(error));
  await page.setViewportSize({width,height:900});
  let rejected=false;
- await page.route("**/api/**",async route=>{
+ await page.route("**/*",async route=>{
+  const url=new URL(route.request().url()); if(url.origin!=="http://127.0.0.1:3187") return route.abort(); if(!url.pathname.startsWith("/api/")) return route.continue();
   const path=new URL(route.request().url()).pathname;
   const eligibility={eventLogisticsRestricted:rejected,canSubmitInterest:false,interestSubmissionEventId:null,interestSubmissions:[],interestSubmissionLimit:3};
   if(path==="/api/applicant/me") return route.fulfill({json:{...eligibility,applicant:{name:"Synthetic",gender:"male",status:rejected?"rejected":"approved",applicantNumber:1,profileCompletionStatus:"completed"},inbound:[],outbound:[],privateDocumented:[]}});
