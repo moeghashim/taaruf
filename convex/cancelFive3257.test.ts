@@ -35,7 +35,7 @@ test("transaction harness discards staged audit and patches on failure",async()=
 import { preview } from "./adminPairTestReset";
 import { vi } from "vitest";
 import type { QueryCtx } from "./_generated/server";
-test("post-cancellation preview is read-only and other unsafe delivery still blocks",async()=>{
+test("post-cancellation preview is read-only; in-flight delivery warns instead of vetoing reset",async()=>{
   vi.stubEnv("ATTENDANCE_ADMIN_SECRET","synthetic");
   const pair=["j57fqgmbmh3am42geabkq852zx8g5wxy","j572w0f7mwazj4ke8snn0k99hn8g508t"];
   const id="jn7exypvtxvsag6pagdgamhqkd8hz9wq";
@@ -46,6 +46,6 @@ test("post-cancellation preview is read-only and other unsafe delivery still blo
   try {
     await expect(handler(ctx,{adminSecret:"synthetic"})).resolves.toBeTruthy();expect(tables).toEqual(before);
     tables.femaleWorkflowDeliveries.push({...rows[0],_id:"other",status:"sending"});
-    await expect(handler(ctx,{adminSecret:"synthetic"})).rejects.toThrow("manual reconciliation");
+    await expect(handler(ctx,{adminSecret:"synthetic"})).resolves.toMatchObject({warnings: [expect.stringContaining("cannot be recalled")]});
   } finally {vi.unstubAllEnvs();}
 });

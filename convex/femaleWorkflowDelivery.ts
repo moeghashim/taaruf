@@ -52,6 +52,7 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
   const abandoned = await due("sending");
   const result = [];
   for (const row of [...pending, ...abandoned].sort((a, b) => a.nextAttemptAt - b.nextAttemptAt || a._creationTime - b._creationTime).slice(0, 10)) {
+    if (row.resetAuditId !== undefined) continue;
     if (!await deliveryAuthorized(ctx, row)) { await ctx.db.patch(row._id, { status: "failed", leaseUntil: undefined, error: "Delivery not authorized by activation boundary/kind; no backfill" }); continue; }
     if (row.firstAttemptAt !== undefined && now - row.firstAttemptAt >= 23 * 3600000) { await ctx.db.patch(row._id, { status: "failed", error: "Idempotency window expired; manual reconciliation required" }); continue; }
     try {
@@ -72,7 +73,7 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
 }});
 export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDeliveries"), attempt: v.number() }, handler: async (ctx, args) => {
   const row = await ctx.db.get(args.id);
-  if (!row || row.status !== "sending" || row.attempts !== args.attempt) return false;
+  if (!row || row.resetAuditId !== undefined || row.status !== "sending" || row.attempts !== args.attempt) return false;
   if (!await deliveryAuthorized(ctx, row)) return false;
   const now = Date.now();
   if (row.leaseUntil === undefined || row.leaseUntil <= now) return false;
@@ -113,6 +114,17 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
 export const finish = internalMutation({ args: { id: v.id("femaleWorkflowDeliveries"), attempt: v.number(), success: v.boolean(), retry: v.boolean(), error: v.optional(v.string()), retryAfterMs: v.optional(v.number()), rateLimited: v.optional(v.boolean()) }, handler: async (ctx, args) => {
   const row = await ctx.db.get(args.id);
   if (!row) return null;
+  // Retired epochs accept evidence only, never workflow writes, retries or
+  // sibling/cooldown changes. Keep the original frozen payload/errors intact.
+  if (row.resetAuditId !== undefined) {
+    // Preserve every callback, including superseded attempts and duplicate
+    // callbacks, separately from the convenience latest-outcome summary.
+    await ctx.db.insert("retiredDeliveryResults", { deliveryId: row._id, resetAuditId: row.resetAuditId, attempt: args.attempt, success: args.success, receivedAt: Date.now(), ...(args.error !== undefined ? { error: args.error } : {}), ...(args.rateLimited !== undefined ? { rateLimited: args.rateLimited } : {}), ...(args.retryAfterMs !== undefined ? { retryAfterMs: args.retryAfterMs } : {}) });
+    if (row.attempts === args.attempt && row.firstAttemptAt !== undefined && row.providerPayload && (!row.lateResult || (!row.lateResult.success && args.success))) {
+      await ctx.db.patch(row._id, { lateResult: { attempt: args.attempt, success: args.success, receivedAt: Date.now(), ...(args.error ? { error: args.error } : {}) } });
+    }
+    return null;
+  }
   // Even a late 429 fences other workers; no stale response can complete a newer attempt.
   if (args.rateLimited) {
     const until = Math.max(await cooldown(ctx), Date.now() + Math.max(60000, args.retryAfterMs ?? 0));
@@ -131,6 +143,26 @@ export const finish = internalMutation({ args: { id: v.id("femaleWorkflowDeliver
   if (row.status !== "sending" || row.attempts !== args.attempt) return null;
   const retry = !args.success && args.retry && row.attempts < 6;
   await ctx.db.patch(row._id, { status: args.success ? "sent" : retry ? "pending" : "failed", sentAt: args.success ? Date.now() : undefined, error: args.success ? row.error : args.error, leaseUntil: undefined, nextAttemptAt: Date.now() + Math.max(args.retryAfterMs ?? 0, Math.min(3600000, 60000 * 2 ** row.attempts)) }); return null;
+}});
+// Last transactional check immediately before external I/O. Reset may still
+// commit after this check; it cannot recall a request already in flight.
+export const authorizeSend = internalMutation({ args: { id: v.id("femaleWorkflowDeliveries"), attempt: v.number() }, handler: async (ctx, args) => {
+  const row = await ctx.db.get(args.id);
+  if (!row || row.resetAuditId !== undefined || row.status !== "sending" || row.attempts !== args.attempt || !row.leaseUntil || row.leaseUntil <= Date.now() || !row.providerPayload) return false;
+  if (!await deliveryAuthorized(ctx, row)) return false;
+  try {
+    const { workflow, sister, brother } = await participants(ctx, row.interestId);
+    const recipient = row.recipientId === sister._id ? sister : row.recipientId === brother._id ? brother : null;
+    if (!recipient || row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== recipient.email) return false;
+    if (row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) return false;
+    if (row.kind === "sister_confirmation") {
+      const interest = await ctx.db.get(row.interestId);
+      if (!interest || row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation" || !currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email)) return false;
+    }
+    if (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") return false;
+    if (row.kind === "contacts_ready" && workflow.state !== "contacts_released") return false;
+  } catch { return false; }
+  return true;
 }});
 export function deliveryConfig(email: string) {
   const allowed = (process.env.FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS ?? "").split(",").map(s => s.trim().toLowerCase());
@@ -154,6 +186,7 @@ export const drain = internalAction({ args: {}, handler: async ctx => {
     if (!payload) continue;
     const config = deliveryConfig(payload.to[0]);
     if (!config) continue; // Recheck isolation on every replay.
+    if (!await ctx.runMutation(internal.femaleWorkflowDelivery.authorizeSend, { id: row._id, attempt: row.attempts })) continue;
     try {
       const response = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: "Bearer " + config.key, "Content-Type": "application/json", "Idempotency-Key": row.key }, body: JSON.stringify(payload) });
       const retryAfter = response.headers.get("retry-after");

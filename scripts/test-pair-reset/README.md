@@ -10,4 +10,4 @@ Run Next with ADMIN_PASSWORD=synthetic-admin-only, ADMIN_TOKEN_SALT=synthetic-sa
 
 Evidence for this candidate: privateops/admin-pair-reset-3002/runtime/{proof.json,browser-proof.json,desktop.png,mobile.png}. Complete unit suite: 708 passed. Production build, typecheck and targeted lint passed.
 
-Existing route-level notification emails are not retractable once started. UI warns they may arrive after reset; retired workflow links cannot restore access. Outbox attempts/in-flight leases fail closed for reconciliation. No global outbox changes or email sends are part of reset.
+Existing route-level notification emails are not retractable once started. UI warns they may arrive after reset; retired workflow links cannot restore access. All old-cycle outbox rows receive an irreversible reset-audit epoch in the same transaction. Claims, retries and pre-send authorization reject retired epochs. Matching late provider results are evidence-only on the retired job; they cannot requeue jobs or change new-cycle/sibling work. Sent or in-flight mail may still arrive; reset never promises external cancellation. No email sending or configuration activation is part of reset.
