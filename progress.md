@@ -732,3 +732,7 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10 — matching release3445
 - Reconciled approved matching and draft validation onto exact live portal; 1097 tests, build/types and portal/comparison/New match browser checks pass. Production remains unchanged pending final gates. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Draft mutual-interest3455: server-complete reciprocal evidence, explicit open/completed badges and mutual filters; preview gate remains closed pending legacy evidence review and final validation.
+- Review fixes: legacy disclosure provenance, request-scoped consistent snapshots, linear evidence payload, and draft-preserving background refresh. Full1122tests/types/lint/serial build passed; no live writes.
