@@ -22,8 +22,8 @@ const stateLabels: Record<string, string> = {
   in_review: "Connection review", contacts_released: "Contact sharing update", closed: "Connection closed",
 };
 const reviewExpired = (item: Review) => item.reviewExpired === true;
-const needsBrotherReview = (item: Review) => item.role === "brother" && item.ownAction === "review" && !item.paused;
-const needsSisterConfirmation = (item: Review) => item.role === "sister" && item.ownAction === "review" && !item.paused;
+const needsBrotherReview = (item: Review) => item.role === "brother" && item.ownAction === "review" && !item.paused && !item.reviewExpired && !["closed", "revoked", "expired"].includes(item.state);
+const needsSisterConfirmation = (item: Review) => item.role === "sister" && item.ownAction === "review" && !item.paused && !item.reviewExpired && !["closed", "revoked", "expired"].includes(item.state);
 export function FemaleReviews() {
   const [loginHref, setLoginHref] = useState("/login");
   const [rows, setRows] = useState<Review[]>([]);
@@ -52,7 +52,7 @@ export function FemaleReviews() {
       if (requestId !== listRequest.current) return;
       setRows(previous => next ? [...previous, ...payload.page.filter((item: Review) => !previous.some(row => row.interestId === item.interestId))] : payload.page);
       setCursor(payload.continueCursor); setDone(payload.isDone);
-    } catch (error) { if (requestId === listRequest.current) setListError(error instanceof Error ? error.message : "Unable to load reviews."); }
+    } catch (error) { if (requestId === listRequest.current) { setRows([]); setListError(error instanceof Error ? error.message : "Unable to load reviews."); } }
     finally { if (requestId === listRequest.current) setLoading(false); }
   }, []);
   useEffect(() => {
@@ -92,7 +92,7 @@ export function FemaleReviews() {
     const controller = new AbortController();
     // Serial reads bound load; notification state never retains contact values.
     void (async () => {
-      for (const item of rows.filter(item => item.state === "contacts_released" && !item.paused)) {
+      for (const item of rows.filter(item => item.state === "contacts_released" && !item.paused && !item.reviewExpired)) {
         try {
           const response = await fetch("/api/applicant/female-review?" + new URLSearchParams({ interestId: item.interestId }), { cache: "no-store", signal: controller.signal });
           if (!response.ok) continue;
@@ -142,7 +142,7 @@ export function FemaleReviews() {
         </li>)}
       </ul>
     </section>}
-    {!!invitations.length && !selected && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
+    {!!invitations.length && !selected && !loading && !listError && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
       <div className="interest-invitation-copy">
         <h2 id="interest-invitation-heading">Your review is needed</h2>
         <p>{invitations.length === 1 ? "This connection is awaiting your review." : "You have multiple profiles to review. Take a look and respond to each invitation."}</p>
@@ -155,7 +155,7 @@ export function FemaleReviews() {
         </li>)}
       </ul>
     </section>}
-    {!!confirmations.length && !selected && <section className="interest-invitation sister-confirmation" aria-labelledby="sister-confirmation-heading">
+    {!!confirmations.length && !selected && !loading && !listError && <section className="interest-invitation sister-confirmation" aria-labelledby="sister-confirmation-heading">
       <div className="interest-invitation-copy">
         <h2 id="sister-confirmation-heading">Your review is needed</h2>
         <p>This connection is awaiting your review.</p>
@@ -168,14 +168,14 @@ export function FemaleReviews() {
         </li>)}
       </ul>
     </section>}
-    {!selected && history.filter(item => !readyIds.includes(item.interestId)).map((item, index) => <section key={item.interestId} className="interest-invitation" aria-label={"Connection update " + (index + 1)}>
+    {!selected && !loading && !listError && history.filter(item => !readyIds.includes(item.interestId)).map((item, index) => <section key={item.interestId} className="interest-invitation" aria-label={"Connection update " + (index + 1)}>
       <div className="interest-invitation-copy">
         <h2>{reviewExpired(item) ? "Review invitation expired" : item.paused ? "Connection paused" : stateLabels[item.state] || "Profile review update"}</h2>
         <p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p>
-        {item.ownDecision === "approved" && <p>Your decision: approved.</p>}
+        {item.ownDecision === "approved" && <p>Your decision: approved.</p>}{item.ownDecision === "approved" && item.state === "in_review" && !item.paused && !item.reviewExpired && <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>}
         {item.ownDecision === "declined" && <p>Your decision: declined.</p>}
       </div>
-      {!reviewExpired(item) && item.canView && <a className="btn btn-primary" aria-label={history.length > 1 ? "View review for connection " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>View review</a>}
+      {!reviewExpired(item) && !["closed", "revoked", "expired"].includes(item.state) && item.canView && <a className="btn btn-primary" aria-label={history.length > 1 ? "View review for connection " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>View review</a>}
     </section>)}
     {selected && <a className="btn" href="/me#applicant-interests">Back to applicant interests</a>}
     <div style={{ padding: 16, display: "grid", gap: 16 }}>
@@ -183,11 +183,11 @@ export function FemaleReviews() {
       {busy && <p role="status">Recording your decision…</p>}
       {message && <p className="notice success" role="status">{message}</p>}
       {listError && <p className="notice error" role="alert">{listError} <a href={loginHref}>Sign in</a> or <button type="button" className="btn" disabled={busy || loading} onClick={() => { void load(); setAccessVersion(value => value + 1); }}>Retry loading reviews</button>.</p>}
-      {!rows.length && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
+      {!rows.length && (!done || loading || selected) && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
       {rows.filter(item => item.interestId === selected).map(item => <div key={item.interestId}>
         {item.paused && <p>Paused</p>}
         <h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : item.ownAction === "review" ? "This connection is awaiting your review." : stateCopy[item.state]}</p>
-        {item.ownDecision === "approved" && <p>Your decision: approved.</p>}
+        {item.ownDecision === "approved" && <p>Your decision: approved.</p>}{item.ownDecision === "approved" && item.state === "in_review" && !item.paused && !item.reviewExpired && <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>}
         {item.ownDecision === "declined" && <p>Your decision: declined.</p>}
 
 

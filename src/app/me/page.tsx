@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
+import { MatchmakerNotifications } from "@/components/applicant/matchmaker-notifications";
 import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
 import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
@@ -360,8 +361,8 @@ function ProfileSideCard({
       )}
 
       {interest.ownInitialDecision && interest.ownInitialDecision !== "pending" && <p className="notice">Your initial response: {titleize(interest.ownInitialDecision)}.</p>}
-      {viewerFinalApproval === "approved" && interest.flowStatus !== "contact_shared" && (
-        <p className="notice success">Your final approval is recorded. Contact details remain private.</p>
+      {viewerFinalApproval === "approved" && !interest.contactSharedAt && !["contact_shared", "closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) && (
+        <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>
       )}
 
       {(canRespond || canFinalApprove) && (
@@ -610,6 +611,9 @@ export default function ApplicantDashboardPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+  const dashboardRequest = useRef(0);
+  const eventsRequest = useRef(0);
+  const [eventsFresh, setEventsFresh] = useState(false);
   const hasDashboard = Boolean(data);
   const [view, setView] = useState<PortalView>("overview");
   const [savedProfile, setSavedProfile] = useState("");
@@ -653,25 +657,29 @@ export default function ApplicantDashboardPage() {
   }, [router]);
 
   const load = useCallback(async () => {
+    const request = ++dashboardRequest.current;
     setIsLoading(true);
     try {
       const requested = new URLSearchParams(window.location.search).get("connection");
       const response = await applicantFetch("/api/applicant/me" + (requested !== null ? "?connection=" + encodeURIComponent(requested) : ""), { cache: "no-store" });
-      if (response.status === 401) {
-        return;
-      }
+      if (request !== dashboardRequest.current) return;
+      if (response.status === 401) { setData(null); return; }
       const payload = await response.json();
+      if (request !== dashboardRequest.current) return;
       if (!response.ok) { setData(null); throw new Error(payload.error || "Failed to load dashboard"); }
       setData({ ...payload, requestedConnectionId: requested });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (request === dashboardRequest.current) { setData(null); setError(err instanceof Error ? err.message : String(err)); }
     } finally {
-      setIsLoading(false);
+      if (request === dashboardRequest.current) setIsLoading(false);
     }
   }, [applicantFetch]);
 
   useEffect(() => {
     void load();
+    const refresh = () => { if (!document.hidden) void load(); };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [load]);
 
   useEffect(() => {
@@ -749,6 +757,8 @@ export default function ApplicantDashboardPage() {
   }, [loadProfile]);
 
   const loadEvents = useCallback(async () => {
+    const request = ++eventsRequest.current;
+    setEventsFresh(false);
     try {
       const response = await applicantFetch("/api/applicant/events", { cache: "no-store" });
       if (response.status === 401) {
@@ -756,20 +766,23 @@ export default function ApplicantDashboardPage() {
       }
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Failed to load events");
-      setEventsData(payload);
+      if (request !== eventsRequest.current) return;
+      setEventsData(payload); setEventsFresh(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (request === eventsRequest.current) { setEventsData(null); setError(err instanceof Error ? err.message : String(err)); }
     }
   }, [applicantFetch]);
 
   useEffect(() => {
     void loadEvents();
+    const refresh = () => { if (!document.hidden) void loadEvents(); };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [loadEvents]);
 
 
 
   async function runAction(body: Record<string, unknown>) {
-    if (archived) return false;
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -1008,7 +1021,9 @@ export default function ApplicantDashboardPage() {
     .toUpperCase();
   const completedProfile = data.applicant.profileCompletionStatus === "completed";
   const hijabLabel = hijabQuestion(profile?.gender);
-  const actionableInbound = data.inbound.filter(interest => !interest.paused && (interest.canRespond || interest.canFinalApprove));
+  const visibleInterests = [...data.inbound, ...data.outbound, ...data.privateDocumented].filter((interest, index, items) => !interest.femaleWorkflow && items.findIndex(item => item.interestId === interest.interestId) === index);
+  const actionableInbound = visibleInterests.filter(interest => !interest.paused && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && (interest.canRespond || interest.canFinalApprove));
+  const interestUpdates = visibleInterests.filter(interest => !actionableInbound.includes(interest));
 
   return (
     <main data-admin>
@@ -1080,7 +1095,6 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
-            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
             <nav className="portal-pages" aria-label="Applicant pages">
               {portalViews.map(item => <a key={item.id} href={item.href} className={`btn ${view === item.id ? "btn-primary" : ""}`} aria-current={view === item.id ? "page" : undefined}>{item.label}</a>)}
             </nav>
@@ -1088,6 +1102,20 @@ export default function ApplicantDashboardPage() {
             {profileDirty && view !== "profile" && <p className="notice">Your unsaved profile changes are kept here. <a href="#profile">Return to My Profile</a> to save.</p>}
             <div role="status" aria-live="polite" aria-atomic="true">{message && <p className="notice success">{message}</p>}</div>
             {error && <p role="alert" className="notice error">{error}</p>}
+            {!archived && <section aria-label="Your notifications" className="applicant-section">
+              {(eventsData?.upcoming || []).filter(event => eventsFresh && !busy && !data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError && event.registration && canConfirmEventRegistration(event.registration)).map(event => <section className="interest-invitation" key={event._id}><div className="interest-invitation-copy"><h2>Event response requested</h2><p>Please review your event registration. Responding does not grant event approval.</p></div><a className="btn btn-primary" href="#events">Review event registration</a></section>)}
+              {!!data.history?.length && <section className="interest-invitation"><div className="interest-invitation-copy"><h2>Connection updates</h2><p>{data.history.length} closed connection{data.history.length === 1 ? "" : "s"}. No further response is needed.</p></div><a className="btn" href="#applicant-interests">View connection history</a></section>}
+              {!isLoading && !busy && actionableInbound.length > 0 && <section className="interest-invitation" aria-labelledby="inbound-action-heading">
+                <div className="interest-invitation-copy"><h2 id="inbound-action-heading">You have {actionableInbound.length === 1 ? "an interest to review" : "interests to review"}</h2><p>{actionableInbound.length} awaiting your response. Contact details remain private until sharing is approved.</p></div>
+                <ul className="interest-invitation-actions">{actionableInbound.map((interest, index) => <li key={interest.interestId}><span>Interest {index + 1}</span><a className="btn btn-primary" href={"/me?connection=" + encodeURIComponent(interest.interestId) + (interest.direction === "private" ? "#private-documented-interests" : interest.direction === "outbound" ? "#outbound-interests" : "#inbound-interests")} aria-label={actionableInbound.length > 1 ? "View interest " + (index + 1) : undefined}>View interest</a></li>)}</ul>
+              </section>}
+              {!isLoading && !busy && interestUpdates.map((interest, index) => {
+                const closed = ["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) || ["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus);
+                const ready = !closed && !interest.paused && Boolean(interest.contactSharedAt && (interest.counterparty?.email || interest.counterparty?.phone));
+                return <section className="interest-invitation" key={interest.interestId} aria-label={"Interest update " + (index + 1)}><div className="interest-invitation-copy"><h2>{ready ? "Contacts are ready" : closed ? "Connection closed" : interest.paused ? "Connection paused" : "Interest update"}</h2><p>{closed ? "This connection is no longer available. No further response is needed." : ready ? "Open your connection to see the contact details available to you." : interest.ownFinalApproval === "approved" && !interest.contactSharedAt && interest.flowStatus !== "contact_shared" ? "Contact details will be shared after the admin reviews and approves the match." : "No response is currently needed from you. You can review your connection."}</p></div>{!closed && interest.counterparty && <a className="btn btn-primary" href={"/me?connection=" + encodeURIComponent(interest.interestId) + (interest.direction === "private" ? "#private-documented-interests" : interest.direction === "outbound" ? "#outbound-interests" : "#inbound-interests")}>{ready ? "View contact details" : "View interest"}</a>}</section>;
+              })}
+              {data.applicant.status === "approved" && <><FemaleReviews /><MatchmakerNotifications /></>}
+            </section>}
             {view === "matchmaker" && <MatchmakerMatching archived={archived} onSessionExpired={onMatchmakerSessionExpired} />}
             <div hidden={view !== "overview"} id="overview">
             <div className="stats">
@@ -1166,282 +1194,3 @@ export default function ApplicantDashboardPage() {
               {(eventsData?.history || []).length > 0 && (
                 <div className="profile-review-box" style={{ marginTop: 16 }}>
                   <h4>Event history</h4>
-                  <div className="interest-list">
-                    {eventsData?.history.map((row) => (
-                      <div key={row._id} className="interest-row">
-                        <div className="interest-row-main">
-                          <h4>{!data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError ? row.event?.title ?? "Event" : "Event registration"}</h4>
-                          <p>{!data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError && row.event ? `${formatDate(row.event.startsAt)} · ${row.event.location}` : "Details unavailable"}</p>
-                        </div>
-                        <div className="interest-row-meta">
-                          <StatusBadge value={row.registrationStatus} />
-                          <StatusBadge value={row.attendanceStatus} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
-
-            <p className="portal-next"><a href="#applicant-interests">Review applicant interests</a> · <a href="#profile">Update my profile</a></p>
-            </div>
-            <div hidden={view !== "interests"} id="applicant-interests">
-<<<<<<< HEAD
-            {!archived && data.applicant.status === "approved" && <FemaleReviews />}
-=======
-            {actionableInbound.length > 0 && <section className="interest-invitation" aria-labelledby="inbound-action-heading">
-              <div className="interest-invitation-copy">
-                <h2 id="inbound-action-heading">You have {actionableInbound.length === 1 ? "an interest to review" : "interests to review"}</h2>
-                <p>Review and respond to your incoming interests. Contact details remain private until sharing is approved.</p>
-              </div>
-              <ul className="interest-invitation-actions">
-                {actionableInbound.map((interest, index, actionable) => <li key={interest.interestId}>
-                  {actionable.length > 1 && <span>Interest {index + 1}</span>}
-                  <a className="btn btn-primary" href={"/me?connection=" + encodeURIComponent(interest.interestId) + "#inbound-interests"} aria-label={actionable.length > 1 ? "View interest " + (index + 1) : undefined}>View interest</a>
-                </li>)}
-              </ul>
-            </section>}
-            {data.applicant.status === "approved" && <FemaleReviews />}
->>>>>>> b61ab0f (fix: streamline interest notifications and surface inbound reviews)
-            <div className="panel interest-submit-panel">
-              <div className="panel-head">
-                <div>
-                  <h3>Submit Interest</h3>
-                  <p aria-live="polite">{!archived && data.canSubmitInterest
-                    ? "Enter the applicant's number and first name. Maximum 3 interests per event."
-                    : "Interest submissions will open after being approved and checked in for the next event"}</p>
-                </div>
-              </div>
-              {eligibilityError && <p role="status" className="notice error">{eligibilityError}</p>}
-              {!archived && data.canSubmitInterest && [0, 1, 2].map(index => {
-                const submitted = data.interestSubmissions?.[index];
-                return <form key={index} onSubmit={event => submitNumber(event, index)} className="applicant-number-form" aria-label={`Interest ${index + 1}`}>
-                  <div className="field">
-                    <label htmlFor={`interest-number-${index}`}>Interest {index + 1} · Applicant #</label>
-                    <input id={`interest-number-${index}`} type="number" min="1" step="1" inputMode="numeric" required disabled={busy || Boolean(eligibilityError) || Boolean(submitted)}
-                      placeholder={submitted ? "Submitted" : "Applicant #"} value={submitted ? "" : interestRows[index].number}
-                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, number: event.target.value } : row))} />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`interest-name-${index}`}>First name</label>
-                    <input id={`interest-name-${index}`} required maxLength={200} disabled={busy || Boolean(eligibilityError) || Boolean(submitted)} placeholder="First name"
-                      value={submitted ? "" : interestRows[index].name}
-                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, name: event.target.value } : row))} />
-                  </div>
-                  <button type="submit" className="btn btn-primary" disabled={busy || Boolean(eligibilityError) || Boolean(submitted)}>
-                    {submitted ? "Submitted" : "Submit interest"}
-                  </button>
-                </form>;
-              })}
-            </div>
-
-            </div>
-            <div hidden={view !== "profile"}>
-              <section id="profile" className="panel applicant-section">
-                <div className="panel-head">
-                  <div>
-                    <h2>My Profile</h2>
-                    <p>Edit your date of birth, education, ethnicity, photos and matching profile here.</p>
-                  </div>
-                  <Pill tone={completedProfile ? "green" : "amber"}>
-                    {titleize(data.applicant.profileCompletionStatus)}
-                  </Pill>
-                </div>
-                {isProfileLoading || !profile ? (
-                  <div className="coming-soon compact">
-                    <div className="lede">Loading profile...</div>
-                  </div>
-                ) : (
-                  <form onSubmit={saveProfile} className="profile-form">
-                    {archived && <p>Archived profile details are read-only.</p>}
-                    <fieldset disabled={archived} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-                    <div className="profile-grid two profile-basics">
-                    <DateOfBirthField externalHelp originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
-                      <div className="field">
-                        <label htmlFor="education">Education level *</label>
-                        <select id="education" value={profile.education || ""}
-                          onChange={(event) => setProfile({ ...profile, education: event.target.value })} required>
-                          <option value="">Select education level</option>
-                          {educationOptionsFor(profile.education).map(({ value, label }) => (
-                            <option key={value} value={value}>{label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field">
-                        <label htmlFor="ethnicity">Ethnicity *</label>
-                        <input
-                          id="ethnicity"
-                          value={profile.ethnicity}
-                          onChange={(event) => setProfile({ ...profile, ethnicity: event.target.value })}
-                          placeholder="e.g. Arab, South Asian, Somali"
-                        />
-                      </div>
-                      <div className="field">
-                        <label htmlFor="prayerCommitment">Prayer commitment *</label>
-                        <select
-                          id="prayerCommitment"
-                          value={profile.prayerCommitment}
-                          onChange={(event) => setProfile({ ...profile, prayerCommitment: event.target.value as PrayerCommitment })}
-                        >
-                          <option value="">Select one</option>
-                          {prayerOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field">
-                        <label htmlFor="hijabResponse">{hijabLabel} *</label>
-                        <select
-                          id="hijabResponse"
-                          value={profile.hijabResponse}
-                          onChange={(event) => setProfile({ ...profile, hijabResponse: event.target.value as HijabResponse })}
-                        >
-                          <option value="">Select one</option>
-                          {hijabOptions(profile.gender, profile.hijabResponse).map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field">
-                        <label htmlFor="photoSharingPermission">Photo sharing permission *</label>
-                        <select
-                          id="photoSharingPermission"
-                          value={profile.photoSharingPermission === "yes" || profile.photoSharingPermission === "no" ? profile.photoSharingPermission : ""}
-                          onChange={(event) => setProfile({ ...profile, photoSharingPermission: event.target.value as PhotoSharingPermission })}
-                        >
-                          <option value="">Select one</option>
-                          {photoSharingOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <p id="birthday-help" className="muted">Please add your date of birth for our records and background checks. Only your age is shared with matches.</p>
-
-                    <div className="photo-upload-box">
-                      <div>
-                        <h4>Pictures *</h4>
-                        <p>Upload up to 3 images. At least 1 is required. Photos are not shared without permission.</p>
-                      </div>
-                      <div className="field">
-                        <input
-                          id="photos"
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={(event) => {
-                            void handleImageUpload(event.target.files);
-                            event.currentTarget.value = "";
-                          }}
-                          disabled={isUploading || uploadedImages.length >= 3}
-                        />
-                      </div>
-                      <div className="mono">{isUploading ? "Uploading..." : `${uploadedImages.length} / 3 uploaded`}</div>
-                      {uploadedImages.length > 0 && (
-                        <div className="photo-grid">
-                          {uploadedImages.map((image) => (
-                            <div key={image.storageId} className="photo-card">
-                              <Image src={image.url} alt={image.name} width={320} height={128} unoptimized />
-                              <div>
-                                <p>{image.name}</p>
-                                <button type="button" className="btn btn-sm" onClick={() => removeImage(image.storageId)}>
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="profile-grid three">
-                      {[0, 1, 2].map((index) => {
-                        const keys = ["spouseRequirement1", "spouseRequirement2", "spouseRequirement3"] as const;
-                        const key = keys[index];
-                        return (
-                          <div className="field" key={key}>
-                            <label htmlFor={key}>Top spouse requirement {index + 1} *</label>
-                            <input
-                              id={key}
-                              value={profile[key]}
-                              onChange={(event) => setProfile({ ...profile, [key]: event.target.value })}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="field">
-                      <label htmlFor="shareableBio">Shareable bio *</label>
-                      <textarea
-                        id="shareableBio"
-                        value={profile.shareableBio}
-                        onChange={(event) => setProfile({ ...profile, shareableBio: event.target.value })}
-                        rows={6}
-                      />
-                    </div>
-
-                    <div className="field">
-                      <label htmlFor="applicantNotesToAdmin">Anything you want the admin team to know?</label>
-                      <textarea
-                        id="applicantNotesToAdmin"
-                        value={profile.applicantNotesToAdmin}
-                        onChange={(event) => setProfile({ ...profile, applicantNotesToAdmin: event.target.value })}
-                        rows={4}
-                        placeholder="Optional note for the admin team"
-                      />
-                    </div>
-
-                    <div className="profile-actions">
-                      <button type="submit" className="btn btn-primary" disabled={isSavingProfile || isUploading}>
-                        {isSavingProfile ? "Saving..." : "Save Profile"}
-                      </button>
-                    </div>
-                    </fieldset>
-                  </form>
-                )}
-              </section>
-
-            </div>
-            <div hidden={view !== "interests"} className="applicant-sections">
-              {!!data.history?.length && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{data.history.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
-              <Section
-                title="Inbound Interests"
-                description="People who expressed interest in you."
-                requestedConnectionId={data.requestedConnectionId}
-                interests={data.inbound}
-                onAction={async body => { await runAction(body); }}
-                busy={busy || archived}
-              />
-              <Section
-                title="Outbound Interests"
-                description="Visible interests you sent."
-                requestedConnectionId={data.requestedConnectionId}
-                interests={data.outbound}
-                onAction={async body => { await runAction(body); }}
-                busy={busy || archived}
-              />
-              {data.applicant.gender === "female" && (
-                <Section
-                  title="Private Documented Interests"
-                  description="Interests you documented for yourself and the admin team. These remain private until the team creates a recipient-specific review."
-                  requestedConnectionId={data.requestedConnectionId}
-                  interests={data.privateDocumented}
-                  onAction={async body => { await runAction(body); }}
-                  busy={busy || archived}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-  );
-}

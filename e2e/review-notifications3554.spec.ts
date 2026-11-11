@@ -17,6 +17,7 @@ for (const width of [1280, 390, 320]) for (const role of ["brother", "sister"]) 
           return route.fulfill({ json: id ? { ...item(id), profile: { label: "Synthetic " + id, age: 30, shareableBio: "Private bio " + id, imageUrls: [], ...(state === "contacts" ? { email: id + "@example.invalid" } : {}) } } : { page: [item("first"), item("second")], isDone: true, continueCursor: "" } });
         }
         if (url.pathname === "/api/applicant/me") return route.fulfill({ json: { applicant: { name: "Synthetic", status: "approved", gender: role === "brother" ? "male" : "female", applicantNumber: 999, profileCompletionStatus: "completed" }, inbound: [], outbound: [], privateDocumented: [], canSubmitInterest: false, interestSubmissions: [] } });
+        if (url.pathname === "/api/applicant/matchmaker") return route.fulfill({ json: { matches: [], optedIn: false } });
         if (url.pathname === "/api/applicant/events") return route.fulfill({ json: { upcoming: [], history: [] } });
         return route.fulfill({ json: { registration: { name: "Synthetic", gender: role === "brother" ? "male" : "female", imageUrls: [], imageStorageIds: [], interestSubmissionNumbers: [] }, canSubmitInterest: false } });
       });
@@ -65,7 +66,8 @@ for (const width of [1280, 390, 320]) for (const gender of ["male", "female"]) t
     if (!url.pathname.startsWith("/api/")) return route.continue();
     if (url.pathname === "/api/applicant/me") return route.fulfill({ json: { applicant: { name: "Synthetic", status: "approved", gender, applicantNumber: 999, profileCompletionStatus: "completed" }, inbound: [row("first", true), row("second", true), row("waiting", false), row("paused", true, true)], outbound: [], privateDocumented: [], canSubmitInterest: false, interestSubmissions: [] } });
     if (url.pathname === "/api/applicant/female-review") return route.fulfill({ json: { page: [], isDone: true, continueCursor: "" } });
-    if (url.pathname === "/api/applicant/events") return route.fulfill({ json: { upcoming: [], history: [] } });
+    if (url.pathname === "/api/applicant/matchmaker") return route.fulfill({ json: { matches: [], optedIn: false } });
+        if (url.pathname === "/api/applicant/events") return route.fulfill({ json: { upcoming: [], history: [] } });
     return route.fulfill({ json: { registration: { name: "Synthetic", gender, imageUrls: [], imageStorageIds: [], interestSubmissionNumbers: [] }, canSubmitInterest: false } });
   });
   await page.goto("/me#applicant-interests");
