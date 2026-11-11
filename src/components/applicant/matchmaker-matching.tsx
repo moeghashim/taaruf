@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { isVisibleMatchmakerMatch, matchmakerArticleId, MATCHMAKER_UPDATED_EVENT } from "./matchmaker-notifications";
 import { ProfileRequirements } from "./profile-requirements";
 import { FactList } from "@/components/admin/primitives/fact-list";
 import { applicantLoginHref } from "@/lib/applicant-destination";
@@ -14,22 +15,54 @@ export function MatchmakerMatching({ onSessionExpired }: { onSessionExpired?: ()
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const guard = useRef(false);
+  const loadRequest = useRef(0);
+  const focusedMatch = useRef<string | null>(null);
+  const invalidateLoad = useCallback(() => { ++loadRequest.current; }, []);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const load = useCallback(async () => {
+    const requestId = ++loadRequest.current;
     setLoading(true);
     try {
       const response = await fetch("/api/applicant/matchmaker", { cache: "no-store" });
-      if (response.status === 401) { if (onSessionExpired) onSessionExpired(); else window.location.assign(applicantLoginHref("/me#matchmaker-matching")); return; }
+      if (requestId !== loadRequest.current) return;
+      if (response.status === 401) { setData(null); if (onSessionExpired) onSessionExpired(); else window.location.assign(applicantLoginHref("/me#matchmaker-matching")); return; }
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to load matchmaker matches.");
-      setData(payload);
-    } catch (failure) { setData(null); setError(failure instanceof Error ? failure.message : "Unable to load matches."); }
-    finally { setLoading(false); }
+      if (requestId !== loadRequest.current) return;
+      if (!Array.isArray(payload.matches)) throw new Error("Unable to load matches.");
+      setData({ ...payload, matches: payload.matches.filter(isVisibleMatchmakerMatch) });
+    } catch (failure) { if (requestId === loadRequest.current) { setData(null); setError(failure instanceof Error ? failure.message : "Unable to load matches."); } }
+    finally { if (requestId === loadRequest.current) setLoading(false); }
   }, [onSessionExpired]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const refresh = () => { if (!guard.current) void load(); };
+    window.addEventListener("focus", refresh);
+    return () => { invalidateLoad(); window.removeEventListener("focus", refresh); };
+  }, [load, invalidateLoad]);
+  useEffect(() => {
+    const focusSelected = () => {
+      const id = new URLSearchParams(window.location.search).get("matchmaker");
+      if (!id || loading || focusedMatch.current === id || !data?.matches.some(match => match._id === id)) return;
+      const article = document.getElementById(matchmakerArticleId(id));
+      if (!article || article.closest("[hidden]")) return;
+      article.focus({ preventScroll: true });
+      article.scrollIntoView({ block: "start", behavior: "instant" });
+      focusedMatch.current = id;
+    };
+    const frame = requestAnimationFrame(focusSelected);
+    window.addEventListener("hashchange", focusSelected);
+    window.addEventListener("popstate", focusSelected);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", focusSelected);
+      window.removeEventListener("popstate", focusSelected);
+    };
+  }, [data, loading]);
   async function act(body: Record<string, unknown>, success: string) {
     if (guard.current) return;
+    invalidateLoad();
     guard.current = true; setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch("/api/applicant/matchmaker", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -38,7 +71,7 @@ export function MatchmakerMatching({ onSessionExpired }: { onSessionExpired?: ()
       if (!response.ok) throw new Error(payload.error || "Unable to save. Please refresh and try again.");
       setMessage(success); await load();
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to save."); await load(); }
-    finally { guard.current = false; setBusy(false); }
+    finally { window.dispatchEvent(new Event(MATCHMAKER_UPDATED_EVENT)); guard.current = false; setBusy(false); }
   }
   return <section id="matchmaker-matching" className="panel applicant-section" aria-labelledby="matchmaker-heading">
     <div className="panel-head"><div><h2 id="matchmaker-heading">Matchmaker Matching</h2><p>Introductions from the matchmaking team, separate from your submitted interests.</p></div></div>
@@ -53,7 +86,7 @@ export function MatchmakerMatching({ onSessionExpired }: { onSessionExpired?: ()
           {data.consentUpdatedAt && <small>Preference saved {date(data.consentUpdatedAt)}</small>}
         </div>
         {data.matches.length === 0 && <div><h3>No matchmaker introductions yet</h3><p>When the team presents a match, it will appear here.</p></div>}
-        {data.matches.map(match => <article key={match._id} style={{ borderTop: "1px solid var(--line)", paddingTop: 20, display: "grid", gap: 14, minWidth: 0 }}>
+        {data.matches.map(match => <article key={match._id} id={matchmakerArticleId(match._id)} tabIndex={-1} aria-label="Matchmaker introduction" style={{ borderTop: "1px solid var(--line)", paddingTop: 20, display: "grid", gap: 14, minWidth: 0 }}>
           <div><h3>{match.partner?.name || (match.partner ? "Applicant #" + (match.partner.publicApplicantNumber ?? "—") : "Matchmaker introduction")}</h3><p>{match.contactShared ? "Contact details shared" : match.withdrawnAt ? "You withdrew from this introduction." : ["closed", "declined"].includes(match.status) ? "Introduction closed" : match.status === "paused" ? "Introduction paused" : match.canApprove && !match.myApproval ? "This connection is awaiting your review." : match.myApproval ? "Your agreement has been saved." : "No action is needed from you."}</p>{match.presentedAt && <small>Presented {date(match.presentedAt)}</small>}</div>
           {!match.partner && <p>The other applicant’s profile is no longer available. This introduction remains in your history.</p>}
           {match.partner && <>

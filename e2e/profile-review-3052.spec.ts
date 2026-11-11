@@ -35,12 +35,12 @@ for (const width of [1280, 390, 320]) for (const role of ["brother", "sister"]) 
     await expect(review.getByRole("button",{name:role==="brother"?"Accept":"Confirm mutual interest",exact:true})).toBeVisible();
     await expect(review.locator(".contact-box")).toHaveCount(0); expect(posts).toEqual([]);
     images=[]; empty=true;
-    await page.getByRole("button",{name:"Refresh",exact:true}).click();
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(review.locator("img")).toHaveCount(0);
     await expect(review.getByText("No requirements provided.")).toBeVisible();
     await page.reload(); // denied/no-photo initial snapshot, not just revocation refresh
     await expect(review.locator("img")).toHaveCount(0);
-    blocked=true; await page.getByRole("button",{name:"Refresh",exact:true}).click();
+    blocked=true; await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(page.getByRole("alert").filter({hasText:"Review unavailable."})).toBeVisible();
     await expect(review.locator(".fact-list")).toHaveCount(0);
     await expect(review.getByRole("button",{name:"Accept",exact:true})).toHaveCount(0);
