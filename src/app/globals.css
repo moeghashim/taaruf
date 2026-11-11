@@ -559,6 +559,8 @@
   align-content: start;
   gap: 14px;
 }
+/* Inline reviews reuse the private-interest detail presentation without changing standalone reviews. */
+[data-admin] .inline-review-content { display: grid; gap: 14px; min-width: 0; }
 [data-admin] .interest-detail-panel.empty {
   min-height: 320px;
   place-content: center;
