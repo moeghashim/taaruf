@@ -210,7 +210,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       {!reviewExpired(item) && !["closed", "revoked", "expired"].includes(item.state) && item.canView && <a className="btn btn-primary" aria-label={history.length > 1 ? "View review for connection " + (index + 1) : undefined} href={reviewHref(item.interestId)}>View review</a>}
     </section>)}
     {selected && <a className="btn" href="/me#applicant-interests">Back to applicant interests</a>}
-    <div style={{ padding: 16, display: "grid", gap: 16 }}>
+    <div style={{ padding: inline ? 0 : 16, display: "grid", gap: 16 }}>
       {error && <p className="notice error" role="alert">{error} <a href={loginHref}>Sign in</a> or <button type="button" className="btn" disabled={busy || reviewLoading} onClick={() => setAccessVersion(value => value + 1)}>Retry loading review</button>.</p>}
       {busy && <p role="status">Recording your decision…</p>}
       {message && <p className="notice success" role="status">{message}</p>}
@@ -225,10 +225,24 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
 
       </div>)}
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
-      {selected && <section id={inline ? "inline-selected-review" : undefined} tabIndex={-1} aria-label="Selected profile review" className="selected-profile-review">
+      {selected && <section id={inline ? "inline-selected-review" : undefined} tabIndex={-1} aria-label="Selected profile review" className={inline ? "interest-detail-panel" : "selected-profile-review"}>
         {access?.canPause && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
         {reviewLoading && !access && <p role="status">Loading profile…</p>}
-        {profile && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
+        {profile && inline && <div className="inline-review-content" style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}>
+          <div className="interest-detail-head"><div><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3></div></div>
+          <div className="profile-review-box">
+            <h4>Profile details</h4>
+            <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: formatEducation(profile.education) || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
+          </div>
+          <div className="profile-review-box"><ProfileRequirements profile={profile} /></div>
+          {!!profile.imageUrls?.length && <div className="profile-review-box">
+            <h4>Photos</h4>
+            <div className="photo-grid">{profile.imageUrls.map((url, index) => <div key={url} className="photo-card"><Image src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 900px) 100vw, 1000px" unoptimized /></div>)}</div>
+          </div>}
+          {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
+          {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
+        </div>}
+        {profile && !inline && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
           <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: formatEducation(profile.education) || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
           <ProfileRequirements profile={profile} />

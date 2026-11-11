@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Production Next renderer, synthetic authorized GETs only. Run with
 // playwright.ribbon3554.config.ts; never contact auth/Convex or mutate real data.
-const origin = "http://127.0.0.1:3761";
+const origin = process.env.PORTAL_BASE || "http://127.0.0.1:3761";
 test.use({ baseURL: origin, serviceWorkers: "block" });
 type Role = "brother" | "sister";
 const views = ["#overview", "#applicant-interests", "#profile", "#matchmaker-matching"];
