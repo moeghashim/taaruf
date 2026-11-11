@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // Production Next renderer, synthetic authorized GETs only. Run with
-// playwright.ribbon3554.config.ts; never contact auth/Convex or mutate real data.
+// playwright.inbound3761.config.ts; never contact auth/Convex or mutate real data.
 const origin = process.env.PORTAL_BASE || "http://127.0.0.1:3761";
 test.use({ baseURL: origin, serviceWorkers: "block" });
 type Role = "brother" | "sister";
@@ -94,6 +94,8 @@ for (const role of ["brother", "sister"] as const) for (const width of [390,1280
     await page.setViewportSize({width,height:1000});const state=fixture(role);
     state.reviews=[review("action",role)];await mock(page,state);await page.goto("/me#applicant-interests");
     const ribbon=page.getByRole("region",{name:"Received interest updates",exact:true});
+    await expect(ribbon.getByRole("link")).toBeVisible();
+    await expect(page.locator("#inbound-interests .interest-invitation")).toHaveCount(0);
     await ribbon.getByRole("link").click();
     await expect(page.locator("#inline-selected-review")).toBeFocused();
     await expect(page.locator("#inline-selected-review")).toContainText("Authorized review bio action");
