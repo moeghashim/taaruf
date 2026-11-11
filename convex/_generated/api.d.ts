@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as reopen315 from "../reopen315.js";
 import type * as birthdays from "../birthdays.js";
 import type * as adminAuthorization from "../adminAuthorization.js";
 import type * as adminEmailChange from "../adminEmailChange.js";
@@ -52,6 +53,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  reopen315: typeof reopen315;
   birthdays: typeof birthdays;
   adminAuthorization: typeof adminAuthorization;
   adminEmailChange: typeof adminEmailChange;

@@ -738,3 +738,4 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11
 - Hardened rejection claim against absent/invalid activation and preactivation queued work, including attempted rows; added six synthetic no-send/immutable-cutoff regressions.
+- Added fixed-scope audited #315→#217 Nov14 submission reopen backend/API and regression tests; preview only, no operational data changes. Existing profile shares and notification history remain unchanged.
