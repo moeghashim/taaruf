@@ -174,6 +174,10 @@ export default defineSchema({
   registrations: defineTable({
     backgroundMatchmakingOptIn: v.optional(v.boolean()),
     backgroundMatchmakingConsentUpdatedAt: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    lastRestoredArchivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.union(v.literal("participant"), v.literal("admin"))),
+    archivedByRegistrationId: v.optional(v.id("registrations")),
     // Legacy/internal identifier. Keep for compatibility, but human-facing
     // applicant references should use publicApplicantNumber.
     applicantNumber: v.optional(v.number()),

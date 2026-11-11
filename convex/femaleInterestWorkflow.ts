@@ -1,3 +1,4 @@
+import { assertNotArchived } from "./archiveRules";
 import { interestBioVisible } from "./bioVisibility";
 import { currentSisterConfirmation } from "./sisterConfirmationActivation";
 import { currentAge } from "./birthdays";
@@ -21,6 +22,7 @@ export async function actor(ctx: ReadCtx, sessionHash: string) {
   if (!session || !(await sessionAllowed(ctx, session))) throw new Error("Unauthorized");
   const person = await ctx.db.get(session.registrationId);
   if (!person || person.status !== "approved") throw new Error("Unauthorized");
+  assertNotArchived(person);
   return person;
 }
 export async function active(ctx: ReadCtx, id: Id<"interests">, allowPaused = false) {
@@ -29,6 +31,8 @@ export async function active(ctx: ReadCtx, id: Id<"interests">, allowPaused = fa
   const sister = await ctx.db.get(interest.fromRegistrationId);
   const brother = await ctx.db.get(interest.toRegistrationId);
   if (!sister || !brother || sister.gender !== "female" || brother.gender !== "male" || sister.status !== "approved" || brother.status !== "approved") throw new Error("Applicants unavailable");
+  assertNotArchived(sister);
+  assertNotArchived(brother);
   const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", id)).unique();
   if (flow && (["closed", "declined"].includes(flow.flowStatus) || flow.fromRegistrationId !== sister._id || flow.toRegistrationId !== brother._id)) throw new Error("Female review unavailable");
   const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;

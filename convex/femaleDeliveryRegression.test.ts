@@ -222,3 +222,17 @@ for (const invalid of ["closed", "declined", "interest_reset", "match_reset", "i
   expect(await t.run(ctx => ctx.db.get(failed._id))).toEqual(failed);
   expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
 });
+
+test.each([true,false])("archive preserves attempted outbox result without retries (success=%s)",async success=>{
+ const {t,sister}=await accepted();isolated();const claimed=await t.mutation(internal.femaleWorkflowDelivery.claim,{});const row=claimed.find(r=>r.kind==="sister_confirmation")!;expect(row).toBeDefined();
+ expect(await t.mutation(internal.femaleWorkflowDelivery.markAttempt,{id:row._id,attempt:row.attempts})).toBeTruthy();
+ const archived=await t.mutation(api.archive.archiveAdmin,{adminSecret,registrationId:sister,expectedArchivedAt:null,confirm:true});
+ expect(await t.run(ctx=>ctx.db.get(row._id))).toMatchObject({status:"cancelled"});
+ await t.mutation(internal.femaleWorkflowDelivery.finish,{id:row._id,attempt:row.attempts+1,success:true,retry:false});
+ expect(await t.run(ctx=>ctx.db.get(row._id))).toMatchObject({status:"cancelled"});
+ await t.mutation(internal.femaleWorkflowDelivery.finish,{id:row._id,attempt:row.attempts,success,retry:!success});
+ expect(await t.run(ctx=>ctx.db.get(row._id))).toMatchObject({status:success?"sent":"cancelled"});
+ await t.mutation(api.archive.restoreAdmin,{adminSecret,registrationId:sister,expectedArchivedAt:archived.archivedAt,confirm:true});
+ const fetcher=vi.fn();vi.stubGlobal("fetch",fetcher);await t.action(internal.femaleWorkflowDelivery.drain,{});expect(fetcher).not.toHaveBeenCalled();
+ expect(await t.mutation(internal.femaleWorkflowDelivery.claim,{})).toEqual([]);
+});

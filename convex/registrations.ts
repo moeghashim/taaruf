@@ -432,6 +432,7 @@ export const create = mutation({
     const phoneCanonical = normalizePhone(args.phone);
     const nameCanonical = normalizeName(args.name);
     const existingProfile = await findExistingParticipantProfile(ctx, { ...args, age }, Boolean(event));
+    if (existingProfile?.archivedAt != null) throw new Error("This profile is archived. Contact the team before registering again.");
     if (existingProfile && !event) {
       throw new Error("An applicant is already registered with this email.");
     }
@@ -565,6 +566,7 @@ export const updateStatus = mutation({
     if (args.status === "waitlisted") throw new Error("Global profile waitlisting is retired; use an event registration");
     const previous = await ctx.db.get(args.id);
     if (!previous) throw new Error("Profile not found");
+    if (previous.archivedAt != null) throw new Error("Profile is archived");
     await rejectionNoticeTransition(ctx, previous, args.status);
     await ctx.db.patch(args.id, { status: args.status });
     return args.id;
@@ -579,6 +581,8 @@ export const updateSearchStatus = mutation({
   },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Profile is archived");
     await ctx.db.patch(args.id, {
       searchStatus: args.searchStatus,
       searchStatusNote: args.searchStatusNote,
@@ -589,6 +593,7 @@ export const updateSearchStatus = mutation({
 
 async function issueProfileAccessToken(ctx: MutationCtx, id: Id<"registrations">, token: string, recoveryOnly = false) {
   const previous = await ctx.db.get(id);
+  if (previous?.archivedAt !== undefined && !recoveryOnly) throw new Error("Profile is archived");
   const issuedAt = Date.now();
   if (!previous || previous.profileAccessToken === token || await ctx.db.query("registrations").withIndex("by_profileAccessToken", q => q.eq("profileAccessToken", token)).first()) throw new Error("Use a fresh profile token");
   if (!await capabilityAllowed(ctx, issuedAt)) throw new Error("Profile token issuance unavailable");
@@ -724,6 +729,7 @@ export const updateProfile = mutation({
     await assertImageOwnership(ctx, registration._id, args.imageStorageIds);
     await saveDateOfBirth(ctx, registration._id, args.dateOfBirth);
     validateEducationUpdate(args.education, registration.education);
+    if (registration.archivedAt != null) throw new Error("Profile is archived");
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
@@ -880,6 +886,8 @@ export const deleteRegistration = mutation({
   // so the deleted applicant number can never be re-issued to a new registration.
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Archived profile history cannot be deleted through this action");
     const birthday = await ctx.db.query("registrationBirthdays").withIndex("by_registrationId", q => q.eq("registrationId", args.id)).unique();
     if (birthday) await ctx.db.delete(birthday._id);
     await ctx.db.delete(args.id);

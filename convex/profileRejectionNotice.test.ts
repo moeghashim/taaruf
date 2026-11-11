@@ -189,3 +189,14 @@ test.each([false,true])("preactivation row with grace boundary cannot send (atte
  vi.setSystemTime(cutoff+1000);await t.mutation(internal.profileRejectionNotice.activate,{});
  expect(await t.run(async ctx=>(await ctx.db.query("settings").withIndex("by_key",q=>q.eq("key","profileRejectionNoticeActivatedAt")).unique())?.value)).toBe(String(cutoff));
 });
+
+ test.each([false,true])("archive fences rejection work across restore (attempted=%s)",async attempted=>{
+ const {t,id,update,rows}=await setup();await update("rejected");vi.setSystemTime(Date.now()+GRACE_MS);
+ const claim=attempted?await t.mutation(internal.profileRejectionNotice.claim,{}):null;
+ const archived=await t.mutation(api.archive.archiveAdmin,{adminSecret:secret,registrationId:id,expectedArchivedAt:null,confirm:true});
+ expect((await rows())[0].state).toBe(attempted?"needs_reconciliation":"cancelled");
+ await t.mutation(api.archive.restoreAdmin,{adminSecret:secret,registrationId:id,expectedArchivedAt:archived.archivedAt,confirm:true});
+ const fetcher=vi.fn();vi.stubGlobal("fetch",fetcher);await t.action(internal.profileRejectionNotice.drain,{});expect(fetcher).not.toHaveBeenCalled();
+ if(claim){await t.mutation(internal.profileRejectionNotice.finish,{id:claim.id,attempt:claim.attempt,providerId:"late-archive-evidence"});expect((await rows())[0]).toMatchObject({state:"accepted",providerId:"late-archive-evidence"});}
+ });
+ test("claim defensively cancels archived profile notice",async()=>{const {t,id,update,rows}=await setup();await update("rejected");vi.setSystemTime(Date.now()+GRACE_MS);await t.run(ctx=>ctx.db.patch(id,{archivedAt:Date.now()}));expect(await t.mutation(internal.profileRejectionNotice.claim,{})).toBeNull();expect((await rows())[0].state).toBe("cancelled");});

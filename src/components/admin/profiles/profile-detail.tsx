@@ -4,6 +4,7 @@ import { interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle"
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 import { formatEducation } from "@/lib/education";
 
+import { ArchiveParticipant } from "@/components/archive-participant";
 import { useEffect, useState } from "react";
 import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -12,7 +13,7 @@ import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
 import type { RegistrationDoc } from "@/components/admin/hooks/use-registrations";
 
 type Props = {
-  profile: RegistrationDoc;
+  profile: RegistrationDoc & { archivedAt?: number };
   registrationNumber?: number;
   onUpdateNotes: (id: string, notes: string) => Promise<unknown>;
   onUpdateStatus: (id: string, status: "approved" | "rejected") => Promise<unknown>;
@@ -60,6 +61,9 @@ function ProfileDetailBody({
   onClose,
   onDirtyChange,
 }: Props) {
+  const [localArchive, setLocalArchive] = useState<{ id: string; at: number | null } | null>(null);
+  const archivedAt = localArchive?.id === profile._id ? localArchive.at : profile.archivedAt;
+  const archived = archivedAt != null;
   const [actionError, setActionError] = useState<string | null>(null);
   const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
   const rejectionNotice = useQuery("profileRejectionNotice.status", { registrationId: profile._id as Id<"registrations"> });
@@ -179,6 +183,7 @@ function ProfileDetailBody({
 
   return (
     <div style={{ padding: 20 }}>
+      <ArchiveParticipant key={profile._id} archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} registrationId={profile._id} name={profile.name} onArchived={at => { setLocalArchive({ id: profile._id, at }); refreshAdminData(); }} onRestored={() => { setLocalArchive({ id: profile._id, at: null }); refreshAdminData(); }} />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <StatusPill status={profile.status} />
         {profile.paymentStatus && <StatusPill status={profile.paymentStatus} />}
@@ -434,8 +439,8 @@ function ProfileDetailBody({
         </p>}
         {profile.status === "rejected" && <button className="btn" onClick={() => handleStatus("approved")} disabled={busyAction !== null}>Reverse rejection and approve profile</button>}
         {actionError && <p role="alert">{actionError}</p>}
-        {profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke profile approval"}</button>}
-        {profile.status === "pending" && (
+        {!archived && profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke profile approval"}</button>}
+        {!archived && profile.status === "pending" && (
           <>
             <button
               className="btn btn-primary"

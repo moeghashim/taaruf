@@ -16,6 +16,8 @@ import type * as adminPairTestReset from "../adminPairTestReset.js";
 import type * as applicantAuth from "../applicantAuth.js";
 import type * as applicantInterests from "../applicantInterests.js";
 import type * as applicantProfile from "../applicantProfile.js";
+import type * as archive from "../archive.js";
+import type * as archiveRules from "../archiveRules.js";
 import type * as brotherReviewActivation from "../brotherReviewActivation.js";
 import type * as capabilitySecurity from "../capabilitySecurity.js";
 import type * as contactGate from "../contactGate.js";
@@ -61,6 +63,8 @@ declare const fullApi: ApiFromModules<{
   applicantAuth: typeof applicantAuth;
   applicantInterests: typeof applicantInterests;
   applicantProfile: typeof applicantProfile;
+  archive: typeof archive;
+  archiveRules: typeof archiveRules;
   brotherReviewActivation: typeof brotherReviewActivation;
   capabilitySecurity: typeof capabilitySecurity;
   contactGate: typeof contactGate;

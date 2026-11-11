@@ -122,6 +122,12 @@ export const finish = internalMutation({ args: { id: v.id("femaleWorkflowDeliver
       if (sibling._id !== row._id && (!scopedKinds() || scopedKinds()!.includes(sibling.kind))) await ctx.db.patch(sibling._id, { status: "pending", leaseUntil: undefined, nextAttemptAt: Math.max(sibling.nextAttemptAt, until) });
     }
   }
+  // Archive fences retries immediately, but cannot recall a provider request
+  // already attempted. Preserve only matching-attempt successful completion.
+  if (row.status === "cancelled" && row.attempts === args.attempt && args.success && row.firstAttemptAt !== undefined && row.providerPayload) {
+    await ctx.db.patch(row._id, { status: "sent", sentAt: Date.now(), leaseUntil: undefined, error: "Provider accepted in-flight delivery after cancellation; no retry" });
+    return null;
+  }
   if (row.status !== "sending" || row.attempts !== args.attempt) return null;
   const retry = !args.success && args.retry && row.attempts < 6;
   await ctx.db.patch(row._id, { status: args.success ? "sent" : retry ? "pending" : "failed", sentAt: args.success ? Date.now() : undefined, error: args.success ? row.error : args.error, leaseUntil: undefined, nextAttemptAt: Date.now() + Math.max(args.retryAfterMs ?? 0, Math.min(3600000, 60000 * 2 ** row.attempts)) }); return null;

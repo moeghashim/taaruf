@@ -48,6 +48,14 @@ async function resolvedInterest(ctx: QueryCtx, share: ShareScope & { createdAt?:
   return null;
 }
 async function available(ctx: QueryCtx, share: Doc<"profileShares">) {
+  // Historical decisions remain intact, but neither archived participant may
+  // retain a live bearer capability (including context-free declined shares).
+  const [owner, recipient] = await Promise.all([
+    ctx.db.get(share.ownerRegistrationId), ctx.db.get(share.recipientRegistrationId),
+  ]);
+  if (!owner || !recipient || owner.archivedAt !== undefined || recipient.archivedAt !== undefined) return false;
+  // Restoration must not reactivate historical bearer links, even declined ones.
+  if ([owner, recipient].some(person => person.lastRestoredArchivedAt !== undefined && share.createdAt <= person.lastRestoredArchivedAt!)) return false;
   return await capabilityAllowed(ctx, share.createdAt) && share.revokedAt === undefined && share.status !== "closed" && await resolvedInterest(ctx, share) !== false;
 }
 async function imagesAllowed(ctx: QueryCtx, share: ShareScope & { includeImages: boolean }, owner: Doc<"registrations"> | null) {
@@ -60,7 +68,7 @@ async function imagesAllowed(ctx: QueryCtx, share: ShareScope & { includeImages:
   return owner.photoSharingPermission === "yes";
 }
 
-import { assertProfileCompleted, getRegistrationOrThrow } from "./interestRules";
+import { assertProfileCompleted, getRegistrationOrThrow, assertMatchingParticipants } from "./interestRules";
 
 export const getAll = query({
   args: { adminSecret: v.optional(v.string()),},
@@ -97,6 +105,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     if (await resolvedInterest(ctx, args) === false) throw new Error("Share context is unavailable; select the active interest");
+    await assertMatchingParticipants(ctx, args.ownerRegistrationId, args.recipientRegistrationId);
     const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
     assertProfileCompleted(ownerRegistration, "Profile owner");
     if (args.includeImages && !(await imagesAllowed(ctx, args, ownerRegistration))) throw new Error("Photo sharing requires explicit owner consent");

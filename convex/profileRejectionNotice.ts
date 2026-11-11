@@ -40,7 +40,7 @@ export const activate = internalMutation({ args: {}, handler: async ctx => {
 // Called in the same transaction as the sole whole-profile status mutation.
 // Explicit exception to the event-email prohibition: never use event email claims.
 export async function transition(ctx: MutationCtx, previous: Doc<"registrations">, status: string) {
-  if (previous.status === status) return;
+  if (previous.archivedAt !== undefined || previous.status === status) return;
   // Cancel even if approval is disabled: reversal must fence old work permanently.
   const existing = await ctx.db.query("profileRejectionNotices").withIndex("by_registrationId", q => q.eq("registrationId", previous._id)).unique();
   if (status !== "rejected") {
@@ -78,7 +78,7 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
   }
   if (row.notBefore !== undefined && now < row.notBefore) return null;
   const profile = await ctx.db.get(row.registrationId);
-  if (!profile || profile.status !== "rejected" || profile.email !== row.email) {
+  if (!profile || profile.archivedAt !== undefined || profile.status !== "rejected" || profile.email !== row.email) {
     await ctx.db.patch(row._id, { state: row.firstAttemptAt === undefined ? "cancelled" : "needs_reconciliation", updatedAt: now, detail: "Profile no longer rejected or recipient changed; reconcile any prior attempt" }); return null;
   }
   // Resend retains idempotency keys 24h. Stop conservatively at 23h, never create a new key.

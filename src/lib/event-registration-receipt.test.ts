@@ -23,7 +23,7 @@ it.each(["approved", "rejected", "withdrawn"] as const)("does not auto-send stat
   expect(send).not.toHaveBeenCalled();
 });
 it("duplicate signup claims send once, using claim status rather than requested capacity", async () => {
-  const mutation = vi.fn().mockResolvedValueOnce(claim).mockResolvedValueOnce(null).mockResolvedValueOnce({ claimed: false });
+  const mutation = vi.fn().mockResolvedValueOnce(claim).mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce({ claimed: false });
   const convex = { mutation } as unknown as ConvexHttpClient;
   expect(await sendEventReceipt(convex, id)).toEqual({ sent: true, error: undefined });
   expect(await sendEventReceipt(convex, id)).toEqual({ sent: false });
@@ -32,10 +32,10 @@ it("duplicate signup claims send once, using claim status rather than requested 
 });
 it("failure releases claim for retry with stable provider idempotency key", async () => {
   send.mockResolvedValueOnce({ error: { message: "temporary" } });
-  const mutation = vi.fn().mockResolvedValueOnce(claim).mockResolvedValueOnce(null).mockResolvedValueOnce(claim);
+  const mutation = vi.fn().mockResolvedValueOnce(claim).mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(claim);
   const convex = { mutation } as unknown as ConvexHttpClient;
   expect(await sendEventReceipt(convex, id)).toEqual({ sent: false, error: "temporary" });
-  expect(mutation.mock.calls[1][1]).toMatchObject({ eventRegistrationId: id, error: "temporary", key: claim.key });
+  expect(mutation.mock.calls[2][1]).toMatchObject({ eventRegistrationId: id, error: "temporary", key: claim.key });
   expect((await sendEventReceipt(convex, id)).sent).toBe(true);
   expect(send.mock.calls[0][1]).toEqual(send.mock.calls[1][1]);
 });
@@ -58,4 +58,12 @@ it("does not send a welcome when its persisted claim requires cutoff reconciliat
  expect(await sendCheckoutReceipt({ query, mutation } as unknown as ConvexHttpClient, "cs_stale", "https://example.invalid")).toEqual({ sent: false, error: "Welcome delivery uncertain; manual reconciliation required" });
  expect(send).not.toHaveBeenCalled();
  expect(mutation).toHaveBeenCalledTimes(1);
+});
+
+it("records suppression as failure when archive happens after receipt claim", async () => {
+ const mutation = vi.fn().mockResolvedValueOnce(claim).mockRejectedValueOnce(new Error("Participant is archived")).mockResolvedValueOnce(null);
+ const result = await sendEventReceipt({mutation} as unknown as ConvexHttpClient, id);
+ expect(result).toEqual({sent: false, error: "Participant is archived"});
+ expect(send).not.toHaveBeenCalled();
+ expect(mutation.mock.calls[2][1]).toMatchObject({key: claim.key, error: "Participant is archived"});
 });
