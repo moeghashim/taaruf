@@ -511,10 +511,7 @@ export const update = mutation({
     if (args.maleCapacity !== undefined) assertCapacity(args.maleCapacity, "Male");
     if (args.femaleCapacity !== undefined) assertCapacity(args.femaleCapacity, "Female");
 
-    for (const gender of ["male", "female"] as const) {
-      const cap = gender === "male" ? args.maleCapacity : args.femaleCapacity;
-      if (cap !== undefined && cap < await countCapacityUsed(ctx, event._id, gender)) throw new Error("Capacity cannot be below reserved Pending and Approved places");
-    }
+    // Capacity limits future reservations; lowering it never removes existing places.
     await ctx.db.patch(args.eventId, {
       title: args.title?.trim() ?? event.title,
       description: args.description?.trim() || event.description,
@@ -530,8 +527,14 @@ export const update = mutation({
       adminNotes: args.adminNotes?.trim() || event.adminNotes,
       updatedAt: Date.now(),
     });
-    await promoteWaitlist(ctx, event._id, "male");
-    await promoteWaitlist(ctx, event._id, "female");
+    // A cap reduction is metadata-only: preserve every existing registration.
+    // Other edits retain the existing expiry/promotion behavior.
+    const lowering = (args.maleCapacity !== undefined && args.maleCapacity < event.maleCapacity) ||
+      (args.femaleCapacity !== undefined && args.femaleCapacity < event.femaleCapacity);
+    if (!lowering) {
+      await promoteWaitlist(ctx, event._id, "male");
+      await promoteWaitlist(ctx, event._id, "female");
+    }
     return args.eventId;
   },
 });
@@ -760,6 +763,34 @@ export const addRegistration = mutation({
 
     const eventRegistrationId = await ctx.db.insert("eventRegistrations", payload);
     return { eventRegistrationId, registrationStatus, event, registration };
+  },
+});
+
+// Explicit one-person admin exception, separate from every ordinary registration path.
+export const forceRegisterWaitlisted = mutation({
+  args: {
+    adminSecret: v.string(),
+    eventRegistrationId: v.id("eventRegistrations"),
+    confirmCapacityOverride: v.literal(true),
+  },
+  handler: async (ctx, args) => {
+    requireEventAdmin(args.adminSecret);
+    const row = await ctx.db.get(args.eventRegistrationId);
+    if (!row) throw new Error("Event registration not found");
+    if (row.registrationStatus !== "waitlisted") throw new Error("Only an existing waitlisted registration can be force-registered");
+    const event = await ctx.db.get(row.eventId);
+    if (!event) throw new Error("Event not found");
+    const now = Date.now();
+    if (event.status === "cancelled" || event.status === "completed") throw new Error("Event registration is closed");
+    if (event.registrationOpensAt && event.registrationOpensAt > now) throw new Error("Event registration is not open yet");
+    if (event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
+    const registration = await ctx.db.get(row.registrationId);
+    if (!registration) throw new Error("Profile not found");
+    if (confirmationExpired(row, now) || row.confirmationStatus === "cancelled") throw new Error("Renew the applicant's confirmation before force-registering");
+    // Preserve confirmation, attendance, payment, profile approval and queue history.
+    // Pending reserves a place; approval remains its own explicit admin action.
+    await ctx.db.patch(row._id, { registrationStatus: "pending", approvedAt: undefined, updatedAt: now });
+    return row._id;
   },
 });
 
