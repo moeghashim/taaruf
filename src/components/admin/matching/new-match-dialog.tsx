@@ -11,7 +11,7 @@ export function NewMatchDialog() {
   const [open, setOpen] = useState(false);
   return <Dialog open={open} onOpenChange={setOpen}>
     <DialogTrigger asChild><button type="button" className="btn btn-primary" aria-label="New match">{Ico.plus}<span>New match</span></button></DialogTrigger>
-    <DialogContent data-admin><DialogTitle>New match</DialogTitle><DialogDescription style={{ color: "var(--mute)" }}>Save a private draft for admin review. Applicants cannot see it and no notifications are sent. Presenting background matches is not available yet: both applicants must opt in before a future presentation step.</DialogDescription>
+    <DialogContent data-admin><DialogTitle>New match</DialogTitle><DialogDescription style={{ color: "var(--mute)" }}>Save a private draft for admin review. Applicants cannot see it and no notifications are sent. After saving, use Present to applicants in the workbench. Both applicants must explicitly opt in before presentation.</DialogDescription>
       {open && <NewMatchForm onCreated={() => setOpen(false)} />}
     </DialogContent>
   </Dialog>;

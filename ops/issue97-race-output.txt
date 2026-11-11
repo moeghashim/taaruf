@@ -1,0 +1,15 @@
+PASS concurrent Present idempotency and permanent recipient claims
+PASS optout/present valid serialization { optoutFirst: 8, presentFirst: 0 }
+PASS contact release/withdraw mutually exclusive { shared: 0, withdrawn: 5 }
+PASS independent followups; global optout retains shared record; zero existing email outbox
+
+Final rerun 2026-11-10 20:39 CST; exit 0; backend stopped.
+23 actual OCC retries: present=11 claimNotification=6 releaseContacts=5 followup=1.
+Raw evidence: /Users/moeghashim/taaruf/privateops/issue97/local-runtime-final/
+
+## Exact tested hashes (SHA256)
+- convex/matchmakerMatching.ts: bf5682e72aa7243fc18fde4a5a50384e4e809f698ac605b8c8ebf070edafe93e
+- convex/contactGate.ts: f47d50d97ee1401738e1c395a8ea3935d6f2aa489876502cd5f66c3d2d5c7ad3
+- convex/schema.ts: d9f70cc7aaf34f1503f183884d2044f7f6e32c9fa23120788183a25c3dbcb146
+- convex/matches.ts: 120b098c7a1067955da25fc96a3d32d3be02bfa92cf5c229eebdfd38d1e8fed0
+- src/lib/manual-match-draft.ts: 41113f21bc65e743c84c2588b2db13e8b41f71bc8961575c5dae27157f3eb378

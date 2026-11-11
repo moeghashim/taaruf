@@ -7,6 +7,7 @@ import { matchEventId, inEventScope, scopedWorkbenchRecords } from "@/lib/workbe
 import Link from "next/link";
 import { canReleaseContacts, interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
 import { FemaleWorkflowActions, FemaleWorkflowOutbox } from "./female-workflow-actions";
+import { MatchmakerActions, isMatchmaker } from "./matchmaker-actions";
 import { NewMatchDialog } from "./new-match-dialog";
 import { isManualMatchDraft } from "@/lib/manual-match-draft";
 import { TestResetDialog } from "./test-reset-dialog";
@@ -151,7 +152,7 @@ async function shareContacts(matchId: string, femaleInterestId?: string) {
 
 export function ContactRelease({ match, femaleInterestId, onMessage }: { match: Doc<"matches"> | null; femaleInterestId?: string; onMessage: (message: string) => void }) {
   const [busy, setBusy] = useState(false);
-  if (!canReleaseContacts(match)) return null;
+  if (isMatchmaker(match) || !canReleaseContacts(match)) return null;
   async function release() {
     if (busy || !match || !window.confirm("Share contacts? This is the final admin release of contacts in both authenticated applicant portals. Notification emails will be queued.")) return;
     setBusy(true);
@@ -849,6 +850,7 @@ function MatchCard({
         <span className="mono" style={{ color: "var(--mute)" }}>{formatDateTime(match.updatedAt ?? match.createdAt ?? match._creationTime)}</span>
       </div>
 
+      <MatchmakerActions match={match} male={match.maleRegistration} female={match.femaleRegistration} onMessage={onMessage} />
       <ContactRelease match={match} femaleInterestId={match.interest?.femaleWorkflow ? match.interest._id : undefined} onMessage={onMessage} />
       {match.interest?.femaleWorkflow && <FemaleWorkflowActions interestId={match.interest._id} state={match.interest.femaleWorkflow.state} />}
       {!isManualMatchDraft(match) && match.status === "paused" && <button type="button" className="btn" disabled={busy !== null} onClick={() => void run("resume", () => data.actions.resumeMatch(match._id), "Match resumed.")}>Resume</button>}
@@ -869,7 +871,7 @@ function MatchCard({
           type="button"
           className="btn btn-sm"
           disabled={busy !== null}
-          hidden={Boolean(match.interest?.femaleWorkflow) || isManualMatchDraft(match)}
+          hidden={Boolean(match.interest?.femaleWorkflow) || isMatchmaker(match)}
           onClick={() => run("notify", () => notifyMatch(match._id), "Match notification sent.")}
         >
           {busy === "notify" ? "Sending..." : "Notify match"}
@@ -1154,10 +1156,10 @@ export function WorkbenchPageClient() {
               )}
               {selectedInterest && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <button type="button" className="btn" disabled={busy !== null} onClick={() => void run("close", () => data.actions.updateInterestStatus(selectedInterest._id, "closed"), "Interest closed.")}>Close interest</button>}
               {!isManualMatchDraft(selectedMatch) && (selectedMatch ?? selectedInterest?.match)?.status === "paused" && <button type="button" className="btn" disabled={busy !== null} onClick={() => void run("resume", () => data.actions.resumeMatch((selectedMatch ?? selectedInterest!.match)!._id), "Match resumed.")}>Resume</button>}
-              {isManualMatchDraft(selectedMatch) && <p role="status">Private draft — not visible to applicants. Presentation is unavailable until both applicants can opt in to background matchmaking.</p>}
+              {selectedMatch && <MatchmakerActions match={selectedMatch} male={selectedMatch.maleRegistration} female={selectedMatch.femaleRegistration} onMessage={setMessage} />}
               <ContactRelease match={selectedMatch ?? selectedInterest?.match ?? null} femaleInterestId={selectedInterest?.femaleWorkflow ? selectedInterest._id : selectedMatch?.interest?.femaleWorkflow ? selectedMatch.interest._id : undefined} onMessage={setMessage} />
-              {!isManualMatchDraft(selectedMatch) && !selectedInterest?.femaleWorkflow && !(selectedInterest?.fromRegistration?.gender === "female") && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />}
-              {!isManualMatchDraft(selectedMatch) && !selectedInterest?.femaleWorkflow && !(selectedInterest?.fromRegistration?.gender === "female") && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />}
+              {!isMatchmaker(selectedMatch) && !selectedInterest?.femaleWorkflow && !(selectedInterest?.fromRegistration?.gender === "female") && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`requester-${left?._id}-${right?._id}`} role="Requester" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={left} recipient={right} onMessage={setMessage} />}
+              {!isMatchmaker(selectedMatch) && !selectedInterest?.femaleWorkflow && !(selectedInterest?.fromRegistration?.gender === "female") && !selectedMatch?.interest?.femaleWorkflow && <ShareProfileAction key={`target-${right?._id}-${left?._id}`} role="Target" interest={selectedInterest ?? selectedMatch?.interest} matchId={selectedMatch?._id} owner={right} recipient={left} onMessage={setMessage} />}
             </div>
           </div>
         </div>

@@ -21,3 +21,6 @@ Backend changes are required. Hosted preview must remain UI-review-only, with th
 - Independent review found no remaining blocker after historical pause correction; 87 focused tests independently passed.
 
 Local evidence: repository privateops/restore-new-match-* logs/screenshots. Browser script: ops/restore-new-match-browser.mjs. Browser tests do not prove hosted backend integration.
+
+## Superseded by full issue97
+The draft-only milestone above documents commit3df9663. Full issue97 now extends it; see [issue97-preview.md](issue97-preview.md) for current scope, notification gates, and hosted backend limitations.

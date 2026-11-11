@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
 
-    if (isManualMatchDraft(match)) return NextResponse.json({ error: "Private drafts cannot be presented or notified. Background matchmaking opt-in is not available yet." }, { status: 409 });
+    if (isManualMatchDraft(match) || (!match.interestId && (match.interestType === "admin_suggested" || match.initiatedBy === "admin_recommendation"))) return NextResponse.json({ error: "Use the explicit matchmaker presentation workflow. This endpoint cannot notify matchmaker matches." }, { status: 409 });
 
     const male = await convexClient.query(api.registrations.getById, { adminSecret: getAdminSecret(),  id: match.maleRegistrationId });
     const female = await convexClient.query(api.registrations.getById, { adminSecret: getAdminSecret(),  id: match.femaleRegistrationId });

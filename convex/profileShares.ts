@@ -11,12 +11,13 @@ async function resolvedInterest(ctx: QueryCtx, share: ShareScope & { createdAt?:
   if (share.ownerRegistrationId === share.recipientRegistrationId) return false;
   // Only context-free shares need the pair guard; preserve legitimate linked history.
   if (!share.interestId && !share.matchId) {
-  // Do not let dropping matchId from a bearer-share request expose a draft pair.
+  // Lifecycle shares must bind to matchId so withdrawal remains enforceable.
+  // Preserve genuinely older shares; never infer their origin from a later match.
   for await (const match of ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", share.ownerRegistrationId))) {
-    if (match.femaleRegistrationId === share.recipientRegistrationId && isManualMatchDraft(match) && (share.createdAt === undefined || share.createdAt >= match.createdAt)) return false;
+    if (match.femaleRegistrationId === share.recipientRegistrationId && (isManualMatchDraft(match) || match.matchmakerPresentedAt !== undefined) && (share.createdAt === undefined || share.createdAt >= match.createdAt)) return false;
   }
   for await (const match of ctx.db.query("matches").withIndex("by_femaleRegistrationId", q => q.eq("femaleRegistrationId", share.ownerRegistrationId))) {
-    if (match.maleRegistrationId === share.recipientRegistrationId && isManualMatchDraft(match) && (share.createdAt === undefined || share.createdAt >= match.createdAt)) return false;
+    if (match.maleRegistrationId === share.recipientRegistrationId && (isManualMatchDraft(match) || match.matchmakerPresentedAt !== undefined) && (share.createdAt === undefined || share.createdAt >= match.createdAt)) return false;
   }
   }
   let interestId = share.interestId;

@@ -31,6 +31,7 @@ import type * as interestRules from "../interestRules.js";
 import type * as interestTestReset from "../interestTestReset.js";
 import type * as interests from "../interests.js";
 import type * as matches from "../matches.js";
+import type * as matchmakerMatching from "../matchmakerMatching.js";
 import type * as migrations_profileCompletion from "../migrations/profileCompletion.js";
 import type * as migrations_publicApplicantNumbers from "../migrations/publicApplicantNumbers.js";
 import type * as pairTestReset from "../pairTestReset.js";
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   interestTestReset: typeof interestTestReset;
   interests: typeof interests;
   matches: typeof matches;
+  matchmakerMatching: typeof matchmakerMatching;
   "migrations/profileCompletion": typeof migrations_profileCompletion;
   "migrations/publicApplicantNumbers": typeof migrations_publicApplicantNumbers;
   pairTestReset: typeof pairTestReset;
