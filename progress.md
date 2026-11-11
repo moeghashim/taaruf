@@ -739,3 +739,4 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-11
 - Hardened rejection claim against absent/invalid activation and preactivation queued work, including attempted rows; added six synthetic no-send/immutable-cutoff regressions.
 - Added fixed-scope audited #315→#217 Nov14 submission reopen backend/API and regression tests; preview only, no operational data changes. Existing profile shares and notification history remain unchanged.
+- Layla3472: applicant-only neutral decision notices and DTOs across event interests, female reviews, matchmaker introductions, and future email copy; own decisions/admin detail retained, progression/contact/bio gates unchanged. Preview-only; frozen email retries and workflow timing can still reveal historical/progression information.

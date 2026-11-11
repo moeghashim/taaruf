@@ -19,20 +19,20 @@ import { Pill, type Tone } from "@/components/admin/primitives/status-pill";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 
 type DashboardInterest = {
-  femaleWorkflow?: { state: string };
+  femaleWorkflow?: boolean;
   interestId: string;
-  matchId?: string | null;
+  canPause?: boolean;
   paused?: boolean;
   direction: "inbound" | "outbound" | "private";
   status: string;
   flowStatus: string;
   visibility: string;
-  adminStatus: string;
   keepOpenExpiresAt: number | null;
-  bioVisibleAt: number | null;
   contactSharedAt: number | null;
-  requesterFinalApproval: string;
-  recipientFinalApproval: string;
+  ownFinalApproval: string;
+  canRespond: boolean;
+  canFinalApprove: boolean;
+  canWithdraw: boolean;
   photoDecision: string;
   senderPhotoConsent: "yes" | "no" | null;
   senderPhotoConsentRevokedAt: number | null;
@@ -74,6 +74,7 @@ type DashboardData = {
   inbound: DashboardInterest[];
   outbound: DashboardInterest[];
   privateDocumented: DashboardInterest[];
+  history?: { interestId: string; status: string; ownDecision: string }[];
   canSubmitInterest: boolean;
   interestSubmissionLimit: number;
   interestSubmissionEventId: string | null;
@@ -242,43 +243,10 @@ function canConfirmEventRegistration(registration: NonNullable<ApplicantEventDat
   );
 }
 
-function viewerFinalApprovalFor(interest: DashboardInterest) {
-  return interest.direction === "inbound" ? interest.recipientFinalApproval : interest.requesterFinalApproval;
-}
-
-function counterpartyFinalApprovalFor(interest: DashboardInterest) {
-  return interest.direction === "inbound" ? interest.requesterFinalApproval : interest.recipientFinalApproval;
-}
-
-function canRespondToInterest(interest: DashboardInterest) {
-  if (interest.femaleWorkflow) return false;
-  return (
-    interest.direction === "inbound" &&
-    interest.visibility !== "internal_only" &&
-    (interest.flowStatus === "awaiting_inbound_response" || interest.flowStatus === "kept_open")
-  );
-}
-
-function canFinalApproveInterest(interest: DashboardInterest) {
-  if (interest.femaleWorkflow) return false;
-  return Boolean(
-    interest.bioVisibleAt &&
-    viewerFinalApprovalFor(interest) === "pending" &&
-    interest.flowStatus !== "contact_shared" &&
-    interest.flowStatus !== "declined" &&
-    interest.flowStatus !== "closed"
-  );
-}
-
-function canWithdrawInterest(interest: DashboardInterest) {
-  if (interest.femaleWorkflow) return false;
-  return (
-    (interest.direction === "outbound" || interest.direction === "private") &&
-    (interest.flowStatus === "awaiting_inbound_response" ||
-      interest.flowStatus === "kept_open" ||
-      interest.flowStatus === "private_documented")
-  );
-}
+function viewerFinalApprovalFor(interest: DashboardInterest) { return interest.ownFinalApproval; }
+function canRespondToInterest(interest: DashboardInterest) { return interest.canRespond; }
+function canFinalApproveInterest(interest: DashboardInterest) { return interest.canFinalApprove; }
+function canWithdrawInterest(interest: DashboardInterest) { return interest.canWithdraw; }
 
 function canCloseConnection(interest: DashboardInterest) {
   return interest.flowStatus === "contact_shared" || Boolean(interest.contactSharedAt);
@@ -362,7 +330,6 @@ function ProfileSideCard({
 
   const viewerFinalApproval =
     viewerFinalApprovalFor(interest);
-  const counterpartyFinalApproval = counterpartyFinalApprovalFor(interest);
   const canRespond = canRespondToInterest(interest);
   const canFinalApprove = !interest.paused && canFinalApproveInterest(interest);
   const canWithdraw = canWithdrawInterest(interest);
@@ -378,26 +345,25 @@ function ProfileSideCard({
         </div>
         <div className="pill-row">
           <StatusBadge value={interest.flowStatus} />
-          <StatusBadge value={interest.status} />
         </div>
       </div>
 
-      {interest.matchId && <button type="button" className="btn" disabled={busy} onClick={() => onAction({ action: interest.paused ? "resume_connection" : "pause_connection", interestId: interest.interestId })}>{interest.paused ? "Resume" : "Pause"}</button>}
+      {interest.canPause && <button type="button" className="btn" disabled={busy} onClick={() => onAction({ action: interest.paused ? "resume_connection" : "pause_connection", interestId: interest.interestId })}>{interest.paused ? "Resume" : "Pause"}</button>}
       {interest.paused && <p className="notice">This connection is paused.</p>}
       {interest.keepOpenExpiresAt && (
         <p className="notice warning">Keep Open expires {formatDate(interest.keepOpenExpiresAt)}.</p>
       )}
 
       {viewerFinalApproval === "approved" && interest.flowStatus !== "contact_shared" && (
-        <p className="notice success">{counterpartyFinalApproval === "approved" ? "Both final approvals are recorded. Pending final admin approval; contacts remain private." : "Your final approval is recorded. Waiting for the other applicant."}</p>
+        <p className="notice success">Your final approval is recorded. Contact details remain private.</p>
       )}
 
-      {viewerFinalApproval === "pending" && counterpartyFinalApproval === "approved" && (
-        <p className="notice warning">The other applicant approved after bio review. Your final decision is needed.</p>
+      {(canRespond || canFinalApprove) && (
+        <p className="notice warning">This connection is awaiting your review.</p>
       )}
 
       {interest.flowStatus === "contact_shared" && (
-        <p className="notice success">Both final approvals are complete. Contact information is available below.</p>
+        <p className="notice success">Contact information is available below.</p>
       )}
 
       {counterparty?.fullProfileVisible && (
@@ -1404,6 +1370,7 @@ export default function ApplicantDashboardPage() {
 
             </div>
             <div hidden={view !== "interests"} className="applicant-sections">
+              {!!data.history?.length && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{data.history.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
               <Section
                 title="Inbound Interests"
                 description="People who expressed interest in you."

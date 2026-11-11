@@ -97,10 +97,9 @@ export const getMine = query({
       const p = await ctx.db.get(male ? m.femaleRegistrationId : m.maleRegistrationId);
       const contactShared = released(m);
       const images = (contactShared || active(m)) && p?.photoSharingPermission === "yes" ? (await Promise.all((p.imageStorageIds ?? []).map(async storageId => ({storageId, url: await ctx.storage.getUrl(storageId)})))).filter(image => image.url !== null) : [];
-      matches.push({_id: m._id, status: m.status, presentedAt: m.matchmakerPresentedAt, contactShared, canWithdraw: !contactShared && m.matchmakerWithdrawnAt === undefined, canApprove: !contactShared && active(m) && p !== null && owner.status === "approved", withdrawnAt: m.matchmakerWithdrawnAt,
+      matches.push({_id: m._id, status: m.status === "declined" ? "closed" : m.status, presentedAt: m.matchmakerPresentedAt, contactShared, canWithdraw: !contactShared && m.matchmakerWithdrawnAt === undefined, canApprove: !contactShared && active(m) && p !== null && owner.status === "approved", withdrawnAt: m.matchmakerWithdrawnBy === owner._id ? m.matchmakerWithdrawnAt : undefined,
         myApproval: (male ? m.maleMatchmakerApprovalAt : m.femaleMatchmakerApprovalAt) !== undefined,
-        partnerApproval: (male ? m.femaleMatchmakerApprovalAt : m.maleMatchmakerApprovalAt) !== undefined,
-        myFollowup: publicFollowup(male ? m.maleFollowup : m.femaleFollowup), partnerFollowup: publicFollowup(male ? m.femaleFollowup : m.maleFollowup),
+        myFollowup: publicFollowup(male ? m.maleFollowup : m.femaleFollowup),
         partner: p ? {publicApplicantNumber: p.publicApplicantNumber, age: await currentAge(ctx, p), gender: p.gender, maritalStatus: p.maritalStatus, education: p.education, job: p.job, ethnicity: p.ethnicity, prayerCommitment: p.prayerCommitment, hijabResponse: p.hijabResponse, spouseRequirement1: p.spouseRequirement1, spouseRequirement2: p.spouseRequirement2, spouseRequirement3: p.spouseRequirement3, shareableBio: p.shareableBio, images, ...(contactShared ? {name: p.name, email: p.email, phone: p.phone} : {})} : null});
     }
     return {optedIn: owner.backgroundMatchmakingOptIn === true, consentUpdatedAt: owner.backgroundMatchmakingConsentUpdatedAt, matches};

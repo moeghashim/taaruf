@@ -5,34 +5,25 @@ import Image from "next/image";
 import { ProfileRequirements } from "./profile-requirements";
 import { FactList } from "@/components/admin/primitives/fact-list";
 
-type Review = { paused?: boolean; interestId: string; state: string; role: string; reviewExpiresAt?: number; matchId?: string };
+type Review = { paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
 type Profile = { name?: string; label?: string; applicantNumber?: number; publicApplicantNumber?: number; age?: number; shareableBio?: string; education?: string; job?: string; ethnicity?: string; imageUrls?: string[]; email?: string; phone?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string };
-type Access = { paused?: boolean; matchId?: string | null; state: string; role: string; profile?: Profile; counterparty?: Profile };
+type Access = { paused?: boolean; canPause?: boolean; ownAction?: "review" | null; ownDecision?: string; state: string; role: string; profile?: Profile; counterparty?: Profile };
 // List status is not authorization: only the existing detail GET supplies contacts.
 const contactsReady = (value: Access | null) => {
   const profile = value?.profile || value?.counterparty;
   return value?.state === "contacts_released" && !value.paused && !!(profile?.email?.trim() || profile?.phone?.trim());
 };
 const stateCopy: Record<string, string> = {
-  private_documented: "Your interest is private with the team. The brother has not been notified.",
-  awaiting_brother_review: "A profile is ready for the brother’s review. Accepting does not share contact details.",
-  awaiting_sister_confirmation: "The brother accepted. The sister must explicitly confirm before a match is created.",
-  pending_admin_approval: "You both agreed. Your match is pending final admin approval. Contact details remain private.",
+  in_review: "This connection is being reviewed. Contact details remain private until the team approves sharing them.",
   contacts_released: "Open this review to check the contact details available to your account.",
-  declined: "This review was declined. No further response is needed.",
-  revoked: "The team revoked this review. Its link is no longer available.",
+  closed: "This connection is no longer available. No further response is needed.",
 };
 const stateLabels: Record<string, string> = {
-  private_documented: "With the matchmaking team",
-  awaiting_brother_review: "Waiting for a response",
-  awaiting_sister_confirmation: "Waiting for confirmation",
-  pending_admin_approval: "Waiting for the team’s approval",
-  contacts_released: "Contact sharing update",
-  declined: "Review declined", revoked: "Review withdrawn", closed: "Review closed",
+  in_review: "Connection review", contacts_released: "Contact sharing update", closed: "Connection closed",
 };
-const reviewExpired = (item: Review) => item.state === "awaiting_brother_review" && item.reviewExpiresAt !== undefined && item.reviewExpiresAt <= Date.now();
-const needsBrotherReview = (item: Review) => item.role === "brother" && item.state === "awaiting_brother_review" && !item.paused && !reviewExpired(item);
-const needsSisterConfirmation = (item: Review) => item.role === "sister" && item.state === "awaiting_sister_confirmation" && !item.paused && !item.matchId;
+const reviewExpired = (item: Review) => item.reviewExpired === true;
+const needsBrotherReview = (item: Review) => item.role === "brother" && item.ownAction === "review" && !item.paused;
+const needsSisterConfirmation = (item: Review) => item.role === "sister" && item.ownAction === "review" && !item.paused;
 export function FemaleReviews() {
   const [loginHref, setLoginHref] = useState("/login");
   const [rows, setRows] = useState<Review[]>([]);
@@ -94,7 +85,7 @@ export function FemaleReviews() {
       if (!stopped && requestId === accessRequest.current) { setAccess(payload); setError(""); }
     }).catch(error => { if (!stopped && requestId === accessRequest.current) { setAccess(null); setError(error.message); } }).finally(() => { if (!stopped && requestId === accessRequest.current) setReviewLoading(false); });
     return () => { stopped = true; };
-  }, [selected, token, row?.role, row?.state, row?.paused, accessVersion]);
+  }, [selected, token, row?.role, row?.state, row?.ownAction, row?.paused, accessVersion]);
   useEffect(() => {
     setReadyIds([]);
     if (loading || listError || selected) return;
@@ -142,7 +133,7 @@ export function FemaleReviews() {
     {!!readyIds.length && !selected && !loading && !listError && <section className="interest-invitation contacts-ready" aria-labelledby="contacts-ready-heading">
       <div className="interest-invitation-copy">
         <h2 id="contacts-ready-heading">Contacts are ready</h2>
-        <p>You both agreed to proceed, and the team has approved sharing contact details. Open your review to see the contact details available to you.</p>
+        <p>The team has approved sharing contact details. Open your review to see the contact details available to you.</p>
       </div>
       <ul className="interest-invitation-actions">
         {readyIds.map((id, index) => <li key={id}>
@@ -153,8 +144,8 @@ export function FemaleReviews() {
     </section>}
     {!!invitations.length && !selected && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
       <div className="interest-invitation-copy">
-        <h2 id="interest-invitation-heading">A sister is interested in you</h2>
-        <p>{invitations.length === 1 ? "A profile is ready for you to review. Take a look and decide whether you’re interested." : "You have multiple profiles to review. Take a look and respond to each invitation."}</p>
+        <h2 id="interest-invitation-heading">Your review is needed</h2>
+        <p>{invitations.length === 1 ? "This connection is awaiting your review." : "You have multiple profiles to review. Take a look and respond to each invitation."}</p>
         <p className="interest-invitation-privacy">Accepting does not share contact details. Both of you must agree before the team can approve sharing them.</p>
       </div>
       <ul className="interest-invitation-actions">
@@ -166,8 +157,8 @@ export function FemaleReviews() {
     </section>}
     {!!confirmations.length && !selected && <section className="interest-invitation sister-confirmation" aria-labelledby="sister-confirmation-heading">
       <div className="interest-invitation-copy">
-        <h2 id="sister-confirmation-heading">{confirmations.length === 1 ? "The brother has accepted — your final approval is needed" : "Brothers have accepted — your final approval is needed"}</h2>
-        <p>{confirmations.length === 1 ? "He has accepted your interest. Review his profile and confirm whether you would like to proceed." : "They have accepted your interest. Review each profile and confirm whether you would like to proceed."} A match will only be created after you confirm.</p>
+        <h2 id="sister-confirmation-heading">Your review is needed</h2>
+        <p>This connection is awaiting your review.</p>
         <p className="interest-invitation-privacy">You can confirm or decline after reviewing. Contact details stay private until final admin approval.</p>
       </div>
       <ul className="interest-invitation-actions">
@@ -186,13 +177,15 @@ export function FemaleReviews() {
       {!rows.length && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
       {(selected ? rows : history).map(item => <div key={item.interestId} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 16 }}>
         {item.paused && <p>Paused</p>}
-        <h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p>
-        {!reviewExpired(item) && !["private_documented", "revoked", "declined", "closed"].includes(item.state) && <a className="btn" href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>{needsBrotherReview(item) ? "Review profile" : "View review"}</a>}
+        <h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : item.ownAction === "review" ? "This connection is awaiting your review." : stateCopy[item.state]}</p>
+        {item.ownDecision === "approved" && <p>Your decision: approved.</p>}
+        {item.ownDecision === "declined" && <p>Your decision: declined.</p>}
+        {!reviewExpired(item) && item.canView && <a className="btn" href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>{needsBrotherReview(item) ? "Review profile" : "View review"}</a>}
 
       </div>)}
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
       {selected && <section aria-label="Selected profile review" className="selected-profile-review">
-        {access?.matchId && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
+        {access?.canPause && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
         {reviewLoading && !access && <p role="status">Loading profile…</p>}
         {profile && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
           <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: profile.education || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
@@ -201,11 +194,11 @@ export function FemaleReviews() {
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
-        {!access?.paused && access?.role === "sister" && access.state === "awaiting_sister_confirmation" && <div className="action-row">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm mutual interest</button>
+        {!access?.paused && access?.role === "sister" && access.ownAction === "review" && <div className="action-row">
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm interest</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>
         </div>}
-        {!access?.paused && access?.role === "brother" && access.state === "awaiting_brother_review" && <><p>Your acceptance asks the sister to confirm. It is not final admin approval.</p><div className="action-row">
+        {!access?.paused && access?.role === "brother" && access.ownAction === "review" && <><p>This connection is awaiting your review. Your decision does not share contact details.</p><div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "accept", ...(token ? { reviewToken: token } : {}) })}>Accept</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "decline", ...(token ? { reviewToken: token } : {}) })}>Decline</button>
         </div></>}

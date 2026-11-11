@@ -146,7 +146,7 @@ test.each([false,true])("missing partner retains introduction history (shared=%s
  const result=await t.query(mm.getMine,{sessionHash:"male"});
  expect(result.matches).toHaveLength(1);
  expect(result.matches[0]).toMatchObject({_id:matchId,partner:null,contactShared:shared,canWithdraw:!shared,canApprove:false,presentedAt:before?.matchmakerPresentedAt});
- if(shared) expect(result.matches[0].partnerFollowup).toMatchObject({status:"contact_made"});
+ expect(result.matches[0]).not.toHaveProperty("partnerFollowup");
  expect(await t.run(ctx=>ctx.db.get(matchId))).toEqual(before);
  expect(JSON.stringify(result)).not.toContain("woman@example.invalid");
  expect((await t.query(mm.getMine,{sessionHash:"other"})).matches).toEqual([]);
@@ -186,4 +186,17 @@ test('generic settings cannot create or change matching activation cutoff', asyn
   expect(await t.query(mm.emailReadiness,{adminSecret:secret})).toEqual(original);
  }
  expect(await t.mutation(internal.matchmakerMatching.prepareEmailActivation,{})).toEqual(original);
+});
+
+test("both roles see only their own matchmaker decision; admin retains counterpart agreement", async () => {
+ const {t,optin,present,matchId}=await fixture(); await optin(); await present();
+ for (const [viewer, partner] of [["male","female"],["female","male"]]) {
+  await t.mutation(mm.approve,{sessionHash:partner,matchId});
+  const row=(await t.query(mm.getMine,{sessionHash:viewer})).matches[0];
+  expect(row).not.toHaveProperty("partnerApproval"); expect(row).not.toHaveProperty("partnerFollowup");
+  expect(row.myApproval).toBe(viewer === "female");
+ }
+ const admin=await t.query(api.matches.getById,{adminSecret:secret,id:matchId});
+ expect(admin?.maleMatchmakerApprovalAt).toEqual(expect.any(Number));
+ expect(admin?.femaleMatchmakerApprovalAt).toEqual(expect.any(Number));
 });
