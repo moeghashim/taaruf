@@ -720,3 +720,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Add admin workbench saved Ethnicity, Education and applicable Hijab comparison facts, responsive aligned rows, mapping and synthetic browser/auth regressions. No backend/public profile changes or live deployment.
+
+## 2026-11-10 — matching integration3430
+- Integrated cancellation94db707 with frontend120, future-only email121 and comparison122 in an isolated candidate; protected matching cutoff from generic settings mutation after independent review and added readiness regressions. Portal119 still pending; no live/config/email writes. <!-- project: github.com/moeghashim/clawscrewskill -->

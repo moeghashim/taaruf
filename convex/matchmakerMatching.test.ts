@@ -174,3 +174,16 @@ test("partner optout prevents recipient send",async()=>{
  await t.mutation(mm.setConsent,{sessionHash:"female",optedIn:false});
  expect(await t.mutation(mm.claimNotification,{adminSecret:secret,matchId,recipientId:male})).toBeNull();
 });
+
+test('generic settings cannot create or change matching activation cutoff', async () => {
+ const t = convexTest(schema, modules);
+ const key = 'matchmakerEmailActivationAt';
+ await expect(t.mutation(api.settings.set, {adminSecret:secret,key,value:'1'})).rejects.toThrow('immutable');
+ expect(await t.query(mm.emailReadiness,{adminSecret:secret})).toEqual({activationAt:null});
+ const original = await t.mutation(internal.matchmakerMatching.prepareEmailActivation,{});
+ for (const value of ['1',String(original.activationAt+1),'invalid','0']) {
+  await expect(t.mutation(api.settings.set,{adminSecret:secret,key,value})).rejects.toThrow('immutable');
+  expect(await t.query(mm.emailReadiness,{adminSecret:secret})).toEqual(original);
+ }
+ expect(await t.mutation(internal.matchmakerMatching.prepareEmailActivation,{})).toEqual(original);
+});
