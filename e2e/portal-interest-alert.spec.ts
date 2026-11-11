@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-for (const width of [1280, 390]) {
+for (const width of [1280, 390, 320]) {
   test("prominent invitation and recipient review at " + width, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     let state = "awaiting_brother_review";
@@ -19,7 +19,7 @@ for (const width of [1280, 390]) {
       return route.fulfill({ status: 400, json: { error: "Synthetic profile not loaded" } });
     });
     await page.goto("/me");
-    const banner = page.getByRole("region", { name: "Someone is interested in you", exact: true });
+    const banner = page.getByRole("region", { name: "A sister is interested in you", exact: true });
     await expect(banner).toBeVisible();
     const cta = banner.getByRole("link", { name: "Review profile", exact: true });
     const box = await cta.boundingBox();
