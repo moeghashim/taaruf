@@ -789,3 +789,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Superseding Omar3715: exact You Have Sent An Interest until recipient acceptance unlocks the sender review; real female workflow waiting and post-review headings corrected using existing ownAction/ownDecision fields, no new backend disclosure. Added real Convex API lifecycle tests for both directions and real female projection browser coverage.
 
 - Integrated remaining typography/status bundle on certified live PR143, preserving inline /me review navigation and both source ancestries; preview-only verification. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Omar3761: suppress standalone review notification banners in inline mode only; preserve unified top ribbon, inbound list and selected profile actions. Added 12 both-role mobile/desktop regression checks; no backend/data changes. <!-- project: github.com/moeghashim/clawscrewskill -->

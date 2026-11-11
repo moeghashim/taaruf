@@ -161,7 +161,8 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     window.history.pushState(null, "", link.href);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }}>
-    {!!readyIds.length && !selected && !loading && !listError && <section className="interest-invitation contacts-ready" aria-labelledby="contacts-ready-heading">
+    {/* Inline mode uses the portal’s unified top ribbon; keep these banners for standalone reviews only. */}
+    {!inline && !!readyIds.length && !selected && !loading && !listError && <section className="interest-invitation contacts-ready" aria-labelledby="contacts-ready-heading">
       <div className="interest-invitation-copy">
         <h2 id="contacts-ready-heading">Contacts are ready</h2>
         <p>The team has approved sharing contact details. Open your review to see the contact details available to you.</p>
@@ -173,7 +174,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
         </li>)}
       </ul>
     </section>}
-    {!!invitations.length && !selected && !listError && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
+    {!inline && !!invitations.length && !selected && !listError && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
       <div className="interest-invitation-copy">
         <h2 id="interest-invitation-heading">You Have Received An Interest</h2>
         <p>{invitations.length === 1 ? "This connection is awaiting your review." : "You have multiple profiles to review. Take a look and respond to each invitation."}</p>
@@ -186,7 +187,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
         </li>)}
       </ul>
     </section>}
-    {!!confirmations.length && !selected && !listError && <section className="interest-invitation sister-confirmation" aria-labelledby="sister-confirmation-heading">
+    {!inline && !!confirmations.length && !selected && !listError && <section className="interest-invitation sister-confirmation" aria-labelledby="sister-confirmation-heading">
       <div className="interest-invitation-copy">
         <h2 id="sister-confirmation-heading">Your review is needed</h2>
         <p>This connection is awaiting your review.</p>
@@ -199,7 +200,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
         </li>)}
       </ul>
     </section>}
-    {!selected && !loading && !listError && history.filter(item => !readyIds.includes(item.interestId)).map((item, index) => <section key={item.interestId} className="interest-invitation" aria-label={"Connection update " + (index + 1)}>
+    {!inline && !selected && !loading && !listError && history.filter(item => !readyIds.includes(item.interestId)).map((item, index) => <section key={item.interestId} className="interest-invitation" aria-label={"Connection update " + (index + 1)}>
       <div className="interest-invitation-copy">
         <h2>{reviewExpired(item) ? "Review invitation expired" : item.paused ? "Connection paused" : stateLabels[item.state] || "Profile review update"}</h2>
         <p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p>
