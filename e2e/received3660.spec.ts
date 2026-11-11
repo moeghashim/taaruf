@@ -237,9 +237,11 @@ test("inline reopening restores focus and old decline cannot clear new selection
     await new Promise<void>(resolve => { finish = resolve; });
     return route.fulfill({ json: { ok: true } });
   });
-  await page.goto("/me?femaleReview=first#inbound-interests");
+  await page.goto("/me#applicant-interests");
+  await page.getByRole("region", { name: "Received interest updates", exact: true }).locator('[data-connection-notice="first"]').getByRole("link").click();
   const panel = page.locator("#inline-selected-review"); await expect(panel).toBeFocused();
-  await page.getByRole("link", { name: "Back to applicant interests" }).click();
+  await expect(page.getByRole("link", { name: "Back to applicant interests" })).toHaveCount(0);
+  await page.goBack();
   await expect(panel).toHaveCount(0);
   const ribbon = page.getByRole("region", { name: "Received interest updates", exact: true });
   await ribbon.locator('[data-connection-notice="first"]').getByRole("link").click(); await expect(panel).toBeFocused();
