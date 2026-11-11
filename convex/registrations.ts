@@ -1,4 +1,6 @@
 import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
+import { currentAge, ownerDateOfBirth, saveDateOfBirth, withCurrentAge } from "./birthdays";
+import { validateDateOfBirth } from "./age";
 import { capabilityAllowed, profileCapabilityAllowed } from "./capabilitySecurity";
 import { assertImageOwnership, claimSignupImages } from "./imageAuthorization";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
@@ -195,14 +197,14 @@ async function findExistingParticipantProfile(
   }
 
   if (nameCanonical) {
-    const nameMatches = (await ctx.db
+    const nameMatches = (await Promise.all((await ctx.db
       .query("registrations")
       .withIndex("by_nameCanonical", (q) => q.eq("nameCanonical", nameCanonical))
-      .take(10))
+      .take(10)).map(registration => withCurrentAge(ctx, registration))))
       .filter((registration) => registration.gender === args.gender && registration.age === args.age);
     if (nameMatches.length === 1) return nameMatches[0];
 
-    const legacyNameMatches = (await ctx.db.query("registrations").take(1000)).filter(
+    const legacyNameMatches = (await Promise.all((await ctx.db.query("registrations").take(1000)).map(registration => withCurrentAge(ctx, registration)))).filter(
       (registration) =>
         normalizeName(registration.name) === nameCanonical &&
         registration.gender === args.gender &&
@@ -382,7 +384,8 @@ export const create = mutation({
   args: { adminSecret: v.optional(v.string()),
     signupCapabilityHash: v.optional(v.string()),
     name: v.string(),
-    age: v.number(),
+    age: v.optional(v.number()),
+    dateOfBirth: v.optional(v.string()),
     gender: v.union(v.literal("male"), v.literal("female")),
     maritalStatus: v.string(),
     education: v.string(),
@@ -419,13 +422,15 @@ export const create = mutation({
     if (!isEducation(args.education) && args.education !== "College") {
       throw new Error("Invalid education level");
     }
+    const age = args.dateOfBirth !== undefined ? validateDateOfBirth(args.dateOfBirth) : args.age;
+    if (age === undefined || !Number.isInteger(age) || age < 18 || age > 99) throw new Error("Age must be between 18 and 99");
     const profileCompleted = hasCompletedProfile(args);
     const event = args.eventCode ? await validatePublicEventRegistration(ctx, args.eventCode) : null;
 
     const emailCanonical = normalizeEmail(args.email);
     const phoneCanonical = normalizePhone(args.phone);
     const nameCanonical = normalizeName(args.name);
-    const existingProfile = await findExistingParticipantProfile(ctx, args, Boolean(event));
+    const existingProfile = await findExistingParticipantProfile(ctx, { ...args, age }, Boolean(event));
     if (existingProfile && !event) {
       throw new Error("An applicant is already registered with this email.");
     }
@@ -446,7 +451,7 @@ export const create = mutation({
       applicantNumber: await nextApplicantNumber(ctx),
       publicApplicantNumber: await nextPublicApplicantNumber(ctx),
       name: args.name.trim(),
-      age: args.age,
+      age,
       gender: args.gender,
       maritalStatus: args.maritalStatus,
       education: args.education,
@@ -482,6 +487,7 @@ export const create = mutation({
       interestSubmissionNumbers: normalizeInterestSubmissionNumbers(args.interestSubmissionNumbers),
     });
 
+    await saveDateOfBirth(ctx, registrationId, args.dateOfBirth);
     await claimSignupImages(ctx, registrationId, args.imageStorageIds ?? []);
 
     if (event) {
@@ -517,6 +523,7 @@ export const getAll = query({
 
         return {
           ...registration,
+          age: await currentAge(ctx, registration),
           imageUrls: images.map((image) => image.url),
           images,
         };
@@ -660,7 +667,7 @@ export const getById = query({
   args: { adminSecret: v.optional(v.string()), id: v.id("registrations") },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
-    return await ctx.db.get(args.id);
+    return await withCurrentAge(ctx, await ctx.db.get(args.id));
   },
 });
 
@@ -676,7 +683,7 @@ export const getByProfileAccessToken = query({
       spouseRequirement1, spouseRequirement2, spouseRequirement3, shareableBio, photoSharingPermission,
       interestSubmission, interestSubmissionNumbers, applicantNotesToAdmin, profileCompletionStatus } = registration;
     const images = (await Promise.all((imageStorageIds ?? []).map(async storageId => ({ storageId, url: await ctx.storage.getUrl(storageId) })))).filter((image): image is { storageId: typeof image.storageId; url: string } => image.url !== null);
-    return { images, name, gender, email, education, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
+    return { age: await currentAge(ctx, registration), dateOfBirth: await ownerDateOfBirth(ctx, registration._id), images, name, gender, email, education, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
       spouseRequirement1, spouseRequirement2, spouseRequirement3, shareableBio, photoSharingPermission,
       interestSubmission, interestSubmissionNumbers, applicantNotesToAdmin, profileCompletionStatus };
   },
@@ -685,6 +692,7 @@ export const getByProfileAccessToken = query({
 export const updateProfile = mutation({
   args: {
     token: v.string(),
+    dateOfBirth: v.optional(v.string()),
     education: v.optional(v.string()),
     ethnicity: v.string(),
     imageStorageIds: v.array(v.id("_storage")),
@@ -710,6 +718,7 @@ export const updateProfile = mutation({
     }
 
     await assertImageOwnership(ctx, registration._id, args.imageStorageIds);
+    await saveDateOfBirth(ctx, registration._id, args.dateOfBirth);
     validateEducationUpdate(args.education, registration.education);
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
@@ -798,17 +807,17 @@ export const getByEmail = query({
       .query("registrations")
       .withIndex("by_emailCanonical", (q) => q.eq("emailCanonical", lowercased))
       .first();
-    if (byCanonical) return byCanonical;
+    if (byCanonical) return await withCurrentAge(ctx, byCanonical);
     const byTrimmed = await ctx.db
       .query("registrations")
       .withIndex("by_email", (q) => q.eq("email", trimmed))
       .first();
-    if (byTrimmed) return byTrimmed;
+    if (byTrimmed) return await withCurrentAge(ctx, byTrimmed);
     if (lowercased === trimmed) return null;
-    return await ctx.db
+    return await withCurrentAge(ctx, await ctx.db
       .query("registrations")
       .withIndex("by_email", (q) => q.eq("email", lowercased))
-      .first();
+      .first());
   },
 });
 
@@ -817,11 +826,11 @@ export const getByStripeSession = query({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
-    if (link) return await ctx.db.get(link.registrationId);
-    return await ctx.db
+    if (link) return await withCurrentAge(ctx, await ctx.db.get(link.registrationId));
+    return await withCurrentAge(ctx, await ctx.db
       .query("registrations")
       .withIndex("by_stripeSessionId", (q) => q.eq("stripeSessionId", args.stripeSessionId))
-      .first();
+      .first());
   },
 });
 
@@ -867,6 +876,8 @@ export const deleteRegistration = mutation({
   // so the deleted applicant number can never be re-issued to a new registration.
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
+    const birthday = await ctx.db.query("registrationBirthdays").withIndex("by_registrationId", q => q.eq("registrationId", args.id)).unique();
+    if (birthday) await ctx.db.delete(birthday._id);
     await ctx.db.delete(args.id);
     return args.id;
   },

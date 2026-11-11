@@ -1,0 +1,96 @@
+{
+  "scope": "Static isolated real React components with synthetic API and Next image/link/router substitutes. Not live backend E2E; signup submission/photo/payment not tested.",
+  "fixedDate": "2026-11-10",
+  "results": [
+    {
+      "kind": "signup",
+      "width": 1280,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": false,
+      "unknownLegacyEmpty": false,
+      "networkAttempts": 0
+    },
+    {
+      "kind": "legacy",
+      "width": 1280,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": true,
+      "unknownLegacyEmpty": true,
+      "networkAttempts": 0
+    },
+    {
+      "kind": "me",
+      "width": 1280,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": true,
+      "unknownLegacyEmpty": true,
+      "networkAttempts": 0
+    },
+    {
+      "kind": "signup",
+      "width": 390,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": false,
+      "unknownLegacyEmpty": false,
+      "networkAttempts": 0
+    },
+    {
+      "kind": "legacy",
+      "width": 390,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": true,
+      "unknownLegacyEmpty": true,
+      "networkAttempts": 0
+    },
+    {
+      "kind": "me",
+      "width": 390,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": true,
+      "unknownLegacyEmpty": true,
+      "networkAttempts": 0
+    },
+    {
+      "kind": "signup",
+      "width": 320,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": false,
+      "unknownLegacyEmpty": false,
+      "networkAttempts": 0
+    },
+    {
+      "kind": "legacy",
+      "width": 320,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": true,
+      "unknownLegacyEmpty": true,
+      "networkAttempts": 0
+    },
+    {
+      "kind": "me",
+      "width": 320,
+      "boundaries": true,
+      "privacyText": true,
+      "overflow": false,
+      "saveRemount": true,
+      "unknownLegacyEmpty": true,
+      "networkAttempts": 0
+    }
+  ]
+}

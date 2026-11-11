@@ -1,3 +1,4 @@
+import { dateOfBirthError, ageForDateOfBirth } from "@/lib/date-of-birth";
 import { getSignupUploadHash } from "@/lib/photo-upload-server";
 import { getAdminSecret } from "@/lib/admin-server";
 import { isEducation } from "@/lib/education";
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     const {
       name,
-      age,
+      dateOfBirth,
       gender,
       maritalStatus,
       education,
@@ -29,6 +30,11 @@ export async function POST(request: NextRequest) {
       imageStorageIds,
       eventCode,
     } = body;
+
+    if (dateOfBirthError(dateOfBirth)) {
+      return NextResponse.json({ error: "Enter a valid date of birth (age 18–99)." }, { status: 400 });
+    }
+    const age = ageForDateOfBirth(dateOfBirth);
 
     if (!isEducation(education) && education !== "College") {
       return NextResponse.json({ error: "Invalid education level" }, { status: 400 });
@@ -102,7 +108,8 @@ export async function POST(request: NextRequest) {
     await convexClient.mutation(api.registrations.create, { adminSecret: getAdminSecret(),
       signupCapabilityHash: await getSignupUploadHash(),
       name,
-      age: Number(age),
+      age,
+      dateOfBirth,
       gender: gender as "male" | "female",
       maritalStatus,
       education,

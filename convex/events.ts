@@ -1,4 +1,5 @@
 import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
+import { withCurrentAge } from "./birthdays";
 import { paginationOptsValidator } from "convex/server";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
@@ -103,7 +104,7 @@ async function serializeEventRegistration(ctx: ReadCtx, row: EventRegistration) 
     ctx.db.get(row.eventId),
     ctx.db.get(row.registrationId),
   ]);
-  return withoutCapabilities({ ...row, confirmationStatus: confirmationStatusForRow(row), event, registration });
+  return withoutCapabilities({ ...row, confirmationStatus: confirmationStatusForRow(row), event, registration: await withCurrentAge(ctx, registration) });
 }
 
 async function serializeEventWaitlistEntry(ctx: ReadCtx, row: Doc<"eventWaitlistEntries">) {
@@ -112,7 +113,7 @@ async function serializeEventWaitlistEntry(ctx: ReadCtx, row: Doc<"eventWaitlist
     ctx.db.get(row.registrationId),
     row.sourceEventId ? ctx.db.get(row.sourceEventId) : Promise.resolve(null),
   ]);
-  return withoutCapabilities({ ...row, event, registration, sourceEvent });
+  return withoutCapabilities({ ...row, event, registration: await withCurrentAge(ctx, registration), sourceEvent });
 }
 
 
@@ -672,7 +673,7 @@ export const registerForEvent = mutation({
       )
       .unique();
     if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
-      return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration };
+      return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
 
     await promoteWaitlist(ctx, event._id, registration.gender);
@@ -701,11 +702,11 @@ export const registerForEvent = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, payload);
-      return { eventRegistrationId: existing._id, registrationStatus, event, registration };
+      return { eventRegistrationId: existing._id, registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
 
     const eventRegistrationId = await ctx.db.insert("eventRegistrations", payload);
-    return { eventRegistrationId, registrationStatus, event, registration };
+    return { eventRegistrationId, registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
   },
 });
 
@@ -735,7 +736,7 @@ export const addRegistration = mutation({
       )
       .unique();
     if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
-      return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration };
+      return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
 
     await promoteWaitlist(ctx, event._id, registration.gender);
@@ -761,11 +762,11 @@ export const addRegistration = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, payload);
-      return { eventRegistrationId: existing._id, registrationStatus, event, registration };
+      return { eventRegistrationId: existing._id, registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
 
     const eventRegistrationId = await ctx.db.insert("eventRegistrations", payload);
-    return { eventRegistrationId, registrationStatus, event, registration };
+    return { eventRegistrationId, registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
   },
 });
 

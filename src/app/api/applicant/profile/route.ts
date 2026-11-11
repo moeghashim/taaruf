@@ -1,3 +1,4 @@
+import { dateOfBirthError } from "@/lib/date-of-birth";
 import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
 import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
@@ -35,11 +36,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    if (body.dateOfBirth !== undefined && dateOfBirthError(body.dateOfBirth)) {
+      return NextResponse.json({ error: "Enter a valid date of birth (age 18–99)." }, { status: 400 });
+    }
     const convex = getConvexClient();
 
     await convex.mutation(api.applicantProfile.updateProfile, {
       sessionHash,
       education: body.education,
+      ...(body.dateOfBirth !== undefined ? { dateOfBirth: body.dateOfBirth } : {}),
       ethnicity: body.ethnicity,
       imageStorageIds: body.imageStorageIds,
       prayerCommitment: body.prayerCommitment,
