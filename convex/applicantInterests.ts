@@ -1,3 +1,4 @@
+import { interestBioVisible } from "./bioVisibility";
 import { currentAge } from "./birthdays";
 import { canReceiveEventMessages } from "./eventMessagingEligibility";
 import { recordPairApproval, contactsVisible, linkedFlows, assertMatchInterest } from "./contactGate";
@@ -141,6 +142,7 @@ async function safeCounterparty(
 )
  {
   if (!counterparty) return null;
+  const bioVisible = await interestBioVisible(ctx, interest);
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
   const showName = showProfile && !(viewer.gender === "male" && counterparty.gender === "female");
   const contactShared = await contactsVisible(ctx, interest, flow);
@@ -181,7 +183,7 @@ async function safeCounterparty(
     spouseRequirement3: fullProfileVisible ? counterparty.spouseRequirement3 ?? null : null,
     photoSharingPermission: fullProfileVisible ? counterparty.photoSharingPermission ?? null : null,
     imageUrls: imageUrls.filter((url): url is string => Boolean(url)),
-    shareableBio: showProfile ? counterparty.shareableBio ?? null : null,
+    shareableBio: bioVisible ? counterparty.shareableBio ?? null : null,
     email: contactShared ? counterparty.email : null,
     phone: contactShared ? counterparty.phone : null,
     label: showName ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
