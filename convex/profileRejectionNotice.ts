@@ -59,10 +59,18 @@ export async function transition(ctx: MutationCtx, previous: Doc<"registrations"
 export const claim = internalMutation({ args: {}, handler: async ctx => {
   if (!configured()) return null;
   const now = Date.now();
+  const activation = await ctx.db.query("settings").withIndex("by_key", q => q.eq("key", ACTIVATION)).unique();
+  const cutoff = Number(activation?.value);
+  if (!Number.isSafeInteger(cutoff) || cutoff <= 0 || cutoff > now) return null;
   const pending = await ctx.db.query("profileRejectionNotices").withIndex("by_state_and_nextAttemptAt", q => q.eq("state", "pending").lte("nextAttemptAt", now)).first();
   const abandoned = await ctx.db.query("profileRejectionNotices").withIndex("by_state_and_nextAttemptAt", q => q.eq("state", "sending").lte("nextAttemptAt", now)).first();
   const row = abandoned ?? pending;
   if (!row) return null;
+  // Fail closed for historical work, including abandoned attempts with a grace field.
+  if (!Number.isSafeInteger(row.createdAt) || row.createdAt < cutoff) {
+    await ctx.db.patch(row._id, { state: row.firstAttemptAt === undefined && row.attempts === 0 ? "cancelled" : "needs_reconciliation", updatedAt: now, detail: "Notice predates immutable activation boundary; no retroactive delivery" });
+    return null;
+  }
   // Cron carries no row snapshot: stale invocations read the current durable deadline.
   // No retroactive delivery for legacy unattempted rows without a grace boundary.
   if (row.firstAttemptAt === undefined && row.notBefore === undefined) {

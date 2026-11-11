@@ -174,3 +174,18 @@ test("dedicated override remains backwards compatible when shared key exists",as
  expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer synthetic");
  expect(JSON.parse(fetcher.mock.calls[0][1].body).from).toBe("Test <test@example.invalid>");
 });
+
+test.each([undefined, "garbage", "0", "1800000000001"])("claim fails closed with activation %s even for eligible queued rows", async value => {
+ const {t,id,rows}=await setup(false,"rejected");
+ await t.run(async ctx=>{if(value!==undefined)await ctx.db.insert("settings",{key:"profileRejectionNoticeActivatedAt",value});await ctx.db.insert("profileRejectionNotices",{registrationId:id,email:"synthetic@example.invalid",state:"pending",attempts:0,createdAt:1,updatedAt:1,notBefore:2,nextAttemptAt:2});});
+ const before=await rows();const fetcher=vi.fn();vi.stubGlobal("fetch",fetcher);
+ await t.action(internal.profileRejectionNotice.drain,{});expect(fetcher).not.toHaveBeenCalled();expect(await rows()).toEqual(before);
+});
+test.each([false,true])("preactivation row with grace boundary cannot send (attempted=%s)",async attempted=>{
+ const {t,id,rows}=await setup(true,"rejected");const cutoff=Date.now();
+ await t.run(ctx=>ctx.db.insert("profileRejectionNotices",{registrationId:id,email:"synthetic@example.invalid",state:attempted?"sending":"pending",attempts:attempted?1:0,firstAttemptAt:attempted?cutoff-1:undefined,createdAt:cutoff-1,updatedAt:cutoff-1,notBefore:cutoff,nextAttemptAt:cutoff}));
+ const fetcher=vi.fn();vi.stubGlobal("fetch",fetcher);await t.action(internal.profileRejectionNotice.drain,{});
+ expect(fetcher).not.toHaveBeenCalled();expect((await rows())[0].state).toBe(attempted?"needs_reconciliation":"cancelled");
+ vi.setSystemTime(cutoff+1000);await t.mutation(internal.profileRejectionNotice.activate,{});
+ expect(await t.run(async ctx=>(await ctx.db.query("settings").withIndex("by_key",q=>q.eq("key","profileRejectionNoticeActivatedAt")).unique())?.value)).toBe(String(cutoff));
+});
