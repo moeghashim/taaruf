@@ -764,3 +764,7 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — archive placement3582
 - Moved unchanged participant archive/restore card to the final portal content position for both roles; added responsive all-view last-position, duplicate and confirmation-cancel no-write tests. No backend or live operations. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — redundant workbench label3634
+- Hide only the private documented display label in FemaleWorkflowActions; retain its state, share action, other statuses and all permissions. Added markup/action regressions; no backend or live changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Added Omar3637 exact received-interest heading in initial inbound notifications for both roles; preserved body/CTAs and final/outbound/event wording. Added 12 desktop/mobile read-only browser cases. <!-- project: github.com/moeghashim/clawscrewskill -->

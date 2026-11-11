@@ -144,7 +144,7 @@ export function FemaleReviews() {
     </section>}
     {!!invitations.length && !selected && !loading && !listError && <section className="interest-invitation" aria-labelledby="interest-invitation-heading">
       <div className="interest-invitation-copy">
-        <h2 id="interest-invitation-heading">Your review is needed</h2>
+        <h2 id="interest-invitation-heading">You Have Received An Interest</h2>
         <p>{invitations.length === 1 ? "This connection is awaiting your review." : "You have multiple profiles to review. Take a look and respond to each invitation."}</p>
         <p className="interest-invitation-privacy">Accepting does not share contact details. Both of you must agree before the team can approve sharing them.</p>
       </div>
