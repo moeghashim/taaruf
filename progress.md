@@ -717,3 +717,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Prepare future-only matching emails: immutable activation stamps, explicit transactional transport reuse, fresh-Present-only send and readiness-gated applicant copy; no live activation.
+
+## 2026-11-10
+- Add admin workbench saved Ethnicity, Education and applicable Hijab comparison facts, responsive aligned rows, mapping and synthetic browser/auth regressions. No backend/public profile changes or live deployment.
