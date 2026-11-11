@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
+import { adminMutualInterests } from '@/lib/admin-mutual-interest';
 import { adminQueries, adminMutations } from '@/lib/admin-operations';
 import { adminRequestError, getAdminSecret, privateJson } from '@/lib/admin-server';
-import { getConvexClient } from '@/lib/convex';
+import { getConvexClient, getSnapshotConvexClient } from '@/lib/convex';
 export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
  const denied = adminRequestError(request);
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
   const args = { ...body.args, adminSecret: getAdminSecret() };
   let result;
   if (body.kind === 'query' && Object.prototype.hasOwnProperty.call(adminQueries, body.name)) {
-   result = await client.query(adminQueries[body.name as keyof typeof adminQueries], args);
+   result = body.name === 'interests.getAll' ? await adminMutualInterests(getSnapshotConvexClient(request.signal), getAdminSecret(), request.signal) : await client.query(adminQueries[body.name as keyof typeof adminQueries], args);
   } else if (body.kind === 'mutation' && Object.prototype.hasOwnProperty.call(adminMutations, body.name)) {
    result = await client.mutation(adminMutations[body.name as keyof typeof adminMutations], args);
   } else return privateJson({ error: 'Operation not allowed' }, 400);
