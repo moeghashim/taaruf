@@ -193,6 +193,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "interestId and approved are required" }, { status: 400 });
       }
       const result = await convex.mutation(api.applicantInterests.giveFinalApproval, {
+        adminSecret: getAdminSecret(),
         sessionHash,
         interestId: body.interestId,
         approved: body.approved,
@@ -209,8 +210,7 @@ export async function POST(request: NextRequest) {
           });
           return NextResponse.json({
             success: true,
-            message: "Approval recorded, but the notification email could not be sent.",
-            notification: { sent: false, error },
+            message: "Your decision has been recorded.",
           });
         }
 
@@ -227,19 +227,17 @@ export async function POST(request: NextRequest) {
           });
           return NextResponse.json({
             success: true,
-            message: "Approval recorded, but the notification email could not be sent.",
-            notification: { sent: false, error: emailResult.error || "Failed to send final approval requested email" },
+            message: "Your decision has been recorded.",
           });
         }
 
         return NextResponse.json({
           success: true,
-          message: "Approval recorded. The other applicant has been notified.",
-          notification: { sent: true, providerId: emailResult.id },
+          message: "Your decision has been recorded.",
         });
       }
 
-      return NextResponse.json({ success: true, message: "Approval recorded." });
+      return NextResponse.json({ success: true, message: "Your decision has been recorded." });
     }
 
     if (body.action === "withdraw") {

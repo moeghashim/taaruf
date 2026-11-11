@@ -1,3 +1,4 @@
+import { interestBioVisible } from "./bioVisibility";
 import { currentSisterConfirmation } from "./sisterConfirmationActivation";
 import { currentAge } from "./birthdays";
 import { deliveryAuthorized } from "./brotherReviewActivation";
@@ -70,11 +71,37 @@ function dashboardRows(ctx: ReadCtx, person: Doc<"registrations">) {
     ? ctx.db.query("interests").withIndex("by_toRegistrationId_and_testReset", q => q.eq("toRegistrationId", person._id).eq("testReset", undefined))
     : ctx.db.query("interests").withIndex("by_fromRegistrationId_and_testReset", q => q.eq("fromRegistrationId", person._id).eq("testReset", undefined));
 }
+// Applicant projection: workflow stages and counterpart decisions remain server-only.
+function applicantReview(row: Doc<"interests">, role: "brother" | "sister", flow: Doc<"interestFlows"> | null, paused = false, closed = false) {
+  const workflow = row.femaleWorkflow!;
+  const ownDecision = (role === "brother" ? flow?.recipientFinalApproval : flow?.requesterFinalApproval)
+    ?? ((role === "brother" ? workflow.brotherAcceptedAt : workflow.sisterConfirmedAt) !== undefined ? "approved" : "pending");
+  const ownReview = role === "brother" ? workflow.state === "awaiting_brother_review" : workflow.state === "awaiting_sister_confirmation" && !row.matchId;
+  const expired = role === "brother" && ownReview && (!workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now());
+  return { interestId: row._id, role, paused, ownDecision,
+    state: closed ? "closed" as const : workflow.state === "contacts_released" ? "contacts_released" as const : "in_review" as const,
+    ownAction: !closed && !paused && ownReview && !expired ? "review" as const : null,
+    reviewExpired: !closed && expired,
+    // Capability only, not a match identifier that exposes bilateral progression.
+    canPause: !closed && !!row.matchId,
+    canView: !closed && workflow.state !== "private_documented" && !!workflow.reviewTokenHash,
+  };
+}
 async function visibleReviews(ctx: ReadCtx, person: Doc<"registrations">, rows: Doc<"interests">[]) {
   const result = [];
   for (const row of rows) {
     if (!row.femaleWorkflow || (person.gender === "male" && (row.femaleWorkflow.state === "private_documented" || !row.femaleWorkflow.reviewTokenHash))) continue;
-    try { const { workflow, match } = await active(ctx, row._id, true); result.push({ paused: match?.status === "paused", interestId: row._id, state: workflow.state, role: person.gender === "male" ? "brother" as const : "sister" as const, reviewExpiresAt: workflow.reviewExpiresAt ?? null, matchId: row.matchId ?? null }); } catch { /* unavailable */ }
+    const role = person.gender === "male" ? "brother" as const : "sister" as const;
+    try { const { flow, match } = await active(ctx, row._id, true); result.push(applicantReview(row, role, flow, match?.status === "paused")); }
+    catch {
+      // Retain only neutral history, never restore profile/contact access on closure.
+      if (row.testReset) continue;
+      const match = row.matchId ? await ctx.db.get(row.matchId) : null;
+      if (match?.testResetAt !== undefined) continue;
+      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
+      if (flow && (flow.fromRegistrationId !== row.fromRegistrationId || flow.toRegistrationId !== row.toRegistrationId)) continue;
+      result.push(applicantReview(row, role, flow, false, true));
+    }
   }
   return result;
 }
@@ -99,17 +126,17 @@ export const getReviewAccess = query({ args: reviewArgs, handler: async (ctx, ar
   const photos = person._id === data.brother._id && data.interest.senderPhotoConsent === "yes" && data.interest.senderPhotoConsentRevokedAt === undefined;
   const imageUrls = photos ? (await Promise.all((profile.imageStorageIds ?? []).map(id => ctx.storage.getUrl(id)))).filter((url): url is string => !!url) : [];
   const released = data.workflow.state === "contacts_released" && !!data.workflow.adminReleasedAt;
-  return { paused: data.match?.status === "paused", interestId: data.interest._id, state: data.workflow.state, role: person._id === data.brother._id ? "brother" as const : "sister" as const, matchId: data.interest.matchId ?? null,
-    profile: { ...(person._id === data.brother._id ? {} : { name: profile.name }), label: person._id === data.brother._id ? `Applicant #${profile.publicApplicantNumber ?? "—"}` : profile.name, applicantNumber: profile.publicApplicantNumber ?? null, age: await currentAge(ctx, profile), maritalStatus: profile.maritalStatus, education: profile.education, job: profile.job, ethnicity: profile.ethnicity ?? null, shareableBio: profile.shareableBio ?? null, prayerCommitment: profile.prayerCommitment ?? null, hijabResponse: profile.hijabResponse ?? null, spouseRequirement1: profile.spouseRequirement1 ?? null, spouseRequirement2: profile.spouseRequirement2 ?? null, spouseRequirement3: profile.spouseRequirement3 ?? null, imageUrls, email: released ? profile.email : null, phone: released ? profile.phone : null } };
+  return { ...applicantReview(data.interest, person._id === data.brother._id ? "brother" : "sister", data.flow, data.match?.status === "paused"),
+    profile: { ...(person._id === data.brother._id ? {} : { name: profile.name }), label: person._id === data.brother._id ? `Applicant #${profile.publicApplicantNumber ?? "—"}` : profile.name, applicantNumber: profile.publicApplicantNumber ?? null, age: await currentAge(ctx, profile), maritalStatus: profile.maritalStatus, education: profile.education, job: profile.job, ethnicity: profile.ethnicity ?? null, shareableBio: await interestBioVisible(ctx, data.interest) ? profile.shareableBio ?? null : null, prayerCommitment: profile.prayerCommitment ?? null, hijabResponse: profile.hijabResponse ?? null, spouseRequirement1: profile.spouseRequirement1 ?? null, spouseRequirement2: profile.spouseRequirement2 ?? null, spouseRequirement3: profile.spouseRequirement3 ?? null, imageUrls, email: released ? profile.email : null, phone: released ? profile.phone : null } };
 }});
 export const respond = mutation({ args: { ...reviewArgs, decision: v.union(v.literal("accept"), v.literal("decline")) }, handler: async (ctx, args) => {
   const person = await actor(ctx, args.sessionHash);
   const { interest, workflow, brother, sister } = await active(ctx, args.interestId);
   if (person._id !== brother._id) throw new Error("Unauthorized");
   if (!workflow.reviewTokenHash) throw new Error("Review unavailable");
-  if (["pending_admin_approval", "contacts_released"].includes(workflow.state) && args.decision === "accept") return { state: workflow.state };
+  if (["pending_admin_approval", "contacts_released"].includes(workflow.state) && args.decision === "accept") return { ownDecision: "approved" as const };
   checkReview(workflow, args.reviewTokenHash);
-  if (workflow.state === "awaiting_sister_confirmation" && args.decision === "accept") return { state: workflow.state };
+  if (workflow.state === "awaiting_sister_confirmation" && args.decision === "accept") return { ownDecision: "approved" as const };
   if (workflow.state !== "awaiting_brother_review") throw new Error("Review already decided");
   const state = args.decision === "accept" ? "awaiting_sister_confirmation" as const : "declined" as const;
   if (args.decision === "decline") await recordPairApproval(ctx, interest, person._id, false);
@@ -120,20 +147,19 @@ export const respond = mutation({ args: { ...reviewArgs, decision: v.union(v.lit
   }
   const matchId = args.decision === "accept" ? await recordPairApproval(ctx, (await ctx.db.get(interest._id))!, person._id, true) : null;
   if (args.decision === "accept" && !matchId) await enqueue(ctx, interest, sister._id, "sister_confirmation");
-  return { state: matchId ? "pending_admin_approval" as const : state };
+  return { ownDecision: args.decision === "accept" ? "approved" as const : "declined" as const };
 }});
 export const confirm = mutation({ args: { ...applicantArgs, confirmed: v.boolean() }, handler: async (ctx, args) => {
   const person = await actor(ctx, args.sessionHash);
   const { interest, workflow } = await active(ctx, args.interestId);
   if (person._id !== interest.fromRegistrationId) throw new Error("Unauthorized");
   if (!workflow.reviewTokenHash) throw new Error("Review unavailable");
-  if (["pending_admin_approval", "contacts_released"].includes(workflow.state) && args.confirmed) return { state: workflow.state, matchId: interest.matchId! };
-  if (workflow.state !== "awaiting_sister_confirmation" || !workflow.brotherAcceptedAt) throw new Error("Brother acceptance required");
-  if (!args.confirmed) { await recordPairApproval(ctx, interest, person._id, false); await ctx.db.patch(interest._id, { femaleWorkflow: { ...workflow, state: "declined" }, status: "declined", adminStatus: "declined", updatedAt: Date.now() }); return { state: "declined" as const, matchId: null }; }
+  if (["pending_admin_approval", "contacts_released"].includes(workflow.state) && args.confirmed) return { ownDecision: "approved" as const };
+  if (workflow.state !== "awaiting_sister_confirmation" || !workflow.brotherAcceptedAt) throw new Error("Review unavailable");
+  if (!args.confirmed) { await recordPairApproval(ctx, interest, person._id, false); await ctx.db.patch(interest._id, { femaleWorkflow: { ...workflow, state: "declined" }, status: "declined", adminStatus: "declined", updatedAt: Date.now() }); return { ownDecision: "declined" as const }; }
   const matchId = await recordPairApproval(ctx, interest, person._id, true);
   if (!matchId) throw new Error("Explicit bilateral consent required");
-  const updated = (await ctx.db.get(interest._id))!;
-  return { state: updated.femaleWorkflow!.state, matchId };
+  return { ownDecision: "approved" as const };
 }});
 export const releaseContacts = mutation({ args: adminArgs, handler: async (ctx, args) => {
   requireAdmin(args.adminSecret);
