@@ -779,3 +779,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Independent review P2 fixed: optional contact verification failures no longer clear other reviews; verified generic actions remain available when the workflow list fails, without restoring ambiguous idle fallbacks. Added mixed-failure regression.
 
 - Omar3689: changed only generic outbound notice heading to exact "You Have Sent an Interest" in the shared portal projection; retained lifecycle/workflow precedence, received wording, body and CTAs. Added 18-unit suite and four read-only desktop/mobile male/female production-browser scenarios; types, scoped lint and build passed. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Requirements correction 3703: shared CSS/component now match incumbent Profile details heading and fact values; preserved full multiline answers, aligned row spacing/dividers. Added 18 read-only browser checks across both portals, private documented view, selected reviews, shared profiles and matchmaker at mobile/desktop sizes. Types, scoped lint and independent review passed. No backend or deployment changes.
