@@ -2,6 +2,7 @@ import { capabilityAllowed, profileCapabilityAllowed } from "./capabilitySecurit
 import { assertImageOwnership, claimSignupImages } from "./imageAuthorization";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
+import { isEducation, validateEducationUpdate } from "../src/lib/education";
 // INVARIANT (see AGENTS.md): `registrations.publicApplicantNumber` is the
 // permanent public identifier. Once assigned it is never patched and never
 // re-used, not even after deleteRegistration. The `create` mutation and the
@@ -412,6 +413,10 @@ export const create = mutation({
     requireAdmin(args.adminSecret);
     const now = Date.now();
     await assertImageOwnership(ctx, undefined, args.imageStorageIds ?? [], args.signupCapabilityHash);
+    // "College" was accepted by older clients/imports; retain that legacy input.
+    if (!isEducation(args.education) && args.education !== "College") {
+      throw new Error("Invalid education level");
+    }
     const profileCompleted = hasCompletedProfile(args);
     const event = args.eventCode ? await validatePublicEventRegistration(ctx, args.eventCode) : null;
 
@@ -665,11 +670,11 @@ export const getByProfileAccessToken = query({
       .withIndex("by_profileAccessToken", (q) => q.eq("profileAccessToken", args.token))
       .first();
     if (!registration || !(await profileCapabilityAllowed(ctx, registration))) return null;
-    const { name, gender, email, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
+    const { name, gender, email, education, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
       spouseRequirement1, spouseRequirement2, spouseRequirement3, shareableBio, photoSharingPermission,
       interestSubmission, interestSubmissionNumbers, applicantNotesToAdmin, profileCompletionStatus } = registration;
     const images = (await Promise.all((imageStorageIds ?? []).map(async storageId => ({ storageId, url: await ctx.storage.getUrl(storageId) })))).filter((image): image is { storageId: typeof image.storageId; url: string } => image.url !== null);
-    return { images, name, gender, email, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
+    return { images, name, gender, email, education, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
       spouseRequirement1, spouseRequirement2, spouseRequirement3, shareableBio, photoSharingPermission,
       interestSubmission, interestSubmissionNumbers, applicantNotesToAdmin, profileCompletionStatus };
   },
@@ -678,6 +683,7 @@ export const getByProfileAccessToken = query({
 export const updateProfile = mutation({
   args: {
     token: v.string(),
+    education: v.optional(v.string()),
     ethnicity: v.string(),
     imageStorageIds: v.array(v.id("_storage")),
     prayerCommitment,
@@ -702,6 +708,7 @@ export const updateProfile = mutation({
     }
 
     await assertImageOwnership(ctx, registration._id, args.imageStorageIds);
+    validateEducationUpdate(args.education, registration.education);
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
@@ -719,6 +726,7 @@ export const updateProfile = mutation({
     const shareableBio = args.shareableBio.trim();
     const lookingFor = legacyLookingForText(args);
     await ctx.db.patch(registration._id, {
+      ...(args.education !== undefined ? { education: args.education } : {}),
       ethnicity: args.ethnicity.trim(),
       imageStorageIds: args.imageStorageIds,
       prayerCommitment: args.prayerCommitment,

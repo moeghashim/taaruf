@@ -34,6 +34,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
           name: registration.name,
           gender: registration.gender,
           email: registration.email,
+          education: registration.education,
           ethnicity: registration.ethnicity || "",
           imageStorageIds,
           imageUrls: images.map((image) => image.url),
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
 
     await convexClient.mutation(api.registrations.updateProfile, {
       token,
+      education: body.education,
       ethnicity: body.ethnicity,
       imageStorageIds: body.imageStorageIds,
       prayerCommitment: body.prayerCommitment,
