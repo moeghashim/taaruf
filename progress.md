@@ -497,8 +497,7 @@ Append-only learning log for commits and deploys. Add new entries only at the en
   - src/app/me/page.tsx
   - src/lib/applicant-session.ts
   - src/lib/email.ts
-  - progress.md
-## 2026-05-12T16:34:03.000Z
+  - progress.md## 2026-05-12T16:34:03.000Z
 - Trigger: commit
 - Learning: Admins need interest visibility directly inside the applicant profile drawer, not just in the interests tab. A compact snapshot plus inbound/outbound cards reduces tab switching during review.
 - Context: feat(admin): surface interest statuses in profile drawer
@@ -752,3 +751,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — archive3480 integration
 - Integrated approved archive/availability-only restore onto verified live54af1ab, preserving newer privacy/mutual-interest/public-event work. Archive cancels future bookings with genuine FIFO Pending promotion, suppresses old access/sends, and retains in-flight provider evidence. 1280 tests pass; root/Convex types, lint and build pass; isolated runtime and independent final review recorded privately. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Added narrowly evidenced configuration-blocked delivery reset handling and repeat-cycle/disabled-sender regression tests; no live writes or deployment.
