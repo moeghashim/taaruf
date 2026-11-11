@@ -1,3 +1,4 @@
+import { assertNotArchived } from "./archiveRules";
 import { sisterActivation } from "./sisterConfirmationActivation";
 import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { deliveryAuthorized, reviewActivation } from "./brotherReviewActivation";
@@ -7,6 +8,10 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 type ReadCtx = MutationCtx | QueryCtx;
 /** Shared outbox retains its original table name for compatibility. */
 export async function enqueueContactDelivery(ctx: MutationCtx, interestId: Id<"interests">, recipientId: Id<"registrations">, kind: Doc<"femaleWorkflowDeliveries">["kind"]) {
+  const source = await ctx.db.get(interestId);
+  if (!source) throw new Error("Interest unavailable");
+  assertNotArchived(await ctx.db.get(source.fromRegistrationId));
+  assertNotArchived(await ctx.db.get(source.toRegistrationId));
   const key = interestId + ":" + kind + ":" + recipientId;
   if (await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_key", q => q.eq("key", key)).unique()) return;
   const createdAt = Date.now();
@@ -30,11 +35,14 @@ export function assertMatchInterest(match: Doc<"matches">, interest: Doc<"intere
   }
 }
 export async function linkedFlows(ctx: ReadCtx, interest: Doc<"interests">) {
+  assertNotArchived(await ctx.db.get(interest.fromRegistrationId));
+  assertNotArchived(await ctx.db.get(interest.toRegistrationId));
   if (interest.fromRegistrationId === interest.toRegistrationId) throw new Error("Linked pair mismatch");
   let eventId = interest.eventId;
   if (interest.matchId) {
     const match = await ctx.db.get(interest.matchId);
     if (!match) throw new Error("Linked match missing");
+    if (match.closedReason === "participant_archived") throw new Error("Match is not active");
     assertMatchInterest(match, interest);
     const primary = match.interestId ? await ctx.db.get(match.interestId) : null;
     if (!primary) throw new Error("Linked interest missing");
@@ -51,7 +59,7 @@ export async function linkedFlows(ctx: ReadCtx, interest: Doc<"interests">) {
     const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
     if (!flow) throw new Error("Linked flow missing; explicit consent required");
     if (flow.fromRegistrationId !== row.fromRegistrationId || flow.toRegistrationId !== row.toRegistrationId) throw new Error("Linked flow identity mismatch");
-    if (["closed", "declined"].includes(flow.flowStatus)) throw new Error("Interest is no longer active");
+    if (flow.closedReason === "participant_archived" || ["closed", "declined"].includes(flow.flowStatus)) throw new Error("Interest is no longer active");
     flows.push(flow);
   }
   return flows;
@@ -68,9 +76,13 @@ export async function queuePendingReview(ctx: MutationCtx, matchId: Id<"matches"
   await ctx.db.patch(matchId, { status: "reviewing", contactGate: "pending_admin_approval", updatedAt: Date.now() });
   for (const id of [match.maleRegistrationId, match.femaleRegistrationId]) await enqueueContactDelivery(ctx, match.interestId, id, "pending_review");
 }
-/** Historical timestamp-only disclosure is not revoked. */
+/** Preserve disclosure history, but never treat archive-closed history as access. */
 export async function contactsVisible(ctx: ReadCtx, interest: Doc<"interests">, flow: Doc<"interestFlows"> | null) {
-  if (!flow?.contactSharedAt) return false;
+  if (!flow?.contactSharedAt || flow.closedReason === "participant_archived" || ["closed", "declined"].includes(flow.flowStatus)) return false;
+  const from = await ctx.db.get(interest.fromRegistrationId);
+  const to = await ctx.db.get(interest.toRegistrationId);
+  if (!from || !to || from.archivedAt !== undefined || to.archivedAt !== undefined) return false;
+  if ([from, to].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) return false;
   const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
   if (interest.matchId) {
     if (!match || match.testResetAt !== undefined) return false;
@@ -96,6 +108,7 @@ export async function assertParticipantsAvailable(ctx: ReadCtx, maleId: Id<"regi
   const female = await ctx.db.get(femaleId);
   if (!male || !female || maleId === femaleId || male.gender !== "male" || female.gender !== "female") throw new Error("Linked pair mismatch");
   for (const person of [male, female]) {
+    assertNotArchived(person);
     if (person.status !== "approved") throw new Error("Both applicants must be approved");
     if (person.activeMatchId && person.activeMatchId !== except) throw new Error("Applicant already has an active match");
   }
@@ -108,6 +121,8 @@ export async function assertParticipantsAvailable(ctx: ReadCtx, maleId: Id<"regi
 }
 
 export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
+  assertNotArchived(await ctx.db.get(interest.fromRegistrationId));
+  assertNotArchived(await ctx.db.get(interest.toRegistrationId));
   if (interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
   if (interest.fromRegistrationId === interest.toRegistrationId) throw new Error("Linked pair mismatch");
   const rows = [];
@@ -122,13 +137,13 @@ export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
     const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
     if (!flow) throw new Error("Linked flow missing; explicit consent required");
     if (flow.fromRegistrationId !== row.fromRegistrationId || flow.toRegistrationId !== row.toRegistrationId) throw new Error("Linked flow identity mismatch");
-    if (["closed", "declined"].includes(flow.flowStatus)) throw new Error("Interest is no longer active");
+    if (flow.closedReason === "participant_archived" || ["closed", "declined"].includes(flow.flowStatus)) throw new Error("Interest is no longer active");
     if (row.matchId) {
       const match = await ctx.db.get(row.matchId);
       if (!match) throw new Error("Linked match missing");
       assertMatchInterest(match, row);
       await linkedFlows(ctx, row);
-      if (match.testResetAt !== undefined || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+      if (match.closedReason === "participant_archived" || match.testResetAt !== undefined || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
     }
     result.push({ interest: row, flow });
   }
@@ -189,7 +204,7 @@ export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interest
 }
 
 export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches">) {
-  if (match.testResetAt !== undefined || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+  if (match.closedReason === "participant_archived" || match.testResetAt !== undefined || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
   if (!match.interestId && match.matchmakerPresentedAt !== undefined) {
     if (match.matchmakerWithdrawnAt !== undefined || match.maleMatchmakerApprovalAt === undefined || match.femaleMatchmakerApprovalAt === undefined) throw new Error("Both applicants must give final approval before contacts can be shared");
     const {male, female} = await assertParticipantsAvailable(ctx, match.maleRegistrationId, match.femaleRegistrationId, match._id);
@@ -224,7 +239,7 @@ export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches"
 
 export async function setPairPaused(ctx: MutationCtx, match: Doc<"matches">, paused: boolean, actorId?: Id<"registrations">) {
   if (isManualMatchDraft(match)) throw new Error("Private drafts can only be edited or closed; presentation is not available yet");
-  if (match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) throw new Error("Match is not active");
+  if (match.closedReason === "participant_archived" || match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) throw new Error("Match is not active");
   if (actorId && ![match.maleRegistrationId, match.femaleRegistrationId].includes(actorId)) throw new Error("Unauthorized");
   const primary = match.interestId ? await ctx.db.get(match.interestId) : null;
   const flows = primary ? await linkedFlows(ctx, primary) : [];

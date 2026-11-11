@@ -60,10 +60,11 @@ export async function POST(request: NextRequest) {
     const { ConvexHttpClient } = await import("convex/browser");
     const convexClient = new ConvexHttpClient(convexUrl);
 
-    const existing = eventCode ? null : await convexClient.query(api.registrations.getByEmail, { adminSecret: getAdminSecret(),
+    const existing = await convexClient.query(api.registrations.getByEmail, { adminSecret: getAdminSecret(),
       email: String(email).trim(),
     });
-    if (existing) {
+    if (existing?.archivedAt != null) return NextResponse.json({ error: "This profile is archived. Sign in to restore availability before registering again.", code: "profile_archived" }, { status: 409 });
+    if (existing && !eventCode) {
       return NextResponse.json(
         {
           error: "An applicant is already registered with this email.",

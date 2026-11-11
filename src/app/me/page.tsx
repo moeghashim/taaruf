@@ -3,6 +3,7 @@ import { educationOptionsFor, formatEducation } from "@/lib/education";
 
 import { applicantLoginHref } from "@/lib/applicant-destination";
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
+import { ArchiveParticipant } from "@/components/archive-participant";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -122,6 +123,8 @@ type ProfileImagePayload = {
 };
 
 type ProfileData = {
+  archivedAt?: number | null;
+  lastRestoredArchivedAt?: number;
   name: string;
   gender: "male" | "female";
   email: string;
@@ -610,6 +613,9 @@ export default function ApplicantDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [locallyArchivedAt, setLocallyArchivedAt] = useState<number | null | undefined>(undefined);
+  const archivedAt = locallyArchivedAt === undefined ? profile?.archivedAt : locallyArchivedAt;
+  const archived = archivedAt != null;
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
   const [message, setMessage] = useState<string | null>(null);
@@ -746,6 +752,7 @@ export default function ApplicantDashboardPage() {
 
 
   async function runAction(body: Record<string, unknown>) {
+    if (archived) return false;
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -782,6 +789,7 @@ export default function ApplicantDashboardPage() {
   }
 
   async function registerForEvent(eventId: string) {
+    if (archived) return;
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -807,6 +815,7 @@ export default function ApplicantDashboardPage() {
   }
 
   async function confirmEventParticipation(eventRegistrationId: string) {
+    if (archived) return;
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -881,7 +890,7 @@ export default function ApplicantDashboardPage() {
 
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!profile) return;
+    if (!profile || archived) return;
 
     setIsSavingProfile(true);
     setMessage(null);
@@ -1069,10 +1078,11 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
+            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
             <div role="tablist" aria-label="Matching" onKeyDown={event => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? "interests" : event.key === "End" ? "matchmaker" : portalTab === "interests" ? "matchmaker" : "interests"; setPortalTab(next); document.getElementById(next === "interests" ? "interests-tab" : "matchmaker-tab")?.focus(); window.history.replaceState(null, "", next === "interests" ? "#overview" : "#matchmaker-matching"); }} style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}><button role="tab" tabIndex={portalTab === "interests" ? 0 : -1} id="interests-tab" aria-controls="interests-panel" aria-selected={portalTab === "interests"} className={`btn ${portalTab === "interests" ? "btn-primary" : ""}`} onClick={() => { setPortalTab("interests"); window.history.replaceState(null, "", "#overview"); }}>Applicant interests</button><button role="tab" tabIndex={portalTab === "matchmaker" ? 0 : -1} id="matchmaker-tab" aria-controls="matchmaker-panel" aria-selected={portalTab === "matchmaker"} className={`btn ${portalTab === "matchmaker" ? "btn-primary" : ""}`} onClick={() => { setPortalTab("matchmaker"); window.history.replaceState(null, "", "#matchmaker-matching"); }}>Matchmaker Matching</button></div>
-            {portalTab === "matchmaker" && <div role="tabpanel" id="matchmaker-panel" aria-labelledby="matchmaker-tab"><MatchmakerMatching /></div>}
+            {portalTab === "matchmaker" && <div role="tabpanel" id="matchmaker-panel" aria-labelledby="matchmaker-tab"><MatchmakerMatching archived={archived} /></div>}
             <div role="tabpanel" id="interests-panel" aria-labelledby="interests-tab" hidden={portalTab !== "interests"}>
-            {data.applicant.status === "approved" && <FemaleReviews />}
+            {!archived && data.applicant.status === "approved" && <FemaleReviews />}
 
             <div className="stats">
               <div className="stat">
@@ -1124,7 +1134,7 @@ export default function ApplicantDashboardPage() {
                               <button
                                 type="button"
                                 className="btn btn-primary"
-                                disabled={busy}
+                                disabled={busy || archived}
                                 onClick={() => confirmEventParticipation(event.registration!._id)}
                               >
                                 Confirm
@@ -1132,7 +1142,7 @@ export default function ApplicantDashboardPage() {
                             ) : null}
                           </>
                         ) : (
-                          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => registerForEvent(event._id)}>
+                          <button type="button" className="btn btn-primary" disabled={busy || archived} onClick={() => registerForEvent(event._id)}>
                             Register
                           </button>
                         )}
@@ -1170,13 +1180,13 @@ export default function ApplicantDashboardPage() {
               <div className="panel-head">
                 <div>
                   <h3>Submit Interest</h3>
-                  <p aria-live="polite">{data.canSubmitInterest
+                  <p aria-live="polite">{!archived && data.canSubmitInterest
                     ? "Enter the applicant's number and first name. Maximum 3 interests per event."
                     : "Interest submissions will open after being approved and checked in for the next event"}</p>
                 </div>
               </div>
               {eligibilityError && <p role="status" className="notice error">{eligibilityError}</p>}
-              {data.canSubmitInterest && [0, 1, 2].map(index => {
+              {!archived && data.canSubmitInterest && [0, 1, 2].map(index => {
                 const submitted = data.interestSubmissions?.[index];
                 return <form key={index} onSubmit={event => submitNumber(event, index)} className="applicant-number-form" aria-label={`Interest ${index + 1}`}>
                   <div className="field">
@@ -1204,6 +1214,7 @@ export default function ApplicantDashboardPage() {
             {error && <p className="notice error">{error}</p>}
 
             <div className="applicant-sections">
+
               <section id="profile" className="panel applicant-section">
                 <div className="panel-head">
                   <div>
@@ -1220,6 +1231,8 @@ export default function ApplicantDashboardPage() {
                   </div>
                 ) : (
                   <form onSubmit={saveProfile} className="profile-form">
+                    {archived && <p>Archived profile details are read-only.</p>}
+                    <fieldset disabled={archived} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
                     <div className="profile-grid two">
                       <div className="field">
                         <label htmlFor="education">Education level *</label>
@@ -1369,6 +1382,7 @@ export default function ApplicantDashboardPage() {
                         {isSavingProfile ? "Saving..." : "Save Profile"}
                       </button>
                     </div>
+                    </fieldset>
                   </form>
                 )}
               </section>
@@ -1379,7 +1393,7 @@ export default function ApplicantDashboardPage() {
                 requestedConnectionId={data.requestedConnectionId}
                 interests={data.inbound}
                 onAction={async body => { await runAction(body); }}
-                busy={busy}
+                busy={busy || archived}
               />
               <Section
                 title="Outbound Interests"
@@ -1387,7 +1401,7 @@ export default function ApplicantDashboardPage() {
                 requestedConnectionId={data.requestedConnectionId}
                 interests={data.outbound}
                 onAction={async body => { await runAction(body); }}
-                busy={busy}
+                busy={busy || archived}
               />
               {data.applicant.gender === "female" && (
                 <Section
@@ -1396,7 +1410,7 @@ export default function ApplicantDashboardPage() {
                   requestedConnectionId={data.requestedConnectionId}
                   interests={data.privateDocumented}
                   onAction={async body => { await runAction(body); }}
-                  busy={busy}
+                  busy={busy || archived}
                 />
               )}
             </div>

@@ -1,7 +1,9 @@
+import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { paginationOptsValidator } from "convex/server";
 import { sessionAllowed } from "./capabilitySecurity";
 import { assertMatchInterest, releasePairContacts, setPairPaused, assertParticipantsAvailable } from "./contactGate";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
+import { assertNotArchived, assertMatchingParticipants } from "./interestRules";
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
@@ -46,6 +48,7 @@ export const create = mutation({
     if (!male || !female) throw new ConvexError("An applicant no longer exists. Refresh and select again.");
     if (male.gender !== "male" || female.gender !== "female") throw new ConvexError("Select one male and one female applicant.");
     for (const person of [male, female]) {
+      assertNotArchived(person);
       if (person.status !== "approved" || person.profileCompletionStatus !== "completed" || (person.searchStatus ?? "active") !== "active") throw new ConvexError("Both applicants must be approved, have complete profiles, and be actively searching.");
       if (person.activeMatchId) throw new ConvexError("An applicant already has an active match. Review it before creating another.");
     }
@@ -114,6 +117,8 @@ export const resetPair = mutation({
       throw new Error("Registration not found");
     }
 
+    assertNotArchived(registrations[0]);
+    assertNotArchived(registrations[1]);
     const pairIds = new Set([args.registrationAId, args.registrationBId]);
     const now = Date.now();
 
@@ -224,6 +229,8 @@ export const deletePairConnection = mutation({
       throw new Error("Registration not found");
     }
 
+    assertNotArchived(registrations[0]);
+    assertNotArchived(registrations[1]);
     const pairIds = new Set([args.registrationAId, args.registrationBId]);
 
     const outboundA = await ctx.db
@@ -390,6 +397,9 @@ export const updateStatus = mutation({
     }
 
     if (match.testResetAt !== undefined) throw new Error("Reset test match is read-only");
+    if (!["closed", "declined"].includes(args.status)) {
+      await assertMatchingParticipants(ctx, match.maleRegistrationId, match.femaleRegistrationId);
+    }
 
     if (args.status === match.status && args.adminNotes !== undefined) {
       await ctx.db.patch(match._id, { adminNotes: args.adminNotes, updatedAt: Date.now() });
@@ -559,6 +569,7 @@ export const resume = mutation({
     requireAdmin(args.adminSecret);
     const match = await ctx.db.get(args.id);
     if (!match) throw new Error("Match unavailable");
+    await assertMatchingParticipants(ctx, match.maleRegistrationId, match.femaleRegistrationId);
     return await setPairPaused(ctx, match, false);
   },
 });
@@ -574,6 +585,7 @@ export const setPausedForApplicant = mutation({
     const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
     if (!match) throw new Error("Match unavailable");
     assertMatchInterest(match, interest);
+    await assertMatchingParticipants(ctx, match.maleRegistrationId, match.femaleRegistrationId);
     return await setPairPaused(ctx, match, args.paused, person._id);
   },
 });
@@ -599,5 +611,28 @@ export const workbenchPage = query({
         };
       })
     )) };
+  },
+});
+
+/** Server-side candidate pool; history queries deliberately retain archived rows. */
+export const getCandidates = query({
+  args: { adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const rows = await ctx.db.query("registrations").withIndex("by_status", q => q.eq("status", "approved")).take(1000);
+    return rows.filter(person => person.archivedAt === undefined && person.profileCompletionStatus === "completed" && (person.searchStatus ?? "active") === "active" && !person.activeMatchId)
+      .map(({ _id, name, gender, publicApplicantNumber }) => ({ _id, name, gender, publicApplicantNumber }));
+  },
+});
+
+/** Revalidate immediately before external delivery. This cannot revoke an in-flight provider call. */
+export const assertNotificationEligible = mutation({
+  args: { adminSecret: v.string(), id: v.id("matches") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const match = await ctx.db.get(args.id);
+    if (!match || match.testResetAt !== undefined || isManualMatchDraft(match) || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+    await assertMatchingParticipants(ctx, match.maleRegistrationId, match.femaleRegistrationId);
+    return true;
   },
 });

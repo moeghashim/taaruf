@@ -688,3 +688,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Implemented issue97 background matchmaking in convex lifecycle/schema, applicant tab/API, admin Present/release/followups and dedicated gated notification sender; added privacy/withdrawal/idempotency/race/mobile regression coverage. Preview only; no live backend/data/email changes.
+
+## 2026-11-10
+- Added owner/admin archive and availability-only restore, FIFO genuine-capacity promotion, archive matching/privacy/notification guards, generation-safe retries, Archived filter and synthetic backend/route/browser regressions. Preserves feature97 live baseline; preview-only, no live changes.

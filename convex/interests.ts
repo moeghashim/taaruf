@@ -1,5 +1,6 @@
 import { paginationOptsValidator } from "convex/server";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
+import { assertNotArchived, assertMatchingParticipants } from "./interestRules";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -88,6 +89,7 @@ export const updateAdminStatus = mutation({
     }
 
     if (args.adminStatus === "matched" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
+    if (args.adminStatus !== "declined") await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     await ctx.db.patch(args.id, {
       adminStatus: args.adminStatus,
       status: args.adminStatus === "declined" ? "declined" : interest.status,
@@ -127,6 +129,9 @@ export const claimDeclineNotification = mutation({
       throw new Error("Interest registration not found");
     }
 
+    assertNotArchived(requester);
+    assertNotArchived(target);
+    if ([requester, target].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) throw new Error("Historical archived workflow cannot send notifications");
     const targetNumber = target.publicApplicantNumber ?? null;
 
     await ctx.db.patch(args.id, {
@@ -209,6 +214,7 @@ export const updateStatus = mutation({
       if (flow) await ctx.db.patch(flow._id, { flowStatus: args.status as "closed" | "declined", updatedAt: Date.now() });
     }
     if (args.status === "converted_to_match" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
+    if (!["closed", "declined", "withdrawn"].includes(args.status)) await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     await ctx.db.patch(args.id, {
       status: args.status,
       adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,
@@ -345,5 +351,19 @@ export const workbenchPage = query({
         };
       })
     )) };
+  },
+});
+
+/** Used by server routes to revalidate previously claimed notification work. */
+export const assertNotificationEligible = mutation({
+  args: { adminSecret: v.string(), id: v.id("interests") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const interest = await ctx.db.get(args.id);
+    if (!interest) throw new Error("Interest not found");
+    await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
+    const participants = await Promise.all([ctx.db.get(interest.fromRegistrationId), ctx.db.get(interest.toRegistrationId)]);
+    if (interest.status === "closed" || participants.some(person => person?.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) throw new Error("Historical archived workflow cannot send notifications");
+    return true;
   },
 });
