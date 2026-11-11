@@ -715,3 +715,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Integrated PR118 b5320f9 live rejection/logistics baseline into four-view portal; added all-view privacy regression while retaining correction3403. Preview only. <!-- project: github.com/moeghashim/clawscrewskill -->
 ## 2026-11-10
 - Harden workbench New match discoverability with an explicit accessible creation group before event filters; retain existing private draft/present flow and backend gates. Hide zero-date sentinel, add action and nine-state browser regressions. Fresh live screenshot mismatch remains unexplained; no deployment.
+## 2026-11-10 — cancellation integration
+- Preserved newest live b5320f9 and integrated only unchanged approved cancellation module/tests plus original additive audit table; no reset, sends or activation.

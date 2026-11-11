@@ -138,6 +138,9 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  deliveryCancellationAudits: defineTable({
+    operationKey: v.string(), authorization: v.string(), snapshot: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
   // Kept off registration documents: raw spreads must never disclose birthdays.
   registrationBirthdays: defineTable({ registrationId: v.id("registrations"), dateOfBirth: v.string() }).index("by_registrationId", ["registrationId"]),
   profileRejectionNotices: defineTable({
