@@ -162,7 +162,7 @@ async function reviewing(general = false) {
 for (const general of [false, true]) for (const kind of ["pending_review", "contacts_ready"] as const) test(`paused ${general ? "general" : "female"} ${kind} retry replays only the failed recipient without changing disclosure history`, async () => {
   const { t, interestId, matchId } = await reviewing(general); isolated();
   let fail = true;
-  const subject = kind === "pending_review" ? "Mutual match pending admin approval" : "Your contacts are ready in the portal";
+  const subject = kind === "pending_review" ? "Your connection is being reviewed" : "Your contacts are ready in the portal";
   const provider = vi.fn<typeof fetch>().mockImplementation(async (_url, options) => {
     const payload = JSON.parse(options!.body as string);
     return new Response("{}", { status: fail && payload.subject === subject && payload.to[0] === "brother@example.com" ? 400 : 200 });

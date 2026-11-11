@@ -41,7 +41,7 @@ async function publicWorld() {
     }
   }
   async function approve(interestId: Id<"interests">, person: number) {
-    return await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: `session-${person}`, interestId, approved: true });
+    return await t.mutation(api.applicantInterests.giveFinalApproval, { adminSecret: workflowAdmin, sessionHash: `session-${person}`, interestId, approved: true });
   }
   return { t, ...ids, submit, open, approve };
 }
@@ -186,11 +186,11 @@ for (const femaleOrigin of [false, true]) test(`new frozen notification routes t
     const interestId = url.searchParams.get(femaleOrigin ? "femaleReview" : "connection");
     expect(interestId).toBe(id);
     const sessionHash = message.to[0] === "person0@example.invalid" ? "session-0" : "session-1";
-    if (url.pathname === "/dashboard") expect((await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash, interestId: id })).state).toBe("pending_admin_approval");
+    if (url.pathname === "/dashboard") expect((await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash, interestId: id })).state).toBe("in_review");
     else {
       expect(url.pathname).toBe("/me");
       const d = await w.t.query(api.applicantInterests.getDashboard, { sessionHash });
-      expect([...d.inbound, ...d.outbound].find(row => row.interestId === interestId)).toMatchObject({ flowStatus: "awaiting_final_approvals", contactSharedAt: null });
+      expect([...d.inbound, ...d.outbound].find(row => row.interestId === interestId)).toMatchObject({ flowStatus: "in_progress", contactSharedAt: null });
     }
     expect(message.text).not.toContain("Sister Private");
     expect(message.text).not.toContain("555010");
@@ -204,11 +204,13 @@ for (const afterRelease of [false, true]) test(`female completion joins unopened
   await w.open(female, true);
   await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId: female, decision: "accept" });
   const result = await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId: female, confirmed: true });
-  if (afterRelease) await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: result.matchId!, status: "contact_shared" });
+  expect(result).toEqual({ ownDecision: "approved" });
+  const matchId = (await w.t.run(ctx => ctx.db.get(female)))!.matchId!;
+  if (afterRelease) await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "contact_shared" });
   await w.open(male);
   await w.approve(male, 0); await w.approve(male, 1);
   expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
-  expect((await w.t.run(ctx => ctx.db.get(male)))?.matchId).toBe(result.matchId);
+  expect((await w.t.run(ctx => ctx.db.get(male)))?.matchId).toBe(matchId);
   expect((await w.t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).filter(d => d.kind === "contacts_ready")).toHaveLength(afterRelease ? 2 : 0);
 });
 
@@ -278,7 +280,7 @@ for (const source of sources) for (const releaseBeforeShare of [false, true]) te
   expect((await w.t.run(ctx => ctx.db.get(female)))?.femaleWorkflow?.state).toBe("private_documented");
   await w.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret: workflowAdmin, interestId: female, reviewTokenHash: reviewHash });
   const access = await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "session-0", interestId: female });
-  expect(access.state).toBe(releaseBeforeShare ? "contacts_released" : "pending_admin_approval");
+  expect(access.state).toBe(releaseBeforeShare ? "contacts_released" : "in_review");
   expect(access.profile.imageUrls).toHaveLength(1);
   expect(access.profile.email).toBe(releaseBeforeShare ? "person1@example.invalid" : null);
   expect(JSON.stringify(access)).not.toContain("Sister Private");

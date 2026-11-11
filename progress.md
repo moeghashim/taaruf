@@ -732,3 +732,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10 — matching release3445
 - Reconciled approved matching and draft validation onto exact live portal; 1097 tests, build/types and portal/comparison/New match browser checks pass. Production remains unchanged pending final gates. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Layla3472: applicant-only neutral decision notices and DTOs across event interests, female reviews, matchmaker introductions, and future email copy; own decisions/admin detail retained, progression/contact/bio gates unchanged. Preview-only; frozen email retries and workflow timing can still reveal historical/progression information.
