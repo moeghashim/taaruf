@@ -12,4 +12,6 @@ crons.interval(
 
 crons.interval("deliver female workflow outbox", { minutes: 1 }, internal.femaleWorkflowDelivery.drain, {});
 
+crons.interval("deliver profile rejection notices", { minutes: 1 }, internal.profileRejectionNotice.drain, {});
+
 export default crons;

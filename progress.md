@@ -683,3 +683,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Added narrowly scoped combined brother/sister notification mode with independent cutoffs, stale recipient/sender retry cancellation, coexistence/security tests and activation checklist; no production changes.
+
+## 2026-11-10
+- Added isolated whole-profile rejection-notice transactional outbox, protected opt-in activation, immutable retries/reconciliation, synthetic tests, admin explanation and release documentation; no live activation.
