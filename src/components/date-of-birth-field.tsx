@@ -3,7 +3,7 @@
 import { dateOfBirthError, changedDateOfBirth } from "@/lib/date-of-birth";
 
 /** Owner-only editor; undefined preserves legacy records without inventing a birthday. */
-export function DateOfBirthField({ value, originalValue, onChange }: { value?: string; originalValue?: string; onChange: (value: string) => void }) {
+export function DateOfBirthField({ value, originalValue, onChange, externalHelp = false }: { externalHelp?: boolean; value?: string; originalValue?: string; onChange: (value: string) => void }) {
   const change = changedDateOfBirth(value, originalValue);
   const error = change === undefined ? undefined : dateOfBirthError(change);
   return (
@@ -12,7 +12,7 @@ export function DateOfBirthField({ value, originalValue, onChange }: { value?: s
       <input id="dateOfBirth" name="dateOfBirth" type="date" autoComplete="bday"
         value={value ?? ""} onChange={(event) => onChange(event.target.value)}
         aria-invalid={!!error} aria-describedby="birthday-help birthday-error" />
-      <p id="birthday-help" className="muted">Your age is shared with matches, not your date of birth. New or changed birthdays must be for ages 18–99. If your birthday is not on file, you can leave it blank.</p>
+      {!externalHelp && <p id="birthday-help" className="muted">Please add your date of birth for our records and background checks. Only your age is shared with matches.</p>}
       <p id="birthday-error" className="field-error" aria-live="polite">{error}</p>
     </div>
   );

@@ -692,6 +692,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Issue #46 isolated preview: private birthdays, owner profile editing, current-age projections/clock and privacy/legacy/eligibility tests; no live deployment. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 ## 2026-11-10
+- Split applicant portal into four history-aware views; preserve forms/actions, legacy destinations and DOB privacy; add synthetic navigation/action coverage. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Applied Layla3403 DOB records/privacy copy and aligned six profile basics in one responsive grid; no required-field or age-validation changes. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Added isolated whole-profile rejection-notice transactional outbox, protected opt-in activation, immutable retries/reconciliation, synthetic tests, admin explanation and release documentation; no live activation.
 - Restrict applicant event logistics using current profile eligibility; retain status-only history, hide stale portal details on refresh, and add synthetic API/browser tests. No public-site, notification, live-data or deployment changes.
 - Combined rejection notice and logistics candidate: preserved lifetime dedup policy; hardened non-JSON rate-limit handling and synthetic browser external-origin blocking after independent review. Preview only, no activation or live deployment.
@@ -709,3 +711,9 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Applicant copy3395: removed internal draft explanation; kept match presentation guidance. No admin draft behavior change.
+
+- Integrated PR118 b5320f9 live rejection/logistics baseline into four-view portal; added all-view privacy regression while retaining correction3403. Preview only. <!-- project: github.com/moeghashim/clawscrewskill -->
+## 2026-11-10
+- Harden workbench New match discoverability with an explicit accessible creation group before event filters; retain existing private draft/present flow and backend gates. Hide zero-date sentinel, add action and nine-state browser regressions. Fresh live screenshot mismatch remains unexplained; no deployment.
+## 2026-11-10 — cancellation integration
+- Preserved newest live b5320f9 and integrated only unchanged approved cancellation module/tests plus original additive audit table; no reset, sends or activation.

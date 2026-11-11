@@ -15,7 +15,7 @@ test("owner editor prefills known birthday; unknown legacy birthday remains empt
     const html = renderToStaticMarkup(createElement(DateOfBirthField, { value, onChange: vi.fn() }));
     expect(html).toContain('value="' + (value ?? "") + '"');
     expect(html).toContain('aria-invalid="false"');
-    expect(html).toContain("not your date of birth");
+    expect(html).toContain("Only your age is shared with matches");
   }
 });
 test("owner editor gives accessible errors for minor and cleared birthday", () => {
