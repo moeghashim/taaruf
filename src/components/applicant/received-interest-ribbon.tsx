@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { receivedInterestUpdates, type InterestNoticeInput, type ReviewNoticeInput } from "@/lib/received-interest-updates";
 
-export function ReceivedInterestRibbon({ interests, approved }: { interests: InterestNoticeInput[]; approved: boolean }) {
+export function ReceivedInterestRibbon({ interests, approved, onReviews }: { interests: InterestNoticeInput[]; approved: boolean; onReviews?: (reviews: ReviewNoticeInput[]) => void }) {
   const [reviews, setReviews] = useState<ReviewNoticeInput[]>([]);
   const [readyIds, setReadyIds] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -12,7 +12,7 @@ export function ReceivedInterestRibbon({ interests, approved }: { interests: Int
     controller.current?.abort();
     const request = new AbortController(); controller.current = request;
     setReadyIds([]); setError(false);
-    if (!approved) { setReviews([]); setLoaded(true); return; }
+    if (!approved) { setReviews([]); onReviews?.([]); setLoaded(true); return; }
     try {
       const rows: ReviewNoticeInput[] = [];
       let cursor: string | null = null;
@@ -28,7 +28,7 @@ export function ReceivedInterestRibbon({ interests, approved }: { interests: Int
         if (cursor) seen.add(cursor);
       } while (cursor);
       if (request.signal.aborted) return;
-      setReviews(rows); setLoaded(true);
+      setReviews(rows); onReviews?.(rows); setLoaded(true);
       for (const item of rows.filter(item => item.state === "contacts_released" && !item.paused && !item.reviewExpired)) {
         try {
         const response = await fetch("/api/applicant/female-review?interestId=" + encodeURIComponent(item.interestId), { cache: "no-store", signal: request.signal });
@@ -39,13 +39,14 @@ export function ReceivedInterestRibbon({ interests, approved }: { interests: Int
         } catch { /* An optional contact check must not hide other invitations. */ }
       }
     } catch { if (!request.signal.aborted) { setReviews([]); setReadyIds([]); setError(true); setLoaded(false); } }
-  }, [approved]);
+  }, [approved, onReviews]);
   useEffect(() => {
     void refresh();
     const onFocus = () => { void refresh(); };
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
+    window.addEventListener("applicant-interest-updated", onFocus);
     window.addEventListener("focus", onFocus); document.addEventListener("visibilitychange", onVisible);
-    return () => { controller.current?.abort(); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVisible); };
+    return () => { controller.current?.abort(); window.removeEventListener("applicant-interest-updated", onFocus); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVisible); };
   }, [refresh]);
   // Do not render a contradictory generic fallback before workflow authority loads.
   const notices = loaded ? receivedInterestUpdates(interests, reviews, readyIds) : receivedInterestUpdates(

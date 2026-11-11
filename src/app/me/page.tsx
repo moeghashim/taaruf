@@ -1,4 +1,6 @@
 "use client";
+import { interestCategories } from "@/lib/interest-categories";
+import type { ReviewNoticeInput } from "@/lib/received-interest-updates";
 import { DateOfBirthField } from "@/components/date-of-birth-field";
 import { dateOfBirthError, changedDateOfBirth } from "@/lib/date-of-birth";
 import { educationOptionsFor, formatEducation } from "@/lib/education";
@@ -606,6 +608,8 @@ function Section({
 export default function ApplicantDashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [reviews, setReviews] = useState<ReviewNoticeInput[] | null>(null);
+  const categories = interestCategories(data?.outbound ?? [], data?.privateDocumented ?? [], reviews ?? []);
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
@@ -690,7 +694,8 @@ export default function ApplicantDashboardPage() {
     void load();
     const refresh = () => { if (!document.hidden) void load(); };
     window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
+    window.addEventListener("applicant-interest-updated", refresh);
+    return () => { window.removeEventListener("focus", refresh); window.removeEventListener("applicant-interest-updated", refresh); };
   }, [load]);
 
   useEffect(() => {
@@ -1116,7 +1121,7 @@ export default function ApplicantDashboardPage() {
             {!archived && <section aria-label="Your notifications" className="applicant-section">
               {(eventsData?.upcoming || []).filter(event => eventsFresh && !busy && !data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError && event.registration && canConfirmEventRegistration(event.registration)).map(event => <section className="interest-invitation" key={event._id}><div className="interest-invitation-copy"><h2>Event response requested</h2><p>Please review your event registration. Responding does not grant event approval.</p></div><a className="btn btn-primary" href="#events">Review event registration</a></section>)}
               {!!data.history?.length && <section className="interest-invitation"><div className="interest-invitation-copy"><h2>Connection updates</h2><p>{data.history.length} closed connection{data.history.length === 1 ? "" : "s"}. No further response is needed.</p></div><a className="btn" href="#applicant-interests">View connection history</a></section>}
-              <ReceivedInterestRibbon interests={[...data.inbound, ...data.outbound, ...data.privateDocumented]} approved={data.applicant.status === "approved"} />
+              <ReceivedInterestRibbon interests={[...data.inbound, ...data.outbound, ...data.privateDocumented]} approved={data.applicant.status === "approved"} onReviews={setReviews} />
               {data.applicant.status === "approved" && <MatchmakerNotifications />}
             </section>}
             {view === "matchmaker" && <MatchmakerMatching archived={archived} onSessionExpired={onMatchmakerSessionExpired} />}
@@ -1131,15 +1136,15 @@ export default function ApplicantDashboardPage() {
               </div>
               <div className="stat">
                 <h4>Outbound</h4>
-                <div className="big">{data.outbound.length}</div>
+                <div className="big">{data.applicant.gender === "female" && data.applicant.status === "approved" && !archived && reviews === null ? "—" : categories.outbound.length}</div>
                 <div className="sub">
                   <span>Visible interests sent</span>
                 </div>
               </div>
-              {data.applicant.gender === "female" && <div className="stat"><h4>Private</h4><div className="big">{data.privateDocumented.length}</div><div className="sub">Documented for admins</div></div>}
+              {data.applicant.gender === "female" && <div className="stat"><h4>Private</h4><div className="big">{data.applicant.status === "approved" && !archived && reviews === null ? "—" : categories.privateDocumented.length}</div><div className="sub">Documented for admins</div></div>}
               <div className="stat">
                 <h4>Status</h4>
-                <div className="big">{data.inbound.length + data.outbound.length + data.privateDocumented.length}</div>
+                <div className="big">{data.inbound.length + categories.outbound.length + categories.privateDocumented.length}</div>
                 <div className="sub">
                   <span>Total interest records</span>
                 </div>
@@ -1438,11 +1443,12 @@ export default function ApplicantDashboardPage() {
               >
                 {!archived && data.applicant.status === "approved" && <FemaleReviews inline active={view === "interests"} />}
               </Section>
+              {data.applicant.gender === "female" && data.applicant.status === "approved" && !archived && reviews === null ? <p role="status">Loading interest categories…</p> : <>
               <Section
                 title="Outbound Interests"
                 description="Visible interests you sent."
                 requestedConnectionId={data.requestedConnectionId}
-                interests={data.outbound}
+                interests={categories.outbound}
                 onAction={async body => { await runAction(body); }}
                 busy={busy || archived}
               />
@@ -1451,11 +1457,12 @@ export default function ApplicantDashboardPage() {
                   title="Private Documented Interests"
                   description="Interests you documented for yourself and the admin team. These remain private until the team creates a recipient-specific review."
                   requestedConnectionId={data.requestedConnectionId}
-                  interests={data.privateDocumented}
+                  interests={categories.privateDocumented}
                   onAction={async body => { await runAction(body); }}
                   busy={busy || archived}
                 />
               )}
+              </>}
             </div>
             {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
           </div>

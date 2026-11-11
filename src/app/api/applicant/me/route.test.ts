@@ -316,3 +316,36 @@ test("a fresh magic login cannot revive a reset requested submission", async () 
   mocks.session.mockResolvedValue(hashToken(verified.cookies.get(applicantSessionCookie)!.value));
   expect((await GET(new NextRequest(`https://synthetic.invalid/api/applicant/me?connection=${id}`))).status).toBe(404);
 });
+
+
+test("real sister projection moves at actual share before target acceptance", async () => {
+ const {interestCategories} = await import("@/lib/interest-categories");
+ const {t,id} = await fixture("platform_submission",true,false,false);
+ const categories=async()=>{
+  const dashboard=await t.query(api.applicantInterests.getDashboard,{sessionHash:"sister"});
+  const reviews=await t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash:"sister"});
+  return {reviews,...interestCategories(dashboard.outbound,dashboard.privateDocumented,reviews)};
+ };
+ expect((await categories()).privateDocumented.map(row=>row.interestId)).toEqual([id]);
+ await t.mutation(api.interests.updateAdminStatus,{adminSecret:secret,id,adminStatus:"requested"});
+ expect((await categories()).outbound).toHaveLength(0);
+ await t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret:secret,interestId:id,reviewTokenHash:"a".repeat(64)});
+ const shared=await categories();
+ expect(shared.outbound.map(row=>row.interestId)).toEqual([id]);
+ expect(shared.privateDocumented).toHaveLength(0);
+ expect(shared.reviews[0]).toMatchObject({ownDecision:"pending",ownAction:null,canView:true});
+ expect(shared.outbound[0].counterparty?.shareableBio).toBeNull();
+ expect(shared.outbound[0].counterparty?.email).toBeNull();
+ await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId:id,decision:"accept"});
+ expect((await categories()).outbound.map(row=>row.interestId)).toEqual([id]);
+ await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId:id,confirmed:true});
+ const matchId=(await t.run(ctx=>ctx.db.get(id)))!.matchId!;
+ await t.mutation(api.matches.updateStatus,{adminSecret:secret,id:matchId,status:"contact_shared"});
+ expect((await categories()).outbound[0].counterparty?.email).toBe("brother@example.invalid");
+ await t.mutation(api.matches.setPausedForApplicant,{sessionHash:"sister",interestId:id,paused:true});
+ expect((await categories()).outbound[0].paused).toBe(true);
+ await t.run(ctx=>ctx.db.patch(id,{status:"withdrawn"}));
+ expect((await categories()).outbound).toHaveLength(0);
+ await t.run(ctx=>ctx.db.patch(id,{status:"closed",testReset:{actor:"admin",reason:"Synthetic reset",at:Date.now()}}));
+ expect((await categories()).outbound).toHaveLength(0);
+});
