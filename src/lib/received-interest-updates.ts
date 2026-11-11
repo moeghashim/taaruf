@@ -19,7 +19,7 @@ export function receivedInterestUpdates(interests: InterestNoticeInput[], review
     const ready = !closed && !item.paused && !!item.contactSharedAt && !!(item.counterparty?.email?.trim() || item.counterparty?.phone?.trim());
     result.set(item.interestId, {
       id: item.interestId, priority: pending ? 0 : ready ? 1 : 2,
-      heading: closed ? "Connection closed" : item.paused ? "Connection paused" : ready ? "Contacts are ready" : pending ? item.canRespond && !item.canFinalApprove ? "You Have Received An Interest" : "Your review is needed" : item.direction === "outbound" ? "You Have Sent an Interest" : "Interest update",
+      heading: closed ? "Connection closed" : item.paused ? "Connection paused" : ready ? "Contacts are ready" : pending ? item.canRespond && !item.canFinalApprove ? "You Have Received An Interest" : "Your review is needed" : item.direction === "outbound" ? item.ownFinalApproval === "approved" ? "Interest Update" : "You Have Sent An Interest" : "Interest update",
       copy: closed ? closedCopy : item.paused ? "This connection is paused." : ready ? "Open your connection to see the contact details available to you." : pending ? "This connection is awaiting your review." : item.ownFinalApproval === "approved" ? approvedCopy : "No response is currently needed from you. You can review your connection.",
       ...(!closed && item.counterparty ? { href: "/me?connection=" + encodeURIComponent(item.interestId) + (item.direction === "private" ? "#private-documented-interests" : item.direction === "outbound" ? "#outbound-interests" : "#inbound-interests"), action: ready ? "View contact details" : "View interest" } : {}),
     });
@@ -32,7 +32,7 @@ export function receivedInterestUpdates(interests: InterestNoticeInput[], review
     const ready = !closed && !item.paused && !item.reviewExpired && readyIds.includes(item.interestId);
     result.set(item.interestId, {
       id: item.interestId, priority: pending ? 0 : ready ? 1 : 2,
-      heading: closed ? "Connection closed" : item.reviewExpired ? "Review invitation expired" : item.paused ? "Connection paused" : ready ? "Contacts are ready" : pending ? item.role === "brother" ? "You Have Received An Interest" : "Your review is needed" : "Interest update",
+      heading: closed ? "Connection closed" : item.reviewExpired ? "Review invitation expired" : item.paused ? "Connection paused" : ready ? "Contacts are ready" : pending ? item.role === "brother" ? "You Have Received An Interest" : "Your review is needed" : item.role === "sister" ? item.ownDecision === "approved" ? "Interest Update" : "You Have Sent An Interest" : "Interest update",
       copy: closed ? closedCopy : item.reviewExpired ? "Please contact the matchmaking team to request a new review invitation." : item.paused ? "This connection is paused." : ready ? "The team has approved sharing contact details. Open your review to see the contact details available to you." : pending ? "This connection is awaiting your review." : item.ownDecision === "approved" ? approvedCopy : "This connection is being reviewed. Contact details remain private until the team approves sharing them.",
       ...(!closed && !item.reviewExpired && (pending || item.canView) ? { href: "/dashboard?femaleReview=" + encodeURIComponent(item.interestId) + (ready ? "#contact-details" : ""), action: ready ? "View contact details" : pending ? item.role === "sister" ? "Review profile and respond" : "Review profile" : "View review" } : {}),
     });

@@ -37,12 +37,18 @@ describe("sent interest heading", () => {
   it("changes only the generic outgoing heading, not body or button", () => {
     const inbound = receivedInterestUpdates([interest("sent")], [])[0];
     const outbound = receivedInterestUpdates([sent], [])[0];
-    expect(outbound).toEqual({ ...inbound, heading: "You Have Sent an Interest", href: "/me?connection=sent#outbound-interests" });
+    expect(outbound).toEqual({ ...inbound, heading: "You Have Sent An Interest", href: "/me?connection=sent#outbound-interests" });
     expect(receivedInterestUpdates([{ ...sent, direction: "private" }], [])[0].heading).toBe("Interest update");
+  });
+  it("returns the exact neutral heading after the sender approves", () => {
+    const approved = receivedInterestUpdates([{ ...sent, status: "in_progress", flowStatus: "in_progress", ownFinalApproval: "approved" }], [])[0];
+    expect(approved.heading).toBe("Interest Update");
+    expect(approved.copy).toBe(approvedCopy);
+    expect(approved.href).toBe("/me?connection=sent#outbound-interests");
   });
   it("keeps mixed and multiple connections directionally accurate", () => {
     const notices = receivedInterestUpdates([sent, { ...sent, interestId: "sent2" }, { ...interest("received"), canRespond: true }], []);
-    expect(notices.map(item => item.heading)).toEqual(["You Have Received An Interest", "You Have Sent an Interest", "You Have Sent an Interest"]);
+    expect(notices.map(item => item.heading)).toEqual(["You Have Received An Interest", "You Have Sent An Interest", "You Have Sent An Interest"]);
   });
   for (const [patch, heading] of [
     [{ canFinalApprove: true }, "Your review is needed"],
@@ -57,7 +63,7 @@ describe("sent interest heading", () => {
     for (const role of ["brother", "sister"]) {
       const workflow = { ...review(role), interestId: "sent" };
       expect(receivedInterestUpdates([sent], [workflow])).toEqual(receivedInterestUpdates([], [workflow]));
-      expect(receivedInterestUpdates([sent], [{ ...workflow, ownAction: null }])[0].heading).toBe("Interest update");
+      expect(receivedInterestUpdates([sent], [{ ...workflow, ownAction: null }])[0].heading).toBe(role === "sister" ? "You Have Sent An Interest" : "Interest update");
     }
   });
 });
