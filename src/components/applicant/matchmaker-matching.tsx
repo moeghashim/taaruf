@@ -9,7 +9,7 @@ type Followup = { status: keyof typeof followupLabels; updatedAt: number };
 type Match = { _id: string; status: string; presentedAt?: number; contactShared: boolean; canWithdraw: boolean; canApprove: boolean; myApproval: boolean; partnerApproval: boolean; withdrawnAt?: number; myFollowup?: Followup; partnerFollowup?: Followup; partner: { publicApplicantNumber?: number; age?: number; gender?: string; maritalStatus?: string; education?: string; job?: string; ethnicity?: string; shareableBio?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string; name?: string; email?: string; phone?: string; images: {url: string; storageId: string}[] } | null };
 type Data = { optedIn: boolean; consentUpdatedAt?: number; matches: Match[] };
 const date = (time: number) => new Date(time).toLocaleString();
-export function MatchmakerMatching() {
+export function MatchmakerMatching({ onSessionExpired }: { onSessionExpired?: () => void } = {}) {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -20,20 +20,20 @@ export function MatchmakerMatching() {
     setLoading(true);
     try {
       const response = await fetch("/api/applicant/matchmaker", { cache: "no-store" });
-      if (response.status === 401) { window.location.assign(applicantLoginHref("/me#matchmaker-matching")); return; }
+      if (response.status === 401) { if (onSessionExpired) onSessionExpired(); else window.location.assign(applicantLoginHref("/me#matchmaker-matching")); return; }
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to load matchmaker matches.");
       setData(payload);
     } catch (failure) { setData(null); setError(failure instanceof Error ? failure.message : "Unable to load matches."); }
     finally { setLoading(false); }
-  }, []);
+  }, [onSessionExpired]);
   useEffect(() => { void load(); }, [load]);
   async function act(body: Record<string, unknown>, success: string) {
     if (guard.current) return;
     guard.current = true; setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch("/api/applicant/matchmaker", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (response.status === 401) { window.location.assign(applicantLoginHref("/me#matchmaker-matching")); return; }
+      if (response.status === 401) { if (onSessionExpired) onSessionExpired(); else window.location.assign(applicantLoginHref("/me#matchmaker-matching")); return; }
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to save. Please refresh and try again.");
       setMessage(success); await load();
@@ -52,7 +52,7 @@ export function MatchmakerMatching() {
           <p style={{ color: "var(--mute)", fontSize: 13 }}>You can opt out at any time. This changes future introductions only; use Withdraw on an individual match before contacts are shared. Existing shared-contact records remain available.</p>
           {data.consentUpdatedAt && <small>Preference saved {date(data.consentUpdatedAt)}</small>}
         </div>
-        {data.matches.length === 0 && <div><h3>No matchmaker introductions yet</h3><p>When the team presents a match, it will appear here. Private drafts are never shown to applicants.</p></div>}
+        {data.matches.length === 0 && <div><h3>No matchmaker introductions yet</h3><p>When the team presents a match, it will appear here.</p></div>}
         {data.matches.map(match => <article key={match._id} style={{ borderTop: "1px solid var(--line)", paddingTop: 20, display: "grid", gap: 14, minWidth: 0 }}>
           <div><h3>{match.partner?.name || (match.partner ? "Applicant #" + (match.partner.publicApplicantNumber ?? "—") : "Matchmaker introduction")}</h3><p>{match.contactShared ? "Contact details shared" : match.withdrawnAt ? "Introduction withdrawn" : ["closed", "declined"].includes(match.status) ? "Introduction closed" : match.status === "paused" ? "Introduction paused" : "A match is ready for your review"}</p>{match.presentedAt && <small>Presented {date(match.presentedAt)}</small>}</div>
           {!match.partner && <p>The other applicant’s profile is no longer available. This introduction remains in your history.</p>}

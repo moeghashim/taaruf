@@ -3,9 +3,10 @@ import { DateOfBirthField } from "@/components/date-of-birth-field";
 import { dateOfBirthError, changedDateOfBirth } from "@/lib/date-of-birth";
 import { educationOptionsFor, formatEducation } from "@/lib/education";
 
+import { portalView, portalViews, type PortalView } from "@/lib/applicant-portal-view";
 import { applicantLoginHref } from "@/lib/applicant-destination";
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
@@ -583,7 +584,7 @@ function Section({
           {interests.length} item{interests.length === 1 ? "" : "s"}
         </span>
       </div>
-      <div className="interest-workspace">
+      <div className={`interest-workspace ${interests.length ? "" : "empty"}`}>
         {interests.length ? (
           <>
             <div className="interest-list">
@@ -625,16 +626,45 @@ export default function ApplicantDashboardPage() {
   const [busy, setBusy] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
   const hasDashboard = Boolean(data);
-  const [portalTab, setPortalTab] = useState<"interests" | "matchmaker">("interests");
-  useEffect(() => { const sync = () => setPortalTab(window.location.hash === "#matchmaker-matching" ? "matchmaker" : "interests"); sync(); window.addEventListener("hashchange", sync); return () => window.removeEventListener("hashchange", sync); }, []);
+  const [view, setView] = useState<PortalView>("overview");
+  const [savedProfile, setSavedProfile] = useState("");
+  const profileDirty = Boolean(profile && savedProfile && JSON.stringify({ profile, images: uploadedImages }) !== savedProfile);
+  const unsavedRef = useRef(false);
+  unsavedRef.current = profileDirty || isUploading || isSavingProfile;
+  const [expiredLogin, setExpiredLogin] = useState<string | null>(null);
+  // Keep the editor mounted across navigation so Back/Forward never loses edits.
+  useEffect(() => {
+    const sync = () => { setView(portalView(window.location.hash, window.location.search)); setSideOpen(false); };
+    sync();
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("popstate", sync);
+    return () => { window.removeEventListener("hashchange", sync); window.removeEventListener("popstate", sync); };
+  }, []);
+  useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    if (profileDirty || isUploading || isSavingProfile) window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [profileDirty, isUploading, isSavingProfile]);
+  useEffect(() => {
+    document.title = portalViews.find(item => item.id === view)!.label + " · Taaruf";
+  }, [view]);
   const [sideOpen, setSideOpen] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(false);
 
   const applicantFetch = useCallback(async (url: string, init?: RequestInit) => {
-    const loginHref = applicantLoginHref(window.location.pathname + window.location.search);
+    const loginHref = applicantLoginHref(window.location.pathname + window.location.search + window.location.hash);
     const response = await fetch(url, init);
-    if (response.status === 401) router.replace(loginHref);
+    if (response.status === 401) {
+      if (unsavedRef.current) setExpiredLogin(loginHref);
+      else router.replace(loginHref);
+    }
     return response;
+  }, [router]);
+
+  const onMatchmakerSessionExpired = useCallback(() => {
+    const href = applicantLoginHref("/me#matchmaker-matching");
+    if (unsavedRef.current) setExpiredLogin(href);
+    else router.replace(href);
   }, [router]);
 
   const load = useCallback(async () => {
@@ -714,11 +744,14 @@ export default function ApplicantDashboardPage() {
       if (!response.ok) throw new Error(payload.error || "Failed to load profile");
       const registration = payload.registration;
       setOriginalDateOfBirth(registration.dateOfBirth);
-      setProfile({
+      const loadedProfile = {
         ...registration,
         interestSubmissionNumbers: ((registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
-      });
-      setUploadedImages(uploadedImagesFromProfile(registration));
+      };
+      const images = uploadedImagesFromProfile(registration);
+      setProfile(loadedProfile);
+      setUploadedImages(images);
+      setSavedProfile(JSON.stringify({ profile: loadedProfile, images }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -944,6 +977,7 @@ export default function ApplicantDashboardPage() {
   }
 
   async function logout() {
+    if ((profileDirty || isUploading || isSavingProfile) && !window.confirm("Leave without saving your profile changes?")) return;
     await fetch("/api/applicant/logout", { method: "POST" });
     router.replace("/login");
   }
@@ -984,7 +1018,6 @@ export default function ApplicantDashboardPage() {
     .slice(0, 2)
     .join("")
     .toUpperCase();
-  const privateCount = data.applicant.gender === "female" ? data.privateDocumented.length : null;
   const completedProfile = data.applicant.profileCompletionStatus === "completed";
   const hijabLabel = hijabQuestion(profile?.gender);
 
@@ -1003,32 +1036,10 @@ export default function ApplicantDashboardPage() {
           <nav className="side-nav">
             <div className="nav-section">
               <h5>Portal</h5>
-              <a className={`nav-item ${portalTab === "interests" ? "active" : ""}`} href="#overview" onClick={() => setSideOpen(false)}>
-                <span className="icon">{Ico.dash}</span>
-                <span>Overview</span>
-              </a>
-              <a className="nav-item" href="#inbound-interests" onClick={() => setSideOpen(false)}>
-                <span className="icon">{Ico.inbox}</span>
-                <span>Inbound</span>
-                <span className="count">{data.inbound.length}</span>
-              </a>
-              <a className="nav-item" href="#outbound-interests" onClick={() => setSideOpen(false)}>
-                <span className="icon">{Ico.heart}</span>
-                <span>Outbound</span>
-                <span className="count">{data.outbound.length}</span>
-              </a>
-              <a className={`nav-item ${portalTab === "matchmaker" ? "active" : ""}`} href="#matchmaker-matching" onClick={() => { setPortalTab("matchmaker"); setSideOpen(false); }}><span className="icon">{Ico.heart}</span><span>Matchmaker Matching</span></a>
-              <a className="nav-item" href="#profile" onClick={() => setSideOpen(false)}>
-                <span className="icon">{Ico.people}</span>
-                <span>Profile</span>
-              </a>
-              {privateCount !== null && (
-                <a className="nav-item" href="#private-documented-interests" onClick={() => setSideOpen(false)}>
-                  <span className="icon">{Ico.pipeline}</span>
-                  <span>Private</span>
-                  <span className="count">{privateCount}</span>
-                </a>
-              )}
+              {portalViews.map(item => <a key={item.id} className={`nav-item ${view === item.id ? "active" : ""}`} href={item.href} aria-current={view === item.id ? "page" : undefined} onClick={() => setSideOpen(false)}>
+                <span className="icon">{item.id === "overview" ? Ico.dash : item.id === "profile" ? Ico.people : Ico.heart}</span>
+                <span>{item.label}</span>
+              </a>)}
             </div>
             <div className="nav-section">
               <h5>Account</h5>
@@ -1059,7 +1070,7 @@ export default function ApplicantDashboardPage() {
               <span style={{ color: "var(--line)" }}>›</span>
               <span>Applicant</span>
               <span style={{ color: "var(--line)" }}>›</span>
-              <span className="now">Dashboard</span>
+              <span className="now">{portalViews.find(item => item.id === view)!.label}</span>
             </div>
             <div className="topbar-actions">
               <button type="button" className="btn" onClick={logout}>
@@ -1068,11 +1079,11 @@ export default function ApplicantDashboardPage() {
             </div>
           </div>
 
-          <div id="overview" className="content">
+          <div className="content">
             <div className="page-head">
               <div>
                 <h1>
-                  Assalāmu <em>ʿalaykum</em>, {data.applicant.name}.
+                  {view === "overview" ? <>Assalāmu <em>ʿalaykum</em>, {data.applicant.name}.</> : portalViews.find(item => item.id === view)!.label}
                 </h1>
                 <p>
                   Applicant #{data.applicant.applicantNumber ?? "-"} · {titleize(data.applicant.gender)} portal
@@ -1080,11 +1091,15 @@ export default function ApplicantDashboardPage() {
               </div>
             </div>
 
-            <div role="tablist" aria-label="Matching" onKeyDown={event => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? "interests" : event.key === "End" ? "matchmaker" : portalTab === "interests" ? "matchmaker" : "interests"; setPortalTab(next); document.getElementById(next === "interests" ? "interests-tab" : "matchmaker-tab")?.focus(); window.history.replaceState(null, "", next === "interests" ? "#overview" : "#matchmaker-matching"); }} style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}><button role="tab" tabIndex={portalTab === "interests" ? 0 : -1} id="interests-tab" aria-controls="interests-panel" aria-selected={portalTab === "interests"} className={`btn ${portalTab === "interests" ? "btn-primary" : ""}`} onClick={() => { setPortalTab("interests"); window.history.replaceState(null, "", "#overview"); }}>Applicant interests</button><button role="tab" tabIndex={portalTab === "matchmaker" ? 0 : -1} id="matchmaker-tab" aria-controls="matchmaker-panel" aria-selected={portalTab === "matchmaker"} className={`btn ${portalTab === "matchmaker" ? "btn-primary" : ""}`} onClick={() => { setPortalTab("matchmaker"); window.history.replaceState(null, "", "#matchmaker-matching"); }}>Matchmaker Matching</button></div>
-            {portalTab === "matchmaker" && <div role="tabpanel" id="matchmaker-panel" aria-labelledby="matchmaker-tab"><MatchmakerMatching /></div>}
-            <div role="tabpanel" id="interests-panel" aria-labelledby="interests-tab" hidden={portalTab !== "interests"}>
-            {data.applicant.status === "approved" && <FemaleReviews />}
-
+            <nav className="portal-pages" aria-label="Applicant pages">
+              {portalViews.map(item => <a key={item.id} href={item.href} className={`btn ${view === item.id ? "btn-primary" : ""}`} aria-current={view === item.id ? "page" : undefined}>{item.label}</a>)}
+            </nav>
+            {expiredLogin && <p role="alert" className="notice error">Your session expired. Your unsaved changes remain on this page. <a href={expiredLogin}>Sign in again</a> before continuing; leaving this page will discard unsaved changes.</p>}
+            {profileDirty && view !== "profile" && <p className="notice">Your unsaved profile changes are kept here. <a href="#profile">Return to My Profile</a> to save.</p>}
+            <div role="status" aria-live="polite" aria-atomic="true">{message && <p className="notice success">{message}</p>}</div>
+            {error && <p role="alert" className="notice error">{error}</p>}
+            {view === "matchmaker" && <MatchmakerMatching onSessionExpired={onMatchmakerSessionExpired} />}
+            <div hidden={view !== "overview"} id="overview">
             <div className="stats">
               <div className="stat">
                 <h4>Inbound</h4>
@@ -1177,6 +1192,10 @@ export default function ApplicantDashboardPage() {
               )}
             </section>
 
+            <p className="portal-next"><a href="#applicant-interests">Review applicant interests</a> · <a href="#profile">Update my profile</a></p>
+            </div>
+            <div hidden={view !== "interests"} id="applicant-interests">
+            {data.applicant.status === "approved" && <FemaleReviews />}
             <div className="panel interest-submit-panel">
               <div className="panel-head">
                 <div>
@@ -1209,17 +1228,13 @@ export default function ApplicantDashboardPage() {
               })}
             </div>
 
-            <div role="status" aria-live="polite" aria-atomic="true">
-              {message && <p className="notice success">{message}</p>}
             </div>
-            {error && <p className="notice error">{error}</p>}
-
-            <div className="applicant-sections">
+            <div hidden={view !== "profile"}>
               <section id="profile" className="panel applicant-section">
                 <div className="panel-head">
                   <div>
-                    <h3>Profile</h3>
-                    <p>Edit your education, ethnicity, photos and matching profile here.</p>
+                    <h2>My Profile</h2>
+                    <p>Edit your date of birth, education, ethnicity, photos and matching profile here.</p>
                   </div>
                   <Pill tone={completedProfile ? "green" : "amber"}>
                     {titleize(data.applicant.profileCompletionStatus)}
@@ -1385,6 +1400,8 @@ export default function ApplicantDashboardPage() {
                 )}
               </section>
 
+            </div>
+            <div hidden={view !== "interests"} className="applicant-sections">
               <Section
                 title="Inbound Interests"
                 description="People who expressed interest in you."
@@ -1411,7 +1428,6 @@ export default function ApplicantDashboardPage() {
                   busy={busy}
                 />
               )}
-            </div>
             </div>
           </div>
         </div>
