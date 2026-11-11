@@ -224,14 +224,15 @@ async function serializeInterest(
 
   const internalStatus = flowStatus(flow, interest);
   const ownFinalApproval = (direction === "inbound" ? flow?.recipientFinalApproval : flow?.requesterFinalApproval) ?? "pending";
-  const paused = interest.matchId ? (await ctx.db.get(interest.matchId))?.status === "paused" : false;
+  const released = await contactsVisible(ctx, interest, flow);
+  const paused = released && interest.matchId ? (await ctx.db.get(interest.matchId))?.status === "paused" : false;
   const closed = ["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(internalStatus);
   const canRespond = viewer.status === "approved" && !closed && !paused && !interest.femaleWorkflow && direction === "inbound" && interest.visibility !== "internal_only" && ["awaiting_inbound_response", "kept_open"].includes(internalStatus);
   const canFinalApprove = viewer.status === "approved" && !closed && !interest.femaleWorkflow && !paused && Boolean(flow?.bioVisibleAt) && ownFinalApproval === "pending" && !["contact_shared", "declined", "closed"].includes(internalStatus);
   return {
     interestId: interest._id,
     ...(interest.femaleWorkflow ? { femaleWorkflow: true } : {}),
-    canPause: !closed && Boolean(interest.matchId),
+    canPause: !closed && released && Boolean(interest.matchId),
     paused,
     direction,
     status: closed ? "closed" : internalStatus === "contact_shared" ? "contact_shared" : "in_progress",
@@ -239,6 +240,7 @@ async function serializeInterest(
     canRespond,
     canFinalApprove,
     canWithdraw: !interest.femaleWorkflow && (direction === "outbound" || direction === "private") && ["awaiting_inbound_response", "kept_open", "private_documented"].includes(internalStatus),
+    ownInitialDecision: direction === "inbound" ? flow?.recipientDecision ?? "pending" : null,
     ownFinalApproval,
     visibility: interest.visibility,
     createdAt: interest.createdAt,
@@ -331,7 +333,11 @@ export const getDashboard = query({
       // Closed rows carry only the viewer's own receipt, never restored profile access.
       history: await Promise.all([...inboundRows, ...outboundRows].filter(row => !row.testReset && !row.femaleWorkflow && !isVisibleInApplicantDashboard(row) && (row.fromRegistrationId === registration._id || row.visibility !== "internal_only")).map(async row => {
         const flow = await ensureFlowForQuery(ctx, row);
-        return { interestId: row._id, status: "closed", ownDecision: row.fromRegistrationId === registration._id && row.status === "withdrawn" ? "withdrawn" : row.toRegistrationId === registration._id && flow?.recipientDecision === "declined" ? "declined" : (row.fromRegistrationId === registration._id ? flow?.requesterFinalApproval : flow?.recipientFinalApproval) ?? "pending" };
+        return { interestId: row._id, status: "closed",
+          ownInitialDecision: row.toRegistrationId === registration._id ? flow?.recipientDecision ?? "pending" : null,
+          ownFinalApproval: (row.fromRegistrationId === registration._id ? flow?.requesterFinalApproval : flow?.recipientFinalApproval) ?? "pending",
+          ownDecision: row.fromRegistrationId === registration._id && row.status === "withdrawn" ? "withdrawn" : null,
+        };
       })),
       privateDocumented: await Promise.all(
         privateDocumented.map((interest) => serializeInterest(ctx, registration, interest, byId, "private"))
@@ -371,7 +377,7 @@ export const submitInterestNumber = mutation({
     const retry = previous.find(row => row.toRegistrationId === target._id);
     if (retry) {
       if (!isVisibleInApplicantDashboard(retry)) throw new Error("Interest already submitted for this event");
-      return { interestId: retry._id, matchId: retry.matchId ?? null, private: retry.visibility === "internal_only", inboundInterestNotification: null };
+      return { interestId: retry._id, private: retry.visibility === "internal_only", inboundInterestNotification: null };
     }
 
     const result = await createApplicantInterestWithRules(ctx, {
@@ -408,7 +414,6 @@ export const submitInterestNumber = mutation({
 
     return {
       interestId: result.interestId,
-      matchId: result.matchId,
       private: interest.visibility === "internal_only",
       inboundInterestNotification: shouldNotifyInboundRecipient
         ? { interestId: interest._id }

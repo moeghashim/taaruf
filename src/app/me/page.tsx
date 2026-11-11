@@ -29,6 +29,7 @@ type DashboardInterest = {
   visibility: string;
   keepOpenExpiresAt: number | null;
   contactSharedAt: number | null;
+  ownInitialDecision?: string | null;
   ownFinalApproval: string;
   canRespond: boolean;
   canFinalApprove: boolean;
@@ -74,7 +75,7 @@ type DashboardData = {
   inbound: DashboardInterest[];
   outbound: DashboardInterest[];
   privateDocumented: DashboardInterest[];
-  history?: { interestId: string; status: string; ownDecision: string }[];
+  history?: { interestId: string; status: string; ownDecision: string | null; ownInitialDecision?: string | null; ownFinalApproval?: string }[];
   canSubmitInterest: boolean;
   interestSubmissionLimit: number;
   interestSubmissionEventId: string | null;
@@ -354,6 +355,7 @@ function ProfileSideCard({
         <p className="notice warning">Keep Open expires {formatDate(interest.keepOpenExpiresAt)}.</p>
       )}
 
+      {interest.ownInitialDecision && interest.ownInitialDecision !== "pending" && <p className="notice">Your initial response: {titleize(interest.ownInitialDecision)}.</p>}
       {viewerFinalApproval === "approved" && interest.flowStatus !== "contact_shared" && (
         <p className="notice success">Your final approval is recorded. Contact details remain private.</p>
       )}
@@ -1370,7 +1372,7 @@ export default function ApplicantDashboardPage() {
 
             </div>
             <div hidden={view !== "interests"} className="applicant-sections">
-              {!!data.history?.length && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{data.history.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
+              {!!data.history?.length && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{data.history.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
               <Section
                 title="Inbound Interests"
                 description="People who expressed interest in you."

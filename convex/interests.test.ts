@@ -830,5 +830,5 @@ test("public final approval receipts hide delivery eligibility and preserve own 
  expect(second).toMatchObject({flowId:null,matchId:null,finalApprovalNotification:null});
  expect(await t.run(ctx=>ctx.db.get(interestId))).toMatchObject({matchId:expect.any(String)});
  await t.run(ctx=>ctx.db.patch(interestId,{status:"closed"}));
- for(const sessionHash of [ms,fs]){const d=await t.query(api.applicantInterests.getDashboard,{sessionHash});expect(d.history).toEqual([{interestId,status:"closed",ownDecision:"approved"}]);}
+ for(const sessionHash of [ms,fs]){const d=await t.query(api.applicantInterests.getDashboard,{sessionHash});expect(d.history).toEqual([{interestId,status:"closed",ownDecision:null,ownFinalApproval:"approved",ownInitialDecision:sessionHash===fs?"accepted":null}]);}
 });

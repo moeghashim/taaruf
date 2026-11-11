@@ -73,7 +73,8 @@ for (const source of sources) for (const femaleOrigin of [false, true]) test(`${
   expect(row.eventId).toBe(w.event);
   const matchId = row.matchId!;
   expect(await w.t.run(ctx => ctx.db.get(matchId))).toMatchObject({ status: "reviewing", contactGate: "pending_admin_approval" });
-  await w.t.mutation(api.matches.setPausedForApplicant, { sessionHash: "session-0", interestId, paused: true });
+  await expect(w.t.mutation(api.matches.setPausedForApplicant, { sessionHash: "session-0", interestId, paused: true })).rejects.toThrow("Pause unavailable until contact release");
+  await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "paused" });
   await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "paused", adminNotes: "Paused notes retained" });
   expect((await w.t.run(ctx => ctx.db.get(matchId)))?.adminNotes).toBe("Paused notes retained");
   await expect(w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "contact_shared" })).rejects.toThrow("not active");
@@ -307,4 +308,50 @@ test("private draft never reserves applicants or prevents ordinary consent and c
   await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: official, status: "contact_shared" });
   expect((await w.t.run(ctx => ctx.db.get(official)))?.status).toBe("contact_shared");
   expect(await w.t.run(ctx => ctx.db.get(draft))).toEqual(before);
+});
+
+for (const female of [false, true]) test("real counterpart join does not change prior approver payload or pause probes: " + female, async () => {
+  const w = await publicWorld();
+  const interestId = await w.submit("platform_submission", female ? 1 : 0, female ? 0 : 1);
+  await w.open(interestId, female);
+  if (female) await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId, decision: "accept" });
+  else await w.t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "session-0", interestId, approved: true });
+  const payload = async () => female ? {
+    list: await w.t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "session-0", paginationOpts: {numItems: 50, cursor: null} }),
+    detail: await w.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "session-0", interestId }),
+  } : await w.t.query(api.applicantInterests.getDashboard, { sessionHash: "session-0", connectionId: interestId });
+  const retry = () => w.t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash: female ? "session-1" : "session-0", expectedEventId: w.event, applicantNumber: female ? 1 : 2, applicantName: female ? "Brother" : "Sister" });
+  const probe = async () => {
+    for (const sessionHash of ["session-0", "session-1"]) for (const paused of [false, true])
+      await expect(w.t.mutation(api.matches.setPausedForApplicant, { sessionHash, interestId, paused })).rejects.toThrow("Pause unavailable until contact release");
+  };
+  const before = await payload();
+  const receipt = await retry();
+  expect(receipt).not.toHaveProperty("matchId");
+  await probe();
+  if (female) await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId, confirmed: true });
+  else await w.t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "session-1", interestId, approved: true });
+  const matchId = (await w.t.run(ctx => ctx.db.get(interestId)))!.matchId!;
+  expect(matchId).toBeTruthy();
+  expect(await payload()).toEqual(before);
+  expect(await retry()).toEqual(receipt);
+  await probe();
+  await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "contact_shared" });
+  for (const paused of [true, false]) await w.t.mutation(api.matches.setPausedForApplicant, { sessionHash: "session-0", interestId, paused });
+});
+
+for (const decision of ["accept", "keep_open", "decline"] as const) test("own initial receipt survives closure independently of final approval: " + decision, async () => {
+  const w = await publicWorld();
+  const interestId = await w.submit("platform_submission");
+  await w.t.mutation(api.applicantInterests.respondToInbound, { sessionHash: "session-1", interestId, decision });
+  const expected = decision === "accept" ? "accepted" : decision === "keep_open" ? "kept_open" : "declined";
+  if (decision !== "decline") {
+    const dashboard = await w.t.query(api.applicantInterests.getDashboard, {sessionHash: "session-1"});
+    expect(dashboard.inbound[0]).toMatchObject({ownInitialDecision: expected, ownFinalApproval: "pending"});
+    if (decision === "accept") await w.t.mutation(api.applicantInterests.giveFinalApproval, {sessionHash: "session-0", interestId, approved: false});
+    else await w.t.mutation(api.applicantInterests.withdrawOutbound, {sessionHash: "session-0", interestId});
+  }
+  const history = (await w.t.query(api.applicantInterests.getDashboard, {sessionHash: "session-1"})).history;
+  expect(history[0]).toMatchObject({ownInitialDecision: expected, ownFinalApproval: "pending"});
+  expect(history[0]).not.toHaveProperty("counterparty");
 });

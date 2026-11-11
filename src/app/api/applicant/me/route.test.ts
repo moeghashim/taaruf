@@ -196,6 +196,12 @@ for (const confirmed of [false, true]) test(`selected older female review suppor
   if (!confirmed) { expect((await get()).status).toBe(409); return; }
   expect((await (await get()).json()).state).toBe("in_review");
   for (const paused of [true, false]) {
+    const response = await interestPOST(new NextRequest("https://synthetic.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify({ action: paused ? "pause_connection" : "resume_connection", interestId: id }) }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({error: "Pause unavailable until contact release"});
+  }
+  await t.mutation(api.femaleInterestWorkflow.releaseContacts, {adminSecret: secret, interestId: id});
+  for (const paused of [true, false]) {
     const action = paused ? "pause_connection" : "resume_connection";
     expect((await interestPOST(new NextRequest("https://synthetic.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify({ action, interestId: id }) }))).status).toBe(200);
     const response = await get(); expect(response.status).toBe(200);

@@ -3,7 +3,7 @@ import { currentSisterConfirmation } from "./sisterConfirmationActivation";
 import { currentAge } from "./birthdays";
 import { deliveryAuthorized } from "./brotherReviewActivation";
 import { sessionAllowed } from "./capabilitySecurity";
-import { enqueueContactDelivery, deliveryParticipants, linkedFlows, recordPairApproval, releasePairContacts } from "./contactGate";
+import { contactsVisible, enqueueContactDelivery, deliveryParticipants, linkedFlows, recordPairApproval, releasePairContacts } from "./contactGate";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
@@ -72,18 +72,18 @@ function dashboardRows(ctx: ReadCtx, person: Doc<"registrations">) {
     : ctx.db.query("interests").withIndex("by_fromRegistrationId_and_testReset", q => q.eq("fromRegistrationId", person._id).eq("testReset", undefined));
 }
 // Applicant projection: workflow stages and counterpart decisions remain server-only.
-function applicantReview(row: Doc<"interests">, role: "brother" | "sister", flow: Doc<"interestFlows"> | null, paused = false, closed = false) {
+function applicantReview(row: Doc<"interests">, role: "brother" | "sister", flow: Doc<"interestFlows"> | null, paused = false, closed = false, released = false) {
   const workflow = row.femaleWorkflow!;
   const ownDecision = (role === "brother" ? flow?.recipientFinalApproval : flow?.requesterFinalApproval)
     ?? ((role === "brother" ? workflow.brotherAcceptedAt : workflow.sisterConfirmedAt) !== undefined ? "approved" : "pending");
   const ownReview = role === "brother" ? workflow.state === "awaiting_brother_review" : workflow.state === "awaiting_sister_confirmation" && !row.matchId;
   const expired = role === "brother" && ownReview && (!workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now());
-  return { interestId: row._id, role, paused, ownDecision,
+  return { interestId: row._id, role, paused: released && paused, ownDecision,
     state: closed ? "closed" as const : workflow.state === "contacts_released" ? "contacts_released" as const : "in_review" as const,
     ownAction: !closed && !paused && ownReview && !expired ? "review" as const : null,
     reviewExpired: !closed && expired,
-    // Capability only, not a match identifier that exposes bilateral progression.
-    canPause: !closed && !!row.matchId,
+    // Match creation is private until contact release.
+    canPause: !closed && released && !!row.matchId,
     canView: !closed && workflow.state !== "private_documented" && !!workflow.reviewTokenHash,
   };
 }
@@ -92,7 +92,7 @@ async function visibleReviews(ctx: ReadCtx, person: Doc<"registrations">, rows: 
   for (const row of rows) {
     if (!row.femaleWorkflow || (person.gender === "male" && (row.femaleWorkflow.state === "private_documented" || !row.femaleWorkflow.reviewTokenHash))) continue;
     const role = person.gender === "male" ? "brother" as const : "sister" as const;
-    try { const { flow, match } = await active(ctx, row._id, true); result.push(applicantReview(row, role, flow, match?.status === "paused")); }
+    try { const { flow, match } = await active(ctx, row._id, true); result.push(applicantReview(row, role, flow, match?.status === "paused", false, await contactsVisible(ctx, row, flow))); }
     catch {
       // Retain only neutral history, never restore profile/contact access on closure.
       if (row.testReset) continue;
@@ -126,7 +126,7 @@ export const getReviewAccess = query({ args: reviewArgs, handler: async (ctx, ar
   const photos = person._id === data.brother._id && data.interest.senderPhotoConsent === "yes" && data.interest.senderPhotoConsentRevokedAt === undefined;
   const imageUrls = photos ? (await Promise.all((profile.imageStorageIds ?? []).map(id => ctx.storage.getUrl(id)))).filter((url): url is string => !!url) : [];
   const released = data.workflow.state === "contacts_released" && !!data.workflow.adminReleasedAt;
-  return { ...applicantReview(data.interest, person._id === data.brother._id ? "brother" : "sister", data.flow, data.match?.status === "paused"),
+  return { ...applicantReview(data.interest, person._id === data.brother._id ? "brother" : "sister", data.flow, data.match?.status === "paused", false, await contactsVisible(ctx, data.interest, data.flow)),
     profile: { ...(person._id === data.brother._id ? {} : { name: profile.name }), label: person._id === data.brother._id ? `Applicant #${profile.publicApplicantNumber ?? "—"}` : profile.name, applicantNumber: profile.publicApplicantNumber ?? null, age: await currentAge(ctx, profile), maritalStatus: profile.maritalStatus, education: profile.education, job: profile.job, ethnicity: profile.ethnicity ?? null, shareableBio: await interestBioVisible(ctx, data.interest) ? profile.shareableBio ?? null : null, prayerCommitment: profile.prayerCommitment ?? null, hijabResponse: profile.hijabResponse ?? null, spouseRequirement1: profile.spouseRequirement1 ?? null, spouseRequirement2: profile.spouseRequirement2 ?? null, spouseRequirement3: profile.spouseRequirement3 ?? null, imageUrls, email: released ? profile.email : null, phone: released ? profile.phone : null } };
 }});
 export const respond = mutation({ args: { ...reviewArgs, decision: v.union(v.literal("accept"), v.literal("decline")) }, handler: async (ctx, args) => {

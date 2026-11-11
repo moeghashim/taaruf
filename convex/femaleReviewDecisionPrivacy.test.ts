@@ -72,7 +72,7 @@ test("expiry, reset, pause and authorization retain their gates",async()=>{
  await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"accept"});
  await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId,confirmed:true});
  await t.run(async ctx=>{const row=(await ctx.db.get(interestId))!;await ctx.db.patch(row.matchId!,{status:"paused"});});
- expect(await t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"sister",interestId})).toMatchObject({paused:true,ownAction:null,profile:{email:null,phone:null}});
+ expect(await t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"sister",interestId})).toMatchObject({paused:false,ownAction:null,profile:{email:null,phone:null}});
  await expect(t.mutation(api.femaleInterestWorkflow.releaseContacts,{adminSecret,interestId})).rejects.toThrow("unavailable");
  await t.run(ctx=>ctx.db.patch(interestId,{testReset:{at:Date.now(),actor:"admin",reason:"synthetic"}}));
  for(const sessionHash of ["sister","brother"])expect(await t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash})).toEqual([]);

@@ -20,6 +20,7 @@ function applicantInterestErrorResponse(error: unknown) {
   if (/interest submissions|submission event|approved and have attended|expectedEventId/i.test(message)) {
     return NextResponse.json({ error: "Interest availability has changed. Submissions require an enabled event and approved, confirmed, checked-in attendance. Please check the updated availability and try again." }, { status: 409 });
   }
+  if (message.includes("Pause unavailable until contact release")) return NextResponse.json({ error: "Pause unavailable until contact release" }, { status: 409 });
   for (const safeMessage of ["Applicant details could not be verified", "You can submit a maximum of 3 interests per event", "Interest already submitted for this event"]) {
     if (message.includes(safeMessage)) return NextResponse.json({ error: safeMessage }, { status: 400 });
   }
