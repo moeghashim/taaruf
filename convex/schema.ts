@@ -138,6 +138,9 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  deliveryCancellationAudits: defineTable({
+    operationKey: v.string(), authorization: v.string(), snapshot: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
   photoUploads: defineTable({
     storageId: v.id("_storage"),
     registrationId: v.optional(v.id("registrations")),

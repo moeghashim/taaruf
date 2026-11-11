@@ -683,3 +683,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Added narrowly scoped combined brother/sister notification mode with independent cutoffs, stale recipient/sender retry cancellation, coexistence/security tests and activation checklist; no production changes.
+
+## 2026-11-10 — cancellation3275 integration
+- Applied unchanged approved cancellation module/tests and additive audit table atop ede0c54; preserved sister email fields and all latest source. No deployment or operational mutation.
