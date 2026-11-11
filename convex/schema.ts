@@ -138,6 +138,9 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  interestReopenAudits: defineTable({
+    operationKey: v.string(), interestId: v.id("interests"), fingerprint: v.string(), snapshot: v.string(), actor: v.literal("admin"), reason: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
   deliveryCancellationAudits: defineTable({
     operationKey: v.string(), authorization: v.string(), snapshot: v.string(), createdAt: v.number(),
   }).index("by_operationKey", ["operationKey"]),
