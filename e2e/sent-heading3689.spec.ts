@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Production Next renderer; synthetic authorized GETs only.
 // Run with playwright.sent3689.config.ts; no auth/Convex or real writes.
-const origin = "http://127.0.0.1:3689";
+const origin = process.env.HEADING_TEST_ORIGIN || "http://127.0.0.1:3689";
 test.use({ baseURL: origin, serviceWorkers: "block" });
 type Role = "brother" | "sister";
 const interest = (id: string, direction = "inbound", final = false) => ({
@@ -87,6 +87,9 @@ for (const role of ["brother", "sister"] as const) for (const width of [390, 128
     state.me.outbound[0].canFinalApprove = true;
     await refresh(page, state, "/api/applicant/me"); await expect(sent.getByRole("heading")).toHaveText("Your review is needed");
     state.me.outbound[0].canFinalApprove = false;
+    state.me.outbound[0].ownFinalApproval = "approved";
+    state.me.outbound[0].status = "in_progress"; state.me.outbound[0].flowStatus = "in_progress";
+    await refresh(page, state, "/api/applicant/me"); await expect(sent.getByRole("heading")).toHaveText("Interest Update");
     state.me.outbound[0].contactSharedAt = Date.now(); state.me.outbound[0].counterparty.email = "synthetic@example.test";
     await refresh(page, state, "/api/applicant/me"); await expect(sent.getByRole("heading")).toHaveText("Contacts are ready");
     state.me.outbound[0].paused = true;

@@ -779,3 +779,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Independent review P2 fixed: optional contact verification failures no longer clear other reviews; verified generic actions remain available when the workflow list fails, without restoring ambiguous idle fallbacks. Added mixed-failure regression.
 
 - Omar3689: changed only generic outbound notice heading to exact "You Have Sent an Interest" in the shared portal projection; retained lifecycle/workflow precedence, received wording, body and CTAs. Added 18-unit suite and four read-only desktop/mobile male/female production-browser scenarios; types, scoped lint and build passed. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Partial correction for Omar3710: generic outbound heading returns to exact Interest Update after own final approval; added unit/browser regression. Literal any-admin/user approval condition remains blocked by private public projections; no backend/data/deploy/certification.
