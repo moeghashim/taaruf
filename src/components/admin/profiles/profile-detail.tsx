@@ -1,4 +1,5 @@
 "use client";
+import { ChangeEmailForm } from "./change-email-form";
 import { interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 
@@ -77,6 +78,7 @@ function ProfileDetailBody({
 
 
   const [savedNotes, setSavedNotes] = useState(profile.adminNotes ?? "");
+  const [emailDirty, setEmailDirty] = useState(false);
   const dirty = notes !== savedNotes;
   // Follow subscriptions while clean; never replace an unsaved local draft.
   useEffect(() => {
@@ -85,13 +87,13 @@ function ProfileDetailBody({
     setNotes(incoming);
     setSavedNotes(incoming);
   }, [profile.adminNotes, dirty, savingNotes]);
-  useEffect(() => { onDirtyChange?.(dirty || savingNotes || busyAction !== null); }, [dirty, savingNotes, busyAction, onDirtyChange]);
+  useEffect(() => { onDirtyChange?.(dirty || emailDirty || savingNotes || busyAction !== null); }, [dirty, emailDirty, savingNotes, busyAction, onDirtyChange]);
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty && !emailDirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  }, [dirty, emailDirty]);
 
 
   const facts: Fact[] = [
@@ -215,6 +217,8 @@ function ProfileDetailBody({
       <div style={{ marginBottom: 24 }}>
         <FactList facts={facts} />
       </div>
+
+      <ChangeEmailForm registrationId={profile._id} email={profile.email} onDirtyChange={setEmailDirty} />
 
       {sectionHeading("Interest snapshot")}
       <div

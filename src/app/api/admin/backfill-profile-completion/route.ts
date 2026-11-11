@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
         const token = await convexClient.mutation(api.registrations.ensureProfileAccessToken, {
           adminSecret: getAdminSecret(),
           id: registration._id,
+          expectedEmail: registration.email,
           token: crypto.randomBytes(24).toString("hex"),
         });
 
