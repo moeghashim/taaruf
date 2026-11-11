@@ -48,7 +48,8 @@ test("concurrent acceptance queues once; email and authenticated GET never creat
  for(const value of ["Synthetic Brother","brother@example.com","5550100",hash,"photo"])expect(payload.text).not.toContain(value);
  await f.t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"sister",interestId:f.interestId});await expect(f.t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"other",interestId:f.interestId})).rejects.toThrow("Unauthorized");
  expect(await f.t.run(ctx=>ctx.db.query("matches").take(10))).toEqual([]);expect((await f.t.run(ctx=>ctx.db.query("interestFlows").first()))?.requesterFinalApproval).toBe("pending");
- await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId:f.interestId,confirmed:true});expect(await f.t.run(ctx=>ctx.db.query("matches").take(10))).toHaveLength(1);
+ await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId:f.interestId,confirmed:true});expect(await f.t.run(ctx=>ctx.db.query("matches").take(10))).toHaveLength(0);
+ await f.t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"brother",interestId:f.interestId,approved:true});expect(await f.t.run(ctx=>ctx.db.query("matches").take(10))).toHaveLength(1);
 });
 for(const status of [429,500,400])test("sister provider retry stable payload/key "+status,async()=>{
  const f=await prepared();await accept(f);const provider=vi.fn().mockResolvedValueOnce(new Response("{}",{status})).mockResolvedValue(new Response("{}",{status:200}));vi.stubGlobal("fetch",provider);

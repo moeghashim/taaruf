@@ -38,7 +38,9 @@ test("private -> authenticated read only review -> explicit accept -> one pendin
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
   expect(await t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").take(100))).toHaveLength(2);
   const first = await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: interestId, approved: true });
   const second = await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: interestId, approved: true });
   expect(first).toEqual({ ownDecision: "approved" });
   expect(second).toEqual(first);
   const matchId = (await t.run(ctx => ctx.db.get(interestId)))!.matchId!;
@@ -114,6 +116,7 @@ test("disabled email fails closed; per-recipient retry and provider idempotency"
 test("one recipient failure never resends successful sibling; abandoned lease recovers safely", async () => {
   const { t, interestId } = await accepted();
   await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: interestId, approved: true });
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com"); vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "test@example.com"); vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "synthetic-only");
   const fetchMock = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 200 })).mockResolvedValueOnce(new Response("", { status: 500 })).mockResolvedValue(new Response("{}", { status: 200 })); vi.stubGlobal("fetch", fetchMock);
   await t.action(internal.femaleWorkflowDelivery.drain, {});
@@ -134,6 +137,7 @@ test("one recipient failure never resends successful sibling; abandoned lease re
 test("closed match, revoked session and unrelated bound match cannot expose review", async () => {
   const { t, interestId } = await accepted();
   await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: interestId, approved: true });
   const matchId = (await t.run(ctx => ctx.db.get(interestId)))!.matchId!;
   await t.mutation(api.matches.updateStatus, { adminSecret, id: matchId, status: "closed" });
   await expect(t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId })).rejects.toThrow("unavailable");
@@ -155,7 +159,7 @@ for (const sessionHash of ["brother", "sister"]) test(sessionHash + " discovers 
   expect(first.page.some(r => r.interestId === fresh)).toBe(true); expect(first.isDone).toBe(false);
   const empty = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { cursor: first.continueCursor, numItems: 50 } });
   expect(empty.page).toHaveLength(sessionHash === "sister" ? 25 : 0);
-  for (const row of empty.page) expect(row).toEqual({ interestId: expect.any(String), role: "sister", state: "closed", ownDecision: "pending", ownAction: null, paused: false, reviewExpired: false, canPause: false, canView: false }); expect(empty.isDone).toBe(false); expect(empty.continueCursor).not.toBe(first.continueCursor);
+  for (const row of empty.page) expect(row).toEqual({ interestId: expect.any(String), role: "sister", state: "closed", ownDecision: "pending", ownAction: null, ownActionStage: null, paused: false, reviewExpired: false, canPause: false, canView: false }); expect(empty.isDone).toBe(false); expect(empty.continueCursor).not.toBe(first.continueCursor);
   const last = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { cursor: empty.continueCursor, numItems: 50 } });
   expect(last.page.some(r => r.interestId === interestId)).toBe(true); expect(last.isDone).toBe(true);
   const other = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "other", paginationOpts: { cursor: null, numItems: 50 } });
@@ -210,6 +214,7 @@ test("serialized brother review surfaces omit sister identity throughout approva
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
   await check("in_review");
   await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: interestId, approved: true });
   await check("in_review");
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated");
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com");

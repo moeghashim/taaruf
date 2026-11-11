@@ -67,3 +67,16 @@ describe("sent interest heading", () => {
     }
   });
 });
+
+
+it('keeps brother post-bio final approval actionable without revealing the other decision', () => {
+  const initial = receivedInterestUpdates([], [{ ...review(), ownActionStage: 'initial', ownDecision: 'pending' }])[0];
+  const final = receivedInterestUpdates([], [{ ...review(), ownActionStage: 'final', ownDecision: 'pending' }])[0];
+  expect(initial.heading).toBe('You Have Received An Interest');
+  expect(final.heading).toBe('Your review is needed');
+  expect(final.action).toBe('Review profile and respond');
+  expect(final.priority).toBe(0);
+  expect(final.copy).toBe(initial.copy);
+  expect(final.href).toBe(initial.href);
+  expect(JSON.stringify(final)).not.toMatch(/sister|approved|match created/i);
+});

@@ -7,9 +7,9 @@ import { ReviewNextSteps } from "./review-next-steps";
 import { formatEducation } from "@/lib/education";
 import { FactList } from "@/components/admin/primitives/fact-list";
 
-type Review = { paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
+type Review = { paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
 type Profile = { name?: string; label?: string; applicantNumber?: number; publicApplicantNumber?: number; age?: number; shareableBio?: string; education?: string; job?: string; ethnicity?: string; imageUrls?: string[]; email?: string; phone?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string };
-type Access = { paused?: boolean; canPause?: boolean; ownAction?: "review" | null; ownDecision?: string; state: string; role: string; profile?: Profile; counterparty?: Profile };
+type Access = { paused?: boolean; canPause?: boolean; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; ownDecision?: string; state: string; role: string; profile?: Profile; counterparty?: Profile };
 // List status is not authorization: only the existing detail GET supplies contacts.
 const contactsReady = (value: Access | null) => {
   const profile = value?.profile || value?.counterparty;
@@ -97,7 +97,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       if (!stopped && requestId === accessRequest.current) { setAccess(payload); setError(""); }
     }).catch(error => { if (!stopped && requestId === accessRequest.current) { setAccess(null); setError(error.message); } }).finally(() => { if (!stopped && requestId === accessRequest.current) setReviewLoading(false); });
     return () => { stopped = true; };
-  }, [selected, token, row?.role, row?.state, row?.ownAction, row?.paused, accessVersion]);
+  }, [selected, token, row?.role, row?.state, row?.ownAction, row?.ownActionStage, row?.paused, accessVersion]);
   useEffect(() => {
     setReadyIds([]);
     if (loading || listError || selected) return;
@@ -141,14 +141,19 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to record your decision.");
       if (selectedRef.current !== actionSelection) { await load(); return; }
-      setMessage(body.action === "pause" ? "Connection paused." : body.action === "resume" ? "Connection resumed. New contact disclosure still requires final admin approval." : "Your decision is recorded. Contact details stay private until final admin approval.");
+      setMessage(body.action === "pause" ? "Connection paused." : body.action === "resume" ? "Connection resumed. New contact disclosure still requires final admin approval." : body.action === "respond" && body.decision === "accept" ? "Initial acceptance recorded. Review the bio, then choose Approve or Decline. No final approval or contact sharing has occurred." : "Your decision is recorded. Contact details stay private until final admin approval.");
       setAccess(null);
       setAccessVersion(value => value + 1);
-      if (body.decision === "decline" || body.confirmed === false) { setSelected(null); setToken(undefined); }
+      if (body.decision === "decline" || body.confirmed === false || body.approved === false) { setSelected(null); setToken(undefined); }
       await load();
     } catch (error) { if (selectedRef.current !== actionSelection) return; ++accessRequest.current; setReviewLoading(false); setAccess(null); setError(error instanceof Error ? error.message : "Unable to record your decision."); }
     finally { actionInFlight.current = false; setBusy(false); }
   }
+  const actionable = access?.ownAction === "review" && !access.paused && !["closed", "revoked", "expired"].includes(access.state);
+  // Explicit stages are required for brothers: never infer final approval from legacy responses.
+  const brotherInitial = actionable && access?.role === "brother" && access.ownActionStage === "initial";
+  const brotherFinal = actionable && access?.role === "brother" && access.ownActionStage === "final";
+  const sisterFinal = actionable && access?.role === "sister";
   const profile = access?.profile || access?.counterparty;
   const invitations = rows.filter(needsBrotherReview);
   const confirmations = rows.filter(needsSisterConfirmation);
@@ -178,7 +183,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       <div className="interest-invitation-copy">
         <h2 id="interest-invitation-heading">You Have Received An Interest</h2>
         <p>{invitations.length === 1 ? "This connection is awaiting your review." : "You have multiple profiles to review. Take a look and respond to each invitation."}</p>
-        <p className="interest-invitation-privacy">Accepting does not share contact details. Both of you must agree before the team can approve sharing them.</p>
+        <p className="interest-invitation-privacy">Initial acceptance only unlocks the bio. Review it before giving your separate final approval. Contact details remain private.</p>
       </div>
       <ul className="interest-invitation-actions">
         {invitations.map((item, index) => <li key={item.interestId}>
@@ -250,14 +255,19 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
-        {!access?.paused && access?.ownAction === "review" && <ReviewNextSteps stage={access.role === "brother" ? "workflow-initial" : "final"} recipientGender={access.role === "brother" ? "male" : "female"} />}
-        {!access?.paused && access?.role === "sister" && access.ownAction === "review" && <div className="action-row">
+        {(brotherInitial || brotherFinal || sisterFinal) && <ReviewNextSteps stage={brotherInitial ? "workflow-initial" : "final"} recipientGender={access?.role === "brother" ? "male" : "female"} />}
+        {actionable && access?.role === "brother" && !brotherInitial && !brotherFinal && <p role="status">This review needs to be refreshed before you can respond. Return to your portal and refresh.</p>}
+        {sisterFinal && <div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm interest</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>
         </div>}
-        {!access?.paused && access?.role === "brother" && access.ownAction === "review" && <><p>This connection is awaiting your review. Your decision does not share contact details.</p><div className="action-row">
+        {brotherInitial && <><p>Initial review: accept to unlock the bio. You will give your final decision separately.</p><div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "accept", ...(token ? { reviewToken: token } : {}) })}>Accept</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "decline", ...(token ? { reviewToken: token } : {}) })}>Decline</button>
+        </div></>}
+        {brotherFinal && <><p>Final review: read the bio, then approve or decline this connection.</p><div className="action-row">
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "brother_final", interestId: selected, approved: true, ...(token ? { reviewToken: token } : {}) })}>Approve</button>
+          <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "brother_final", interestId: selected, approved: false, ...(token ? { reviewToken: token } : {}) })}>Decline</button>
         </div></>}
       </section>}
     </div>

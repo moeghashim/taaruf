@@ -796,3 +796,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Omar3779: remove standalone back link and ordinary review heading/subtitle only from embedded selected profiles in both portals; retain lifecycle notices and standalone routes. Added selected-state, switching, keyboard, lifecycle and standalone regression coverage. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Omar3782/3786: exact initial-review What happens next paragraphs for male/female recipients with correct counterpart pronouns; final guidance and workflow unchanged. Added exact-copy unit/browser regressions. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Omar3825: separate brother initial bio acceptance from authenticated final approval, retain sister decision/admin contact gate, add source-only consent provenance and historical ambiguity defenses, strengthen exact-interest bio/contact projections, and cover backend/API/browser transitions. Preview-only branch; no migration, deployment, real-user mutation, email or human signoff. <!-- project: github.com/moeghashim/clawscrewskill -->

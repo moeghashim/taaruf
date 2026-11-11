@@ -50,6 +50,7 @@ test("older failures remain visible and retryable beyond 100 newer successes", a
 test("429 600-second cooldown defers leased siblings and newly queued work globally", async () => {
   const { t, interestId } = await accepted(); isolated();
   await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
+  await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: interestId, approved: true });
   const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 429, headers: { "retry-after": "600" } })); vi.stubGlobal("fetch", fetchMock);
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -155,7 +156,8 @@ async function reviewing(general = false) {
   if (general) {
     await f.t.mutation(api.applicantInterests.respondToInbound, { sessionHash: "sister", interestId: f.interestId, decision: "accept" });
     for (const sessionHash of ["brother", "sister"]) await f.t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash, interestId: f.interestId, approved: true });
-  } else await f.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId: f.interestId, confirmed: true });
+  } else { await f.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId: f.interestId, confirmed: true });
+  await f.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: f.interestId, approved: true }); }
   return { ...f, matchId: (await f.t.run(ctx => ctx.db.get(f.interestId)))!.matchId! };
 }
 

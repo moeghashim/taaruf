@@ -151,7 +151,7 @@ for (const corruption of ["flow_order", "flow_other", "match_pair", "interest_se
       deliveries: await ctx.db.query("femaleWorkflowDeliveries").collect(),
     }));
     const before = await snapshot();
-    await expect(t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "male-session", interestId: corruption === "missing_pointer" ? reciprocal : interest, approved: true })).rejects.toThrow(/Linked/);
+    await expect(t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "male-session", interestId: corruption === "missing_pointer" ? reciprocal : interest, approved: true })).rejects.toThrow(/Linked|Bio review is not open/);
     await expect(t.mutation(api.matches.updateStatus, { id: match, status: "contact_shared", adminSecret: "test-only-secret" })).rejects.toThrow(/Linked/);
     expect(await snapshot()).toEqual(before);
     expect(before.deliveries).toHaveLength(0);
