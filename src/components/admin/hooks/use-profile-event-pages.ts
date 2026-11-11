@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { adminQueries } from "@/lib/admin-operations";
-type Name = "events.profileFilterCatalog" | "events.profileFilterMembership";
+type Name = "matches.workbenchPage" | "interests.workbenchPage" | "events.profileFilterCatalog" | "events.profileFilterMembership";
 type Args<K extends Name> = Omit<FunctionArgs<(typeof adminQueries)[K]>, "adminSecret" | "paginationOpts">;
 type Row<K extends Name> = FunctionReturnType<(typeof adminQueries)[K]>["page"][number];
 

@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { sessionAllowed } from "./capabilitySecurity";
 import { assertMatchInterest, releasePairContacts, setPairPaused, assertParticipantsAvailable } from "./contactGate";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
@@ -569,5 +570,29 @@ export const setPausedForApplicant = mutation({
     if (!match) throw new Error("Match unavailable");
     assertMatchInterest(match, interest);
     return await setPairPaused(ctx, match, args.paused, person._id);
+  },
+});
+
+export const workbenchPage = query({
+  args: { adminSecret: v.optional(v.string()), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const result = await ctx.db.query("matches").paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
+    const matches = result.page;
+
+    return { ...result, page: withoutCapabilities(await Promise.all(
+      matches.filter(match => match.testResetAt === undefined).map(async (match) => {
+        const maleRegistration = await ctx.db.get(match.maleRegistrationId);
+        const femaleRegistration = await ctx.db.get(match.femaleRegistrationId);
+        const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
+
+        return {
+          ...match,
+          maleRegistration,
+          femaleRegistration,
+          interest,
+        };
+      })
+    )) };
   },
 });

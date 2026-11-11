@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -317,5 +318,32 @@ export const getByRegistration = query({
       outbound: await Promise.all(outbound.map(enrich)),
       inbound: await Promise.all(inbound.map(enrich)),
     };
+  },
+});
+
+export const workbenchPage = query({
+  args: { adminSecret: v.optional(v.string()), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const result = await ctx.db.query("interests").paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
+    const interests = result.page;
+
+    return { ...result, page: withoutCapabilities(await Promise.all(
+      interests.map(async (interest) => {
+        const fromRegistration = await ctx.db.get(interest.fromRegistrationId);
+        const toRegistration = await ctx.db.get(interest.toRegistrationId);
+        const linkedMatch = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+        const match = linkedMatch?.testResetAt !== undefined ? null : linkedMatch;
+        const event = interest.eventId ? await ctx.db.get(interest.eventId) : null;
+
+        return {
+          ...interest,
+          fromRegistration: withoutCapabilities(fromRegistration),
+          toRegistration: withoutCapabilities(toRegistration),
+          match,
+          event,
+        };
+      })
+    )) };
   },
 });
