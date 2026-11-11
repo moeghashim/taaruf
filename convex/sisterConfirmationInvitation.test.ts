@@ -1,10 +1,11 @@
 import { convexTest } from "convex-test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { modules } from "./test.setup";
 const adminSecret = "synthetic-female-admin";
 const hash = "a".repeat(64);
+describe.each(["sister-confirmation-production", "brother-sister-review-production"])("%s", productionMode => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 async function fixture(general = false) {
   vi.stubEnv("ATTENDANCE_ADMIN_SECRET", adminSecret);
@@ -33,7 +34,7 @@ function isolated() {
 
 async function prepared(activate = true) {
  const f=await fixture();isolated();await f.t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret,interestId:f.interestId,reviewTokenHash:hash});
- vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE","sister-confirmation-production");vi.stubEnv("FEMALE_WORKFLOW_PRODUCTION_APPROVED","true");vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL","https://www.1plus1match.com");
+ vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE",productionMode);vi.stubEnv("FEMALE_WORKFLOW_PRODUCTION_APPROVED","true");vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL","https://www.1plus1match.com");
  if(activate){const at=Number(await f.t.mutation(internal.femaleWorkflowDelivery.activateSisterConfirmation,{}));vi.spyOn(Date,"now").mockReturnValue(at+1);}return f;
 }
 const accept=(f:Awaited<ReturnType<typeof prepared>>)=>f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId:f.interestId,decision:"accept"});
@@ -65,9 +66,11 @@ for(const invalid of ["revoked","expired","reset","closed","recipient","email","
 test("no historical promotion, immutable separate boundary and unrelated rows untouched",async()=>{
  const f=await prepared(false);await accept(f);const [old]=await rows(f);expect(old.status).toBe("failed");const at=await f.t.mutation(internal.femaleWorkflowDelivery.activateSisterConfirmation,{});vi.spyOn(Date,"now").mockReturnValue(Number(at)+1);expect(await f.t.mutation(internal.femaleWorkflowDelivery.activateSisterConfirmation,{})).toBe(at);
  await expect(f.t.mutation(api.settings.set,{adminSecret,key:"sisterConfirmationEmailActivatedAt",value:"1"})).rejects.toThrow("immutable");await accept(f);await expect(f.t.mutation(api.femaleInterestWorkflow.retryDelivery,{adminSecret,deliveryId:old._id})).rejects.toThrow("activation");
- const before=await f.t.run(ctx=>ctx.db.query("femaleWorkflowDeliveries").take(100));const provider=vi.fn();vi.stubGlobal("fetch",provider);await f.t.action(internal.femaleWorkflowDelivery.drain,{});expect(provider).not.toHaveBeenCalled();expect(await f.t.run(ctx=>ctx.db.query("femaleWorkflowDeliveries").take(100))).toEqual(before);expect(await f.t.query(api.settings.get,{adminSecret,key:"brotherReviewEmailActivatedAt"})).toBe(null);
+ const before=await f.t.run(ctx=>ctx.db.query("femaleWorkflowDeliveries").take(100));const provider=vi.fn();vi.stubGlobal("fetch",provider);await f.t.action(internal.femaleWorkflowDelivery.drain,{});expect(provider).not.toHaveBeenCalled();const after=await f.t.run(ctx=>ctx.db.query("femaleWorkflowDeliveries").take(100));if(productionMode==="sister-confirmation-production")expect(after).toEqual(before);else {expect(after.filter(r=>r.kind==="sister_confirmation")).toEqual(before.filter(r=>r.kind==="sister_confirmation"));expect(after.find(r=>r.kind==="brother_review")?.status).toBe("failed");}expect(await f.t.query(api.settings.get,{adminSecret,key:"brotherReviewEmailActivatedAt"})).toBe(null);
 });
 test("changed email after ambiguous provider attempt cannot replay frozen recipient",async()=>{
  const f=await prepared();await accept(f);const provider=vi.fn().mockRejectedValue(Error("transport"));vi.stubGlobal("fetch",provider);await f.t.action(internal.femaleWorkflowDelivery.drain,{});const [row]=await rows(f);
  await f.t.run(async ctx=>{await ctx.db.patch(f.sister,{email:"new@example.com"});await ctx.db.patch(row._id,{nextAttemptAt:0});});await f.t.action(internal.femaleWorkflowDelivery.drain,{});expect(provider).toHaveBeenCalledTimes(1);expect((await rows(f))[0].status).toBe("cancelled");
+});
+
 });

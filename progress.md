@@ -676,3 +676,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Add separately gated future-only sister final-approval email, recipient/acceptance freshness checks and synthetic tests; no production send, activation or deployment.
+
+## 2026-11-10
+- Added narrowly scoped combined brother/sister notification mode with independent cutoffs, stale recipient/sender retry cancellation, coexistence/security tests and activation checklist; no production changes.
