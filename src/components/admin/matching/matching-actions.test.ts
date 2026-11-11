@@ -3,7 +3,7 @@ import { createElement, isValidElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Doc } from "../../../../convex/_generated/dataModel";
-vi.mock("react", async importOriginal => ({ ...await importOriginal<typeof import("react")>(), useState: (value: unknown) => [value, vi.fn()] }));
+vi.mock("react", async importOriginal => ({ ...await importOriginal<typeof import("react")>(), useState: (value: unknown) => [value, vi.fn()], useRef: (value: unknown) => ({ current: value }) }));
 vi.mock("@/components/admin/hooks/use-admin-transport", () => ({ refreshAdminData: vi.fn(), useAdminMutation: () => vi.fn(), useAdminQuery: () => [] }));
 import { ContactRelease } from "./matching-page-client";
 import { FemaleWorkflowActions } from "./female-workflow-actions";
@@ -35,6 +35,17 @@ test("other workflow status labels and controls remain visible", () => {
   expect(markup).toContain("awaiting brother review");
   expect(markup).toContain("Reissue review link");
   expect(markup).toContain("Revoke review");
+});
+test("rapid requester share activation sends once until completion", async () => {
+  let complete!: (value: unknown) => void;
+  fetchMock.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+  const button = buttons(FemaleWorkflowActions({ interestId: "interest", state: "private_documented" }))[0];
+  button.props.onClick!(); button.props.onClick!();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  complete({ ok: true, json: async () => ({}) });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  button.props.onClick!();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 test("contact release renders only for an approved official match", () => {
   for (const invalid of [null, { ...match, interestId: undefined }, { ...match, contactGate: undefined }, { ...match, status: "closed" }, { ...match, status: "contact_shared" }, { ...match, testResetAt: 1 }]) {

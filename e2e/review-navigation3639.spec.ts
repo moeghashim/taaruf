@@ -4,19 +4,12 @@ import { expect, test, type Page } from "@playwright/test";
 const origin = process.env.PORTAL_BASE!;
 test.use({ baseURL: origin, serviceWorkers: "block" });
 type Role = "brother" | "sister";
-const interest = (id: string, direction = "inbound", final = false) => ({
-  femaleWorkflow: false, interestId: id, direction, status: "active", flowStatus: final ? "awaiting_final_approval" : "awaiting_inbound_response",
-  visibility: "visible", paused: false, canRespond: !final, canFinalApprove: final, canWithdraw: false,
-  ownFinalApproval: "pending", contactSharedAt: null as number | null,
-  counterparty: { label: "Applicant " + id, applicantNumber: 901, age: 30, gender: "female", fullProfileVisible: true,
-    imageUrls: [], shareableBio: "Authorized bio " + id, email: null as string | null, phone: null },
-});
 const review = (id: string, role: Role) => ({ interestId: id, role, state: "in_review", ownAction: "review" as string | null, ownDecision: "pending", paused: false, canView: true });
 function fixture(role: Role) {
   const gender = role === "brother" ? "male" : "female";
   return {
     me: { applicant: { name: "Synthetic Applicant", gender, status: "approved", applicantNumber: 999, profileCompletionStatus: "completed" },
-      inbound: [] as ReturnType<typeof interest>[], outbound: [] as ReturnType<typeof interest>[], privateDocumented: [] as ReturnType<typeof interest>[],
+      inbound: [], outbound: [], privateDocumented: [],
       canSubmitInterest: false, interestSubmissionLimit: 3, interestSubmissions: [], eventLogisticsRestricted: false },
     reviews: [] as ReturnType<typeof review>[],
     reviewContacts: {} as Record<string, string | null>,
