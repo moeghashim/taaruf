@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const { mutation, query, session, config } = vi.hoisted(() => ({ mutation: vi.fn(), query: vi.fn(), session: vi.fn(), config: vi.fn() }));
 vi.mock("@/lib/matchmaker-delivery", () => ({ matchmakerDeliveryConfig: config }));
 vi.mock("@/lib/convex", () => ({ getConvexClient: () => ({ mutation, query }) }));
 vi.mock("@/lib/applicant-session", () => ({ getApplicantSessionHash: session }));
 import { GET, POST } from "./route";
 const post = (body: unknown, origin = "https://test.invalid") => new NextRequest("https://test.invalid/api/applicant/matchmaker", { method: "POST", headers: { origin }, body: JSON.stringify(body) });
-beforeEach(() => { vi.clearAllMocks(); config.mockReturnValue(null); session.mockResolvedValue("cookie-hash"); mutation.mockResolvedValue(null); query.mockResolvedValue({ optedIn: false, matches: [] }); });
+afterEach(() => vi.unstubAllEnvs());
+beforeEach(() => { vi.clearAllMocks(); query.mockReset(); vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "synthetic-readiness"); config.mockReturnValue(null); session.mockResolvedValue("cookie-hash"); mutation.mockResolvedValue(null); query.mockResolvedValue({ optedIn: false, matches: [] }); });
 test("requires cookie identity for reads and writes", async () => { session.mockResolvedValue(null); expect((await GET()).status).toBe(401); expect((await POST(post({ action: "consent", optedIn: true }))).status).toBe(401); expect(query).not.toHaveBeenCalled(); expect(mutation).not.toHaveBeenCalled(); });
 test("read is inert and private", async () => { const response = await GET(); expect(response.headers.get("cache-control")).toContain("no-store"); expect(query.mock.calls[0][1]).toEqual({ sessionHash: "cookie-hash" }); expect(mutation).not.toHaveBeenCalled(); });
 test("cross origin fails closed", async () => { expect((await POST(post({ action: "consent", optedIn: true }, "https://evil.invalid"))).status).toBe(403); expect(mutation).not.toHaveBeenCalled(); });
