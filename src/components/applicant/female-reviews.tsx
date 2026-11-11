@@ -26,10 +26,12 @@ const stateLabels: Record<string, string> = {
 const reviewExpired = (item: Review) => item.reviewExpired === true;
 const needsBrotherReview = (item: Review) => item.role === "brother" && item.ownAction === "review" && !item.paused && !item.reviewExpired && !["closed", "revoked", "expired"].includes(item.state);
 const needsSisterConfirmation = (item: Review) => item.role === "sister" && item.ownAction === "review" && !item.paused && !item.reviewExpired && !["closed", "revoked", "expired"].includes(item.state);
-export function FemaleReviews() {
+export function FemaleReviews({ inline = false, active = true }: { inline?: boolean; active?: boolean }) {
   const [loginHref, setLoginHref] = useState("/login");
   const [rows, setRows] = useState<Review[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const [token, setToken] = useState<string | undefined>();
   const [access, setAccess] = useState<Access | null>(null);
   const [readyIds, setReadyIds] = useState<string[]>([]);
@@ -59,14 +61,22 @@ export function FemaleReviews() {
   }, []);
   useEffect(() => {
     setLoginHref(applicantLoginHref(window.location.pathname + window.location.search));
-    const params = new URLSearchParams(window.location.search);
-    setSelected(params.get("femaleReview"));
-    setToken(params.get("reviewToken") || undefined);
+    const sync = () => {
+      const params = new URLSearchParams(window.location.search);
+      setSelected(params.get("femaleReview"));
+      setToken(inline ? undefined : params.get("reviewToken") || undefined);
+      setError(""); setMessage("");
+    };
+    sync();
+    window.addEventListener("popstate", sync);
+    window.addEventListener("hashchange", sync);
     void load();
     const refresh = () => { void load(); setAccessVersion(value => value + 1); };
     window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
-  }, [load]);
+    const visible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", visible);
+    return () => { window.removeEventListener("focus", refresh); window.removeEventListener("popstate", sync); window.removeEventListener("hashchange", sync); document.removeEventListener("visibilitychange", visible); };
+  }, [load, inline]);
   const row = rows.find(item => item.interestId === selected);
   // Retain the current view during revalidation so a focus event cannot
   // unmount a pressed button before its click. A changed selection is cleared.
@@ -110,28 +120,47 @@ export function FemaleReviews() {
       document.getElementById("contact-details")?.focus();
     }
   }, [access]);
+  const focusedSelection = useRef<string | null>(null);
+  useEffect(() => {
+    if (!active || !selected) { focusedSelection.current = null; return; }
+    if (!inline || !selected || !access || reviewLoading || focusedSelection.current === selected) return;
+    const panel = document.getElementById("inline-selected-review");
+    if (panel) { panel.focus({ preventScroll: true }); panel.scrollIntoView({ block: "start" }); focusedSelection.current = selected; }
+  }, [inline, active, selected, access, reviewLoading]);
+  const reviewHref = (id: string, contacts = false) => inline
+    ? "/me?femaleReview=" + encodeURIComponent(id) + "#inbound-interests"
+    : "/dashboard?femaleReview=" + encodeURIComponent(id) + (contacts ? "#contact-details" : "");
   async function act(body: Record<string, unknown>) {
     if (actionInFlight.current) return;
     actionInFlight.current = true;
+    const actionSelection = selected;
     ++accessRequest.current;
     setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch(["pause", "resume"].includes(String(body.action)) ? "/api/applicant/interests" : "/api/applicant/female-review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(["pause", "resume"].includes(String(body.action)) ? { ...body, action: body.action === "pause" ? "pause_connection" : "resume_connection" } : body) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to record your decision.");
+      if (selectedRef.current !== actionSelection) { await load(); return; }
       setMessage(body.action === "pause" ? "Connection paused." : body.action === "resume" ? "Connection resumed. New contact disclosure still requires final admin approval." : "Your decision is recorded. Contact details stay private until final admin approval.");
       setAccess(null);
       setAccessVersion(value => value + 1);
       if (body.decision === "decline" || body.confirmed === false) { setSelected(null); setToken(undefined); }
       await load();
-    } catch (error) { ++accessRequest.current; setReviewLoading(false); setAccess(null); setError(error instanceof Error ? error.message : "Unable to record your decision."); }
+    } catch (error) { if (selectedRef.current !== actionSelection) return; ++accessRequest.current; setReviewLoading(false); setAccess(null); setError(error instanceof Error ? error.message : "Unable to record your decision."); }
     finally { actionInFlight.current = false; setBusy(false); }
   }
   const profile = access?.profile || access?.counterparty;
   const invitations = rows.filter(needsBrotherReview);
   const confirmations = rows.filter(needsSisterConfirmation);
   const history = rows.filter(item => !needsBrotherReview(item) && !needsSisterConfirmation(item));
-  return <section id="review-notifications" aria-label="Interest notifications" className="applicant-section">
+  return <section id="review-notifications" aria-label="Interest notifications" className="applicant-section" onClick={event => {
+    if (!inline || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = (event.target as HTMLElement).closest<HTMLAnchorElement>("a");
+    if (!link || !link.getAttribute("href")?.startsWith("/me")) return;
+    event.preventDefault();
+    window.history.pushState(null, "", link.href);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }}>
     {!!readyIds.length && !selected && !loading && !listError && <section className="interest-invitation contacts-ready" aria-labelledby="contacts-ready-heading">
       <div className="interest-invitation-copy">
         <h2 id="contacts-ready-heading">Contacts are ready</h2>
@@ -140,7 +169,7 @@ export function FemaleReviews() {
       <ul className="interest-invitation-actions">
         {readyIds.map((id, index) => <li key={id}>
           {readyIds.length > 1 && <span>Connection {index + 1}</span>}
-          <a className="btn btn-primary" aria-label={readyIds.length > 1 ? "View contact details for connection " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(id) + "#contact-details"}>View contact details</a>
+          <a className="btn btn-primary" aria-label={readyIds.length > 1 ? "View contact details for connection " + (index + 1) : undefined} href={reviewHref(id, true)}>View contact details</a>
         </li>)}
       </ul>
     </section>}
@@ -153,7 +182,7 @@ export function FemaleReviews() {
       <ul className="interest-invitation-actions">
         {invitations.map((item, index) => <li key={item.interestId}>
           {invitations.length > 1 && <span>Invitation {index + 1}</span>}
-          <a className="btn btn-primary" aria-label={invitations.length > 1 ? "Review profile for invitation " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>Review profile</a>
+          <a className="btn btn-primary" aria-label={invitations.length > 1 ? "Review profile for invitation " + (index + 1) : undefined} href={reviewHref(item.interestId)}>Review profile</a>
         </li>)}
       </ul>
     </section>}
@@ -166,7 +195,7 @@ export function FemaleReviews() {
       <ul className="interest-invitation-actions">
         {confirmations.map((item, index) => <li key={item.interestId}>
           {confirmations.length > 1 && <span>Review {index + 1}</span>}
-          <a className="btn btn-primary" aria-label={confirmations.length > 1 ? "Review profile and respond for review " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>Review profile and respond</a>
+          <a className="btn btn-primary" aria-label={confirmations.length > 1 ? "Review profile and respond for review " + (index + 1) : undefined} href={reviewHref(item.interestId)}>Review profile and respond</a>
         </li>)}
       </ul>
     </section>}
@@ -177,7 +206,7 @@ export function FemaleReviews() {
         {item.ownDecision === "approved" && <p>Your decision: approved.</p>}{item.ownDecision === "approved" && item.state === "in_review" && !item.paused && !item.reviewExpired && <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>}
         {item.ownDecision === "declined" && <p>Your decision: declined.</p>}
       </div>
-      {!reviewExpired(item) && !["closed", "revoked", "expired"].includes(item.state) && item.canView && <a className="btn btn-primary" aria-label={history.length > 1 ? "View review for connection " + (index + 1) : undefined} href={"/dashboard?femaleReview=" + encodeURIComponent(item.interestId)}>View review</a>}
+      {!reviewExpired(item) && !["closed", "revoked", "expired"].includes(item.state) && item.canView && <a className="btn btn-primary" aria-label={history.length > 1 ? "View review for connection " + (index + 1) : undefined} href={reviewHref(item.interestId)}>View review</a>}
     </section>)}
     {selected && <a className="btn" href="/me#applicant-interests">Back to applicant interests</a>}
     <div style={{ padding: 16, display: "grid", gap: 16 }}>
@@ -195,7 +224,7 @@ export function FemaleReviews() {
 
       </div>)}
       {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
-      {selected && <section aria-label="Selected profile review" className="selected-profile-review">
+      {selected && <section id={inline ? "inline-selected-review" : undefined} tabIndex={-1} aria-label="Selected profile review" className="selected-profile-review">
         {access?.canPause && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
         {reviewLoading && !access && <p role="status">Loading profile…</p>}
         {profile && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>

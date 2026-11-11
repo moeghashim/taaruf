@@ -56,7 +56,12 @@ export function ReceivedInterestRibbon({ interests, approved }: { interests: Int
     {error && <p role="alert">Unable to load some interest updates. <button className="btn" onClick={() => void refresh()}>Retry</button></p>}
     <ul className="received-interest-items">{notices.map((notice, index) => <li key={notice.id} data-connection-notice={notice.id}>
       <div className="interest-invitation-copy"><h2>{notice.heading}</h2>{notices.length > 1 && <p>Connection {index + 1}</p>}<p>{notice.copy}</p></div>
-      {notice.href && <a className="btn btn-primary" href={notice.href} aria-label={notices.length > 1 ? notice.action + " for connection " + (index + 1) : undefined}>{notice.action}</a>}
+      {notice.href && <a className="btn btn-primary" href={notice.href} onClick={event => {
+        if (!notice.href?.startsWith("/me?femaleReview=") || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        window.history.pushState(null, "", notice.href);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }} aria-label={notices.length > 1 ? notice.action + " for connection " + (index + 1) : undefined}>{notice.action}</a>}
     </li>)}</ul>
   </section>;
 }

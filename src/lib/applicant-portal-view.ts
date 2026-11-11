@@ -11,5 +11,5 @@ export function portalView(hash: string, search = ""): PortalView {
   if (hash === "#matchmaker-matching") return "matchmaker";
   if (["#applicant-interests", "#inbound-interests", "#outbound-interests", "#private-documented-interests"].includes(hash)) return "interests";
   if (hash === "#overview" || hash === "#events") return "overview";
-  return new URLSearchParams(search).has("connection") ? "interests" : "overview";
+  return (new URLSearchParams(search).has("connection") || new URLSearchParams(search).has("femaleReview")) ? "interests" : "overview";
 }

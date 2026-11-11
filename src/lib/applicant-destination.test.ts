@@ -17,3 +17,8 @@ test("carried destinations omit review tokens and all unrelated query values", (
   expect(applicantDestination("/dashboard?femaleReview=review&reviewToken=private-secret&token=login-secret&next=//evil.invalid")).toBe("/dashboard?femaleReview=review");
   expect(applicantLoginHref("/me?connection=interest&token=private-secret")).toBe("/login?next=%2Fme%3Fconnection%3Dinterest");
 });
+
+test("preserves inline review destination without accepting review tokens", () => {
+  expect(applicantDestination("/me?femaleReview=interest-2#inbound-interests")).toBe("/me?femaleReview=interest-2#inbound-interests");
+  expect(applicantDestination("/me?femaleReview=interest-2&reviewToken=secret#inbound-interests")).toBe("/me?femaleReview=interest-2#inbound-interests");
+});
