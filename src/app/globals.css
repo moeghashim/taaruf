@@ -1261,3 +1261,34 @@
   [data-admin] .comparison-profile .fact-list { display: grid; grid-template-rows: subgrid; grid-row: span 8; }
   [data-admin] .comparison-profile .fact { height: 100%; box-sizing: border-box; align-items: start; }
 }
+
+[data-admin] .received-interest-items { list-style: none; padding: 0; margin: 0; width: 100%; display: grid; gap: 32px; }
+[data-admin] .received-interest-items > li { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+[data-admin] .received-interest-items > li + li { border-top: 1px solid var(--line); padding-top: 32px; }
+[data-admin] .received-interest-items .btn { flex-shrink: 0; min-height: 48px; }
+@media (max-width: 700px) {
+  [data-admin] .received-interest-items > li { flex-direction: column; align-items: stretch; }
+}
+
+/* Applicant review surfaces share portal typography, with readable full answers. */
+[data-admin] .selected-profile-review,
+[data-admin] .interest-detail-panel { font-family: var(--font-admin-sans), sans-serif; font-size: 16px; line-height: 1.6; }
+[data-admin] .selected-profile-review h3 { font-family: var(--font-admin-serif), Georgia, serif; font-size: 30px; line-height: 1.2; margin-bottom: 20px; }
+[data-admin] .selected-profile-review h4,
+[data-admin] .interest-detail-panel .profile-requirements h4,
+[data-admin] .review-next-steps h4 { font-family: var(--font-admin-sans), sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; margin-bottom: 12px; }
+[data-admin] .selected-profile-review .fact .k { font-size: 13px; }
+[data-admin] .selected-profile-review .fact .v { font-size: 16px; }
+[data-admin] .selected-profile-review .btn,
+[data-admin] .interest-detail-panel .action-row .btn { font-size: 16px; min-height: 48px; padding: 12px 24px; }
+[data-admin] .selected-profile-review .profile-requirements,
+[data-admin] .selected-profile-review .bio-box,
+[data-admin] .selected-profile-review .profile-review-photos { margin-top: 28px; }
+[data-admin] .profile-requirements ul { list-style: none; padding: 0; }
+[data-admin] .profile-requirements li { padding-block: 12px; border-bottom: 1px solid var(--line); }
+[data-admin] .profile-requirements li + li { margin-top: 0; }
+[data-admin] .profile-requirements li:last-child { border-bottom: 0; }
+[data-admin] .review-next-steps { margin-top: 12px; padding-block: 20px; border-top: 1px solid var(--line); max-width: 70ch; }
+[data-admin] .review-next-steps p { font-size: 16px; line-height: 1.6; color: var(--ink); }
+[data-admin] .review-next-steps p + p { margin-top: 12px; }
+[data-admin] .selected-profile-review .action-row { flex-wrap: wrap; gap: 12px; }

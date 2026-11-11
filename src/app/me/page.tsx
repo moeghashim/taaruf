@@ -11,9 +11,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
+import { ReviewNextSteps } from "@/components/applicant/review-next-steps";
 import { MatchmakerNotifications } from "@/components/applicant/matchmaker-notifications";
 import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
-import { FemaleReviews } from "@/components/applicant/female-reviews";
+import { ReceivedInterestRibbon } from "@/components/applicant/received-interest-ribbon";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 import { Ico } from "@/components/admin/primitives/icons";
 import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
@@ -433,6 +434,8 @@ function ProfileSideCard({
           </p>
         </div>
       )}
+
+      {(canRespond || canFinalApprove) && <ReviewNextSteps stage={canRespond ? "initial" : "final"} />}
 
       {canRespond && (
         <div className="action-row">
@@ -1023,9 +1026,7 @@ export default function ApplicantDashboardPage() {
     .toUpperCase();
   const completedProfile = data.applicant.profileCompletionStatus === "completed";
   const hijabLabel = hijabQuestion(profile?.gender);
-  const visibleInterests = [...data.inbound, ...data.outbound, ...data.privateDocumented].filter((interest, index, items) => !interest.femaleWorkflow && items.findIndex(item => item.interestId === interest.interestId) === index);
-  const actionableInbound = visibleInterests.filter(interest => !interest.paused && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && (interest.canRespond || interest.canFinalApprove));
-  const interestUpdates = visibleInterests.filter(interest => !actionableInbound.includes(interest));
+
 
   return (
     <main data-admin>
@@ -1107,16 +1108,8 @@ export default function ApplicantDashboardPage() {
             {!archived && <section aria-label="Your notifications" className="applicant-section">
               {(eventsData?.upcoming || []).filter(event => eventsFresh && !busy && !data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError && event.registration && canConfirmEventRegistration(event.registration)).map(event => <section className="interest-invitation" key={event._id}><div className="interest-invitation-copy"><h2>Event response requested</h2><p>Please review your event registration. Responding does not grant event approval.</p></div><a className="btn btn-primary" href="#events">Review event registration</a></section>)}
               {!!data.history?.length && <section className="interest-invitation"><div className="interest-invitation-copy"><h2>Connection updates</h2><p>{data.history.length} closed connection{data.history.length === 1 ? "" : "s"}. No further response is needed.</p></div><a className="btn" href="#applicant-interests">View connection history</a></section>}
-              {!isLoading && !busy && actionableInbound.length > 0 && <section className="interest-invitation" aria-labelledby="inbound-action-heading">
-                <div className="interest-invitation-copy"><h2 id="inbound-action-heading">{actionableInbound.every(interest => interest.direction === "inbound" && interest.canRespond && !interest.canFinalApprove) ? "You Have Received An Interest" : actionableInbound.length === 1 ? "You have an interest to review" : "You have interests to review"}</h2><p>{actionableInbound.length} awaiting your response. Contact details remain private until sharing is approved.</p></div>
-                <ul className="interest-invitation-actions">{actionableInbound.map((interest, index) => <li key={interest.interestId}><span>Interest {index + 1}</span><a className="btn btn-primary" href={"/me?connection=" + encodeURIComponent(interest.interestId) + (interest.direction === "private" ? "#private-documented-interests" : interest.direction === "outbound" ? "#outbound-interests" : "#inbound-interests")} aria-label={actionableInbound.length > 1 ? "View interest " + (index + 1) : undefined}>View interest</a></li>)}</ul>
-              </section>}
-              {!isLoading && !busy && interestUpdates.map((interest, index) => {
-                const closed = ["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) || ["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus);
-                const ready = !closed && !interest.paused && Boolean(interest.contactSharedAt && (interest.counterparty?.email || interest.counterparty?.phone));
-                return <section className="interest-invitation" key={interest.interestId} aria-label={"Interest update " + (index + 1)}><div className="interest-invitation-copy"><h2>{ready ? "Contacts are ready" : closed ? "Connection closed" : interest.paused ? "Connection paused" : "Interest update"}</h2><p>{closed ? "This connection is no longer available. No further response is needed." : ready ? "Open your connection to see the contact details available to you." : interest.ownFinalApproval === "approved" && !interest.contactSharedAt && interest.flowStatus !== "contact_shared" ? "Contact details will be shared after the admin reviews and approves the match." : "No response is currently needed from you. You can review your connection."}</p></div>{!closed && interest.counterparty && <a className="btn btn-primary" href={"/me?connection=" + encodeURIComponent(interest.interestId) + (interest.direction === "private" ? "#private-documented-interests" : interest.direction === "outbound" ? "#outbound-interests" : "#inbound-interests")}>{ready ? "View contact details" : "View interest"}</a>}</section>;
-              })}
-              {data.applicant.status === "approved" && <><FemaleReviews /><MatchmakerNotifications /></>}
+              <ReceivedInterestRibbon interests={[...data.inbound, ...data.outbound, ...data.privateDocumented]} approved={data.applicant.status === "approved"} />
+              {data.applicant.status === "approved" && <MatchmakerNotifications />}
             </section>}
             {view === "matchmaker" && <MatchmakerMatching archived={archived} onSessionExpired={onMatchmakerSessionExpired} />}
             <div hidden={view !== "overview"} id="overview">

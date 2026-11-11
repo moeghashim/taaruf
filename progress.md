@@ -772,3 +772,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Hide only the private documented display label in FemaleWorkflowActions; retain its state, share action, other statuses and all permissions. Added markup/action regressions; no backend or live changes. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Added Omar3637 exact received-interest heading in initial inbound notifications for both roles; preserved body/CTAs and final/outbound/event wording. Added 12 desktop/mobile read-only browser cases. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Follow-up: exact admin Share requester control rapid double activation reproduced2POST; synchronous in-flight ref now sends1. Added unit regression; integrated certified copy ancestry98b04b8 without changing frozenPR137. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Consolidated applicant interest/workflow notices into one ID-keyed ribbon, preserving distinct connections, lifecycle copy, cursor completeness and authorized contact checks; added unit and synthetic production-browser coverage. No backend or live-data changes.
+- Polished both applicant review surfaces: consistent portal typography, complete requirements with separated prose, and stage-specific What happens next before decisions; preserved disclosure/mutation gates and first-click DOM behavior.
+- Independent review P2 fixed: optional contact verification failures no longer clear other reviews; verified generic actions remain available when the workflow list fails, without restoring ambiguous idle fallbacks. Added mixed-failure regression.
