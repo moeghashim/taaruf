@@ -31,3 +31,33 @@ describe("authoritative received interest ribbon", () => {
     expect(receivedInterestUpdates([], [{ ...review(), reviewExpired: true }])[0].href).toBeUndefined();
   });
 });
+
+describe("sent interest heading", () => {
+  const sent = { ...interest("sent"), direction: "outbound" };
+  it("changes only the generic outgoing heading, not body or button", () => {
+    const inbound = receivedInterestUpdates([interest("sent")], [])[0];
+    const outbound = receivedInterestUpdates([sent], [])[0];
+    expect(outbound).toEqual({ ...inbound, heading: "You Have Sent an Interest", href: "/me?connection=sent#outbound-interests" });
+    expect(receivedInterestUpdates([{ ...sent, direction: "private" }], [])[0].heading).toBe("Interest update");
+  });
+  it("keeps mixed and multiple connections directionally accurate", () => {
+    const notices = receivedInterestUpdates([sent, { ...sent, interestId: "sent2" }, { ...interest("received"), canRespond: true }], []);
+    expect(notices.map(item => item.heading)).toEqual(["You Have Received An Interest", "You Have Sent an Interest", "You Have Sent an Interest"]);
+  });
+  for (const [patch, heading] of [
+    [{ canFinalApprove: true }, "Your review is needed"],
+    [{ canRespond: true }, "You Have Received An Interest"],
+    [{ paused: true }, "Connection paused"],
+    [{ contactSharedAt: 1, counterparty: { email: "synthetic@example.test" } }, "Contacts are ready"],
+    ...["closed", "declined", "withdrawn", "revoked", "expired"].map(status => [{ status }, "Connection closed"]),
+  ] as [Partial<InterestNoticeInput>, string][]) it("preserves lifecycle heading " + JSON.stringify(patch), () => {
+    expect(receivedInterestUpdates([{ ...sent, ...patch }], [])[0].heading).toBe(heading);
+  });
+  it("preserves workflow authority rather than infer direction from portal gender", () => {
+    for (const role of ["brother", "sister"]) {
+      const workflow = { ...review(role), interestId: "sent" };
+      expect(receivedInterestUpdates([sent], [workflow])).toEqual(receivedInterestUpdates([], [workflow]));
+      expect(receivedInterestUpdates([sent], [{ ...workflow, ownAction: null }])[0].heading).toBe("Interest update");
+    }
+  });
+});
