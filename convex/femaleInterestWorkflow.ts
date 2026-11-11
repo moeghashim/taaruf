@@ -1,3 +1,4 @@
+import { deliveryAuthorized } from "./brotherReviewActivation";
 import { sessionAllowed } from "./capabilitySecurity";
 import { enqueueContactDelivery, deliveryParticipants, linkedFlows, recordPairApproval, releasePairContacts } from "./contactGate";
 import { paginationOptsValidator } from "convex/server";
@@ -50,13 +51,16 @@ export const createReview = mutation({ args: { ...adminArgs, reviewTokenHash: v.
     await ctx.db.patch(existing._id, { femaleWorkflow: { state: "private_documented" } });
   }
   if (existing) await createInitialInterestFlow(ctx, existing);
-  const { interest, workflow, flow, match } = await active(ctx, args.interestId);
+  const { interest, workflow, flow, match, brother } = await active(ctx, args.interestId);
   if (!["private_documented", "awaiting_brother_review"].includes(workflow.state)) throw new Error("Review already decided");
   if (match && (!flow || flow.requesterFinalApproval !== "approved" || flow.recipientFinalApproval !== "approved")) throw new Error("Explicit bilateral consent required");
   const releasedAt = match?.adminReleasedAt ?? flow?.contactSharedAt;
   const released = match?.contactGate === "contacts_released" || (!!match && !match.contactGate && flow?.contactSharedAt !== undefined);
   const state = match ? released ? "contacts_released" as const : "pending_admin_approval" as const : "awaiting_brother_review" as const;
   await ctx.db.patch(interest._id, { femaleWorkflow: { ...workflow, state, ...(released ? { adminReleasedAt: releasedAt } : {}), reviewTokenHash: args.reviewTokenHash, reviewExpiresAt: Date.now() + 7 * 86400000 }, updatedAt: Date.now() });
+  // One durable invitation per interest/recipient, including token reissues.
+  // Only an explicit admin share can enqueue, never dashboard reads.
+  if (state === "awaiting_brother_review") await enqueue(ctx, interest, brother._id, "brother_review");
   return { interestId: interest._id, state };
 }});
 function dashboardRows(ctx: ReadCtx, person: Doc<"registrations">) {
@@ -164,8 +168,12 @@ export const listDeliveriesPage = query({ args: { adminSecret: v.optional(v.stri
 export const retryDelivery = mutation({ args: { adminSecret: v.optional(v.string()), deliveryId: v.id("femaleWorkflowDeliveries") }, handler: async (ctx, args) => {
   requireAdmin(args.adminSecret); const row = await ctx.db.get(args.deliveryId);
   if (!row || row.status !== "failed") throw new Error("Only failed delivery can retry");
+  if (!await deliveryAuthorized(ctx, row)) throw new Error("Delivery unavailable: not authorized by activation boundary/kind");
   const interest = await ctx.db.get(row.interestId);
-  if (interest?.femaleWorkflow) await active(ctx, row.interestId, true); else await deliveryParticipants(ctx, row.interestId);
+  if (interest?.femaleWorkflow) {
+    const { workflow, brother } = await active(ctx, row.interestId, true);
+    if (row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !workflow.reviewTokenHash || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) throw new Error("Review unavailable for retry");
+  } else await deliveryParticipants(ctx, row.interestId);
   if (row.firstAttemptAt !== undefined && Date.now() - row.firstAttemptAt >= 23 * 3600000) throw new Error("Idempotency window expired; reconcile provider delivery manually");
   await ctx.db.patch(row._id, { status: "pending", nextAttemptAt: Date.now(), error: undefined }); return null;
 }});

@@ -1,3 +1,5 @@
+import { deliveryAuthorized, reviewActivation } from "./brotherReviewActivation";
+import { deliveryConfig } from "./femaleWorkflowDelivery";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 type ReadCtx = MutationCtx | QueryCtx;
@@ -5,7 +7,13 @@ type ReadCtx = MutationCtx | QueryCtx;
 export async function enqueueContactDelivery(ctx: MutationCtx, interestId: Id<"interests">, recipientId: Id<"registrations">, kind: Doc<"femaleWorkflowDeliveries">["kind"]) {
   const key = interestId + ":" + kind + ":" + recipientId;
   if (await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_key", q => q.eq("key", key)).unique()) return;
-  await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId, kind, key, status: "pending", attempts: 0, nextAttemptAt: Date.now(), createdAt: Date.now() });
+  const createdAt = Date.now();
+  const reviewActivationAt = kind === "brother_review" ? await reviewActivation(ctx) : null;
+  const authorized = await deliveryAuthorized(ctx, { kind, createdAt, reviewActivationAt: reviewActivationAt ?? undefined });
+  const recipient = kind === "brother_review" ? await ctx.db.get(recipientId) : null;
+  const ready = kind !== "brother_review" || (authorized && !!recipient && !!deliveryConfig(recipient.email));
+  // Record ineligible shares too: reissue must not turn a preactivation share into a future send.
+  await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId, kind, key, status: ready ? "pending" : "failed", attempts: 0, nextAttemptAt: createdAt, createdAt, ...(ready && reviewActivationAt !== null ? { reviewActivationAt } : {}), ...(ready ? {} : { error: "Review notification not activated/configured at share time; no backfill" }) });
 }
 /** Validate both directions of the link before trusting any consent metadata. */
 export function assertMatchInterest(match: Doc<"matches">, interest: Doc<"interests">) {

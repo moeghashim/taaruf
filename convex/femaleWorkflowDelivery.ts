@@ -1,3 +1,4 @@
+import { BROTHER_REVIEW_ACTIVATION_KEY, BROTHER_REVIEW_MODE, deliveryAuthorized } from "./brotherReviewActivation";
 import { deliveryParticipants } from "./contactGate";
 import { v } from "convex/values";
 import { internalMutation, internalAction, type MutationCtx } from "./_generated/server";
@@ -15,17 +16,28 @@ async function cooldown(ctx: MutationCtx) {
   return latest?.providerCooldownUntil ?? 0;
 }
 // Outbox lease plus provider idempotency covers action crashes after delivery.
+// Explicit owner-approved operation only; never called by cron, enqueue, or deployment.
+export const activateBrotherReview = internalMutation({ args: {}, handler: async ctx => {
+  if (process.env.FEMALE_WORKFLOW_EMAIL_MODE !== BROTHER_REVIEW_MODE || !deliveryConfig("activation@example.invalid")) throw new Error("Dedicated review production configuration missing");
+  const existing = await ctx.db.query("settings").withIndex("by_key", q => q.eq("key", BROTHER_REVIEW_ACTIVATION_KEY)).unique();
+  if (existing) return existing.value;
+  const value = String(Date.now());
+  await ctx.db.insert("settings", { key: BROTHER_REVIEW_ACTIVATION_KEY, value });
+  return value;
+}});
 export const claim = internalMutation({ args: {}, handler: async ctx => {
   const now = Date.now();
   if (await cooldown(ctx) > now) return [];
-  const pending = await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_status_and_nextAttemptAt", q => q.eq("status", "pending").lte("nextAttemptAt", now)).take(10);
-  const abandoned = await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_status_and_nextAttemptAt", q => q.eq("status", "sending").lte("nextAttemptAt", now)).take(10);
+  const scoped = process.env.FEMALE_WORKFLOW_EMAIL_MODE === BROTHER_REVIEW_MODE;
+  const pending = scoped ? await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_kind_and_status_and_nextAttemptAt", q => q.eq("kind", "brother_review").eq("status", "pending").lte("nextAttemptAt", now)).take(10) : await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_status_and_nextAttemptAt", q => q.eq("status", "pending").lte("nextAttemptAt", now)).take(10);
+  const abandoned = scoped ? await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_kind_and_status_and_nextAttemptAt", q => q.eq("kind", "brother_review").eq("status", "sending").lte("nextAttemptAt", now)).take(10) : await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_status_and_nextAttemptAt", q => q.eq("status", "sending").lte("nextAttemptAt", now)).take(10);
   const result = [];
   for (const row of [...pending, ...abandoned].slice(0, 10)) {
+    if (!await deliveryAuthorized(ctx, row)) { await ctx.db.patch(row._id, { status: "failed", leaseUntil: undefined, error: "Delivery not authorized by activation boundary/kind; no backfill" }); continue; }
     if (row.firstAttemptAt !== undefined && now - row.firstAttemptAt >= 23 * 3600000) { await ctx.db.patch(row._id, { status: "failed", error: "Idempotency window expired; manual reconciliation required" }); continue; }
     try {
       const { workflow, sister, brother } = await participants(ctx, row.interestId);
-      if (![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
+      if ((row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) || ![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
       const recipient = row.recipientId === sister._id ? sister : brother;
       const attempts = row.attempts + 1;
       await ctx.db.patch(row._id, { status: "sending", attempts, leaseUntil: now + 120000, nextAttemptAt: now + 120000 });
@@ -37,6 +49,7 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
 export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDeliveries"), attempt: v.number() }, handler: async (ctx, args) => {
   const row = await ctx.db.get(args.id);
   if (!row || row.status !== "sending" || row.attempts !== args.attempt) return false;
+  if (!await deliveryAuthorized(ctx, row)) return false;
   const now = Date.now();
   if (row.leaseUntil === undefined || row.leaseUntil <= now) return false;
   if (row.firstAttemptAt !== undefined && now - row.firstAttemptAt >= 23 * 3600000) {
@@ -48,7 +61,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   let review = false;
   try {
     const { workflow, sister, brother } = await participants(ctx, row.interestId);
-    if (![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
+    if ((row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) || ![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
     email = row.recipientId === sister._id ? sister.email : brother.email;
     review = Boolean((await ctx.db.get(row.interestId))?.femaleWorkflow);
   } catch { await ctx.db.patch(row._id, { status: "cancelled", error: "Workflow no longer available" }); return false; }
@@ -57,7 +70,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   if (row.firstAttemptAt !== undefined && !row.providerPayload) {
     await ctx.db.patch(row._id, { status: "failed", leaseUntil: undefined, error: "Prior attempt has no immutable payload; manual reconciliation required" }); return false;
   }
-  const subject = row.kind === "sister_confirmation" ? "Please confirm your interest on the website" : row.kind === "pending_review" ? "Mutual match pending admin approval" : "Your contacts are ready in the portal";
+  const subject = row.kind === "brother_review" ? "A profile is ready for your review" : row.kind === "sister_confirmation" ? "Please confirm your interest on the website" : row.kind === "pending_review" ? "Mutual match pending admin approval" : "Your contacts are ready in the portal";
   const portal = new URL(config.portal);
   portal.pathname = review ? "/dashboard" : "/me";
   portal.searchParams.set(review ? "femaleReview" : "connection", row.interestId);
@@ -74,7 +87,7 @@ export const finish = internalMutation({ args: { id: v.id("femaleWorkflowDeliver
     await ctx.db.patch(row._id, { providerCooldownUntil: until });
     const siblings = await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_status_and_nextAttemptAt", q => q.eq("status", "sending")).take(100);
     for (const sibling of siblings) {
-      if (sibling._id !== row._id) await ctx.db.patch(sibling._id, { status: "pending", leaseUntil: undefined, nextAttemptAt: Math.max(sibling.nextAttemptAt, until) });
+      if (sibling._id !== row._id && (process.env.FEMALE_WORKFLOW_EMAIL_MODE !== BROTHER_REVIEW_MODE || sibling.kind === "brother_review")) await ctx.db.patch(sibling._id, { status: "pending", leaseUntil: undefined, nextAttemptAt: Math.max(sibling.nextAttemptAt, until) });
     }
   }
   if (row.status !== "sending" || row.attempts !== args.attempt) return null;
@@ -87,7 +100,7 @@ export function deliveryConfig(email: string) {
   const key = process.env.FEMALE_WORKFLOW_RESEND_API_KEY;
   const from = process.env.FEMALE_WORKFLOW_EMAIL_FROM;
   const mode = process.env.FEMALE_WORKFLOW_EMAIL_MODE;
-  const production = mode === "production" && process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED === "true";
+  const production = (mode === "production" || mode === BROTHER_REVIEW_MODE) && process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED === "true";
   if ((!production && mode !== "isolated") || (!production && !allowed.includes(email.trim().toLowerCase())) || !portal || !key || !from) return null;
   try {
     const url = new URL(portal);

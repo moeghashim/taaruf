@@ -35,7 +35,7 @@ function isolated() {
 test("older failures remain visible and retryable beyond 100 newer successes", async () => {
   const { t } = await accepted();
   const failed = await t.run(async ctx => {
-    const row = (await ctx.db.query("femaleWorkflowDeliveries").first())!;
+    const row = (await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_kind_and_status_and_nextAttemptAt", q => q.eq("kind", "sister_confirmation")).first())!;
     await ctx.db.patch(row._id, { status: "failed", error: "synthetic failure" });
     const { _id, _creationTime, ...copy } = row;
     void _creationTime;
@@ -115,6 +115,7 @@ test("frozen replay still fails closed if isolated sending is disabled", async (
 
 test("failed pagination reaches row 101 beyond non-retryable failures and newer successes", async () => {
   const { t } = await accepted();
+  await t.run(async ctx => { const review = await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_kind_and_status_and_nextAttemptAt", q => q.eq("kind", "brother_review")).first(); if (review) await ctx.db.delete(review._id); });
   const ids = await t.run(async ctx => {
     const row = (await ctx.db.query("femaleWorkflowDeliveries").first())!;
     const { _id, _creationTime, ...copy } = row; void _creationTime;
@@ -207,7 +208,7 @@ for (const invalid of ["closed", "declined", "interest_reset", "match_reset", "i
   vi.stubGlobal("fetch", provider);
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   const rows = await t.query(api.femaleInterestWorkflow.listDeliveries, { adminSecret, interestId });
-  const failed = rows.find(row => row.status === "failed")!;
+  const failed = rows.find(row => row.kind === "pending_review" && row.status === "failed")!;
   const sibling = rows.find(row => row.status === "sent")!;
   await t.mutation(api.matches.updateStatus, { adminSecret, id: matchId, status: "paused" });
   if (invalid === "closed" || invalid === "declined") await t.mutation(api.matches.updateStatus, { adminSecret, id: matchId, status: invalid });

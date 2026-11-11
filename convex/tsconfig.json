@@ -11,6 +11,10 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    // Bridge tests import Next.js routes; resolve their shared src alias too.
+    "paths": {
+      "@/*": ["../src/*"]
+    },
 
     /* These compiler options are required by Convex */
     "target": "ESNext",
