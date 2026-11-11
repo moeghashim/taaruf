@@ -1,0 +1,13 @@
+// Disposable loopback fixture ONLY. Never copy to release convex/.
+import {mutation,query} from "./_generated/server";
+import schema from "./schema";
+export const seed=mutation({args:{},handler:async ctx=>{
+ if((await ctx.db.query("registrations").take(1)).length) throw Error("Fresh synthetic database required");
+ const pairs=[];
+ for(let i=0;i<16;i++){const pair=[];for(const gender of ["male","female"] as const){
+ const sessionHash=`synthetic-issue97-${i}-${gender}`;
+ const registrationId=await ctx.db.insert("registrations",{name:sessionHash,email:sessionHash+"@example.invalid",age:30,gender,maritalStatus:"single",education:"College",job:"Synthetic",phone:"0000000000",status:"approved",profileCompletionStatus:"completed",searchStatus:"active",createdAt:Date.now()});
+ await ctx.db.insert("applicantSessions",{registrationId,sessionHash,createdAt:Date.now(),expiresAt:Date.now()+86400000});pair.push({registrationId,sessionHash});}pairs.push(pair);}
+ return pairs;
+}});
+export const snapshot=query({args:{},handler:async ctx=>Object.fromEntries(await Promise.all(Object.keys(schema.tables).map(async name=>[name,await ctx.db.query(name as keyof typeof schema.tables).take(1000)])))});

@@ -676,3 +676,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Restore workbench New match as private Save draft; block draft bearer disclosure/notifications and availability reservation; preserve legacy contact-release provenance. Synthetic regression/browser checks; preview-only, no live deployment.
+
+## 2026-11-10
+- Implemented issue97 background matchmaking in convex lifecycle/schema, applicant tab/API, admin Present/release/followups and dedicated gated notification sender; added privacy/withdrawal/idempotency/race/mobile regression coverage. Preview only; no live backend/data/email changes.

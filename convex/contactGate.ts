@@ -187,6 +187,15 @@ export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interest
 
 export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches">) {
   if (match.testResetAt !== undefined || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+  if (!match.interestId && match.matchmakerPresentedAt !== undefined) {
+    if (match.matchmakerWithdrawnAt !== undefined || match.maleMatchmakerApprovalAt === undefined || match.femaleMatchmakerApprovalAt === undefined) throw new Error("Both applicants must give final approval before contacts can be shared");
+    const {male, female} = await assertParticipantsAvailable(ctx, match.maleRegistrationId, match.femaleRegistrationId, match._id);
+    if ([male, female].some(p => !p.email || !p.phone)) throw new Error("Both applicants must have contact details");
+    const now = Date.now();
+    await ctx.db.patch(match._id, {status: "contact_shared", contactGate: "contacts_released", adminReleasedAt: match.adminReleasedAt ?? now, updatedAt: now});
+    for (const p of [male, female]) await ctx.db.patch(p._id, {activeMatchId: match._id});
+    return;
+  }
   const interest = match.interestId ? await ctx.db.get(match.interestId) : null;
   if (!interest) throw new Error("Active linked interest required");
   assertMatchInterest(match, interest);
