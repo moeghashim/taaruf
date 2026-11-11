@@ -732,3 +732,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10 — matching release3445
 - Reconciled approved matching and draft validation onto exact live portal; 1097 tests, build/types and portal/comparison/New match browser checks pass. Production remains unchanged pending final gates. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Added fixed-scope audited #315→#217 Nov14 submission reopen backend/API and regression tests; preview only, no operational data changes. Existing profile shares and notification history remain unchanged.
