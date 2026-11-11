@@ -693,3 +693,4 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-10
 - Split applicant portal into four history-aware views; preserve forms/actions, legacy destinations and DOB privacy; add synthetic navigation/action coverage. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Applied Layla3403 DOB records/privacy copy and aligned six profile basics in one responsive grid; no required-field or age-validation changes. <!-- project: github.com/moeghashim/clawscrewskill -->

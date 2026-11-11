@@ -44,6 +44,12 @@ for (const width of [1280, 820, 390, 320]) for (const gender of ["male", "female
   expect(calls.some(c=>c.body.action==="submit_number")).toBe(true);
   await screenshot("interests.png");
   await go("My Profile");
+  await expect(page.locator("#birthday-help")).toHaveText("Please add your date of birth for our records and background checks. Only your age is shared with matches.");
+  const fields = await page.locator(".profile-basics input, .profile-basics select").evaluateAll(nodes => nodes.map(node => { const r=node.getBoundingClientRect(); return {x:r.x,y:r.y,w:r.width}; }));
+  expect(fields).toHaveLength(6);
+  if (width > 768) {
+    for (let i=0;i<6;i+=2) { expect(Math.abs(fields[i].w-fields[i+1].w)).toBeLessThan(2); expect(Math.abs(fields[i].y-fields[i+1].y)).toBeLessThan(2); }
+  } else { for (const field of fields) expect(field.x).toBe(fields[0].x); }
   await page.getByLabel(/date of birth/i).fill("1995-04-03");
   await page.getByLabel("Education level").selectOption("master");
   await go("Overview");

@@ -65,7 +65,7 @@ const stubs = { name: 'next-browser-isolation', setup(build) {
       await page.addScriptTag({content:bundles[kind]});
       const dob=page.getByLabel(/date of birth/i).first();await expect(dob).toBeVisible();
       await expect(dob).toHaveAttribute('type','date');
-      await expect(page.locator('#birthday-help')).toContainText('Your age is shared with matches, not your date of birth');
+      await expect(page.locator('#birthday-help')).toContainText(kind === 'signup' ? 'not your date of birth' : 'Only your age is shared with matches');
       await expect(dob).toHaveValue(kind==='signup'?'':fixture.dateOfBirth);
       await dob.fill('2008-11-10');await expect(dob).toHaveAttribute('aria-invalid','false');
       await dob.fill('2008-11-11');await expect(dob).toHaveAttribute('aria-invalid','true');

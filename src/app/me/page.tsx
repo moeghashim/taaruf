@@ -1246,8 +1246,8 @@ export default function ApplicantDashboardPage() {
                   </div>
                 ) : (
                   <form onSubmit={saveProfile} className="profile-form">
-                    <DateOfBirthField originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
-                    <div className="profile-grid two">
+                    <div className="profile-grid two profile-basics">
+                    <DateOfBirthField externalHelp originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
                       <div className="field">
                         <label htmlFor="education">Education level *</label>
                         <select id="education" value={profile.education || ""}
@@ -1282,9 +1282,6 @@ export default function ApplicantDashboardPage() {
                           ))}
                         </select>
                       </div>
-                    </div>
-
-                    <div className="profile-grid two">
                       <div className="field">
                         <label htmlFor="hijabResponse">{hijabLabel} *</label>
                         <select
@@ -1316,6 +1313,7 @@ export default function ApplicantDashboardPage() {
                         </select>
                       </div>
                     </div>
+                    <p id="birthday-help" className="muted">Please add your date of birth for our records and background checks. Only your age is shared with matches.</p>
 
                     <div className="photo-upload-box">
                       <div>
