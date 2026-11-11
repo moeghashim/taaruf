@@ -1,3 +1,4 @@
+import { dateOfBirthError } from "@/lib/date-of-birth";
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
@@ -35,6 +36,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
           gender: registration.gender,
           email: registration.email,
           education: registration.education,
+          dateOfBirth: registration.dateOfBirth,
           ethnicity: registration.ethnicity || "",
           imageStorageIds,
           imageUrls: images.map((image) => image.url),
@@ -66,11 +68,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   try {
     const { token } = await context.params;
     const body = await request.json();
+    if (body.dateOfBirth !== undefined && dateOfBirthError(body.dateOfBirth)) {
+      return NextResponse.json({ error: "Enter a valid date of birth (age 18–99)." }, { status: 400 });
+    }
     const convexClient = getConvexClient();
 
     await convexClient.mutation(api.registrations.updateProfile, {
       token,
       education: body.education,
+      ...(body.dateOfBirth !== undefined ? { dateOfBirth: body.dateOfBirth } : {}),
       ethnicity: body.ethnicity,
       imageStorageIds: body.imageStorageIds,
       prayerCommitment: body.prayerCommitment,

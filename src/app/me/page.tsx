@@ -1,4 +1,6 @@
 "use client";
+import { DateOfBirthField } from "@/components/date-of-birth-field";
+import { dateOfBirthError, changedDateOfBirth } from "@/lib/date-of-birth";
 import { educationOptionsFor, formatEducation } from "@/lib/education";
 
 import { applicantLoginHref } from "@/lib/applicant-destination";
@@ -125,6 +127,7 @@ type ProfileData = {
   name: string;
   gender: "male" | "female";
   email: string;
+  dateOfBirth?: string;
   education: string;
   ethnicity: string;
   imageStorageIds: string[];
@@ -610,6 +613,7 @@ export default function ApplicantDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
   const [message, setMessage] = useState<string | null>(null);
@@ -709,6 +713,7 @@ export default function ApplicantDashboardPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Failed to load profile");
       const registration = payload.registration;
+      setOriginalDateOfBirth(registration.dateOfBirth);
       setProfile({
         ...registration,
         interestSubmissionNumbers: ((registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
@@ -882,6 +887,11 @@ export default function ApplicantDashboardPage() {
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!profile) return;
+    const birthdayChange = changedDateOfBirth(profile.dateOfBirth, originalDateOfBirth);
+    if (birthdayChange !== undefined) {
+      const birthdayError = dateOfBirthError(birthdayChange);
+      if (birthdayError) { setError(birthdayError); return; }
+    }
 
     setIsSavingProfile(true);
     setMessage(null);
@@ -906,6 +916,7 @@ export default function ApplicantDashboardPage() {
         body: JSON.stringify({
           ethnicity: profile.ethnicity,
           education: profile.education,
+          ...(birthdayChange !== undefined ? { dateOfBirth: birthdayChange } : {}),
           imageStorageIds: uploadedImages.map((image) => image.storageId),
           prayerCommitment: profile.prayerCommitment,
           hijabResponse: profile.hijabResponse,
@@ -1220,6 +1231,7 @@ export default function ApplicantDashboardPage() {
                   </div>
                 ) : (
                   <form onSubmit={saveProfile} className="profile-form">
+                    <DateOfBirthField originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
                     <div className="profile-grid two">
                       <div className="field">
                         <label htmlFor="education">Education level *</label>

@@ -1,4 +1,5 @@
 import { isManualMatchDraft } from "../src/lib/manual-match-draft";
+import { currentAge, withCurrentAge } from "./birthdays";
 import { capabilityAllowed } from "./capabilitySecurity";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
@@ -75,8 +76,8 @@ export const getAll = query({
 
         return {
           ...share,
-          owner,
-          recipient,
+          owner: await withCurrentAge(ctx, owner),
+          recipient: await withCurrentAge(ctx, recipient),
         };
       })
     ));
@@ -138,7 +139,7 @@ export const getByShareToken = query({
       includeImages,
       status: share.status,
       owner: owner ? {
-        age: owner.age, gender: owner.gender, maritalStatus: owner.maritalStatus,
+        age: await currentAge(ctx, owner), gender: owner.gender, maritalStatus: owner.maritalStatus,
         education: owner.education, job: owner.job, ethnicity: owner.ethnicity,
         prayerCommitment: owner.prayerCommitment, hijabResponse: owner.hijabResponse,
         spouseRequirement1: owner.spouseRequirement1, spouseRequirement2: owner.spouseRequirement2,
