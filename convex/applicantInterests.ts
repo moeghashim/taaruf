@@ -7,7 +7,7 @@ import { recordPairApproval, contactsVisible, linkedFlows, assertMatchInterest }
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
 import { assertNotArchived, assertMatchingParticipants } from "./interestRules";
-import { matchesInterestFirstName } from "./interestIdentity";
+
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -182,6 +182,7 @@ async function safeCounterparty(
       direction === "outbound" ||
       direction === "private" ||
       (direction === "inbound" && viewer.gender === "female"));
+  const requirementsVisible = fullProfileVisible && (direction === "inbound" || flow?.recipientDecision === "accepted" || Boolean(interest.femaleWorkflow?.brotherAcceptedAt));
   // Neither gender nor contact sharing is photo consent.
   const explicitChoice = counterparty._id === interest.fromRegistrationId && viewer._id === interest.toRegistrationId
     ? interest.senderPhotoConsent : undefined;
@@ -207,9 +208,10 @@ async function safeCounterparty(
     ethnicity: fullProfileVisible ? counterparty.ethnicity ?? null : null,
     prayerCommitment: fullProfileVisible ? counterparty.prayerCommitment ?? null : null,
     hijabResponse: fullProfileVisible ? counterparty.hijabResponse ?? null : null,
-    spouseRequirement1: fullProfileVisible ? counterparty.spouseRequirement1 ?? null : null,
-    spouseRequirement2: fullProfileVisible ? counterparty.spouseRequirement2 ?? null : null,
-    spouseRequirement3: fullProfileVisible ? counterparty.spouseRequirement3 ?? null : null,
+    requirementsVisible,
+    spouseRequirement1: requirementsVisible ? counterparty.spouseRequirement1 ?? null : null,
+    spouseRequirement2: requirementsVisible ? counterparty.spouseRequirement2 ?? null : null,
+    spouseRequirement3: requirementsVisible ? counterparty.spouseRequirement3 ?? null : null,
     photoSharingPermission: fullProfileVisible ? counterparty.photoSharingPermission ?? null : null,
     imageUrls: imageUrls.filter((url): url is string => Boolean(url)),
     shareableBio: bioVisible ? counterparty.shareableBio ?? null : null,
@@ -268,7 +270,7 @@ async function serializeInterest(
     flowStatus: closed ? "closed" : internalStatus === "contact_shared" ? "contact_shared" : "in_progress",
     canRespond,
     canFinalApprove,
-    canWithdraw: !interest.femaleWorkflow && (direction === "outbound" || direction === "private") && ["awaiting_inbound_response", "kept_open", "private_documented"].includes(internalStatus),
+    canWithdraw: !closed && !interest.matchId && viewer.status === "approved" && (!interest.femaleWorkflow || (interest.femaleWorkflow.state === "private_documented" && interest.visibility === "internal_only" && (interest.adminStatus ?? "pending") === "pending")) && (direction === "outbound" || direction === "private") && ["awaiting_inbound_response", "kept_open", "private_documented"].includes(internalStatus),
     ownInitialDecision: direction === "inbound" ? flow?.recipientDecision ?? "pending" : null,
     ownFinalApproval,
     visibility: interest.visibility,
@@ -289,7 +291,7 @@ export const getInterestEligibility = query({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const event = await findEligibleInterestSubmissionEvent(ctx, registration._id);
     const submissions = event ? await ctx.db.query("interests")
-      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", event._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3) : [];
+      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", event._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3) : [];
     return {
       eventLogisticsRestricted: !canReceiveEventMessages(registration),
       interestSubmissionEventId: event?._id ?? null,
@@ -338,7 +340,7 @@ export const getDashboard = query({
     const visibleOutbound = outboundRows.filter(interest => dashboardDirection(registration, interest) === "outbound");
 
     const submissions = eligibleEvent ? await ctx.db.query("interests")
-      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3) : [];
+      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3) : [];
     return {
       eventLogisticsRestricted: !canReceiveEventMessages(registration),
       requestedConnectionId: args.connectionId ?? null,
@@ -377,11 +379,32 @@ export const getDashboard = query({
   },
 });
 
+// Exact-number only; per-applicant budget survives session rotation and failed lookups.
+export const lookupInterestName = mutation({
+  args: { sessionHash: v.string(), applicantNumber: v.number(), expectedEventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const person = await getRegistrationForSession(ctx, args.sessionHash);
+    assertNotArchived(person);
+    const event = await findEligibleInterestSubmissionEvent(ctx, person._id);
+    if (person.status !== "approved" || !event || event._id !== args.expectedEventId) return { firstName: null };
+    const now = Date.now();
+    const budget = await ctx.db.query("interestLookups").withIndex("by_registrationId", q => q.eq("registrationId", person._id)).unique();
+    const fresh = !budget || now - budget.windowStart >= 3600000;
+    if (!fresh && budget.count >= 12) return { firstName: null, limited: true };
+    if (budget) await ctx.db.patch(budget._id, { windowStart: fresh ? now : budget.windowStart, count: fresh ? 1 : budget.count + 1 });
+    else await ctx.db.insert("interestLookups", { registrationId: person._id, windowStart: now, count: 1 });
+    const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
+      ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique() : null;
+    if (!target || target.archivedAt !== undefined || target.status !== "approved" || target.gender === person.gender || target._id === person._id) return { firstName: null };
+    return { firstName: target.name.trim().split(/\s+/u)[0] };
+  },
+});
+
 export const submitInterestNumber = mutation({
   args: {
     sessionHash: v.string(),
     applicantNumber: v.number(),
-    applicantName: v.string(),
+    applicantName: v.optional(v.string()),
     expectedEventId: v.id("events"),
     // Compatibility only: an old client may still send a denial. It can never grant access.
     photoConsent: v.optional(v.union(v.literal("yes"), v.literal("no"))),
@@ -393,11 +416,33 @@ export const submitInterestNumber = mutation({
     if (!selected || selected._id !== args.expectedEventId) {
       throw new Error("Interest submissions are unavailable or the selected event changed. You must be approved, confirmed, and checked in to the event that is ON.");
     }
+    if (registration.profileCompletionStatus !== "completed") throw new Error("Requester must complete their profile before matching can begin");
+    const budget = await ctx.db.query("interestLookups").withIndex("by_registrationId", q => q.eq("registrationId", registration._id)).unique();
+    const fresh = !budget || Date.now() - budget.windowStart >= 3600000;
+    if (!fresh && budget.count >= 12) throw new Error("Too many name checks. Please try again in an hour.");
+    // Reject quota-full callers before inspecting the target: failed attempts reveal no target eligibility.
+    const charged = await ctx.db.query("interests").withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3);
+    if (charged.length >= 3) {
+      // Permit exact idempotent retries using only the already-authorized charged rows.
+      for (const row of charged) {
+        const known = await ctx.db.get(row.toRegistrationId);
+        if (known?.publicApplicantNumber === args.applicantNumber) {
+          const incoming = await existingInboundReview(ctx, registration, known, selected._id);
+          if (incoming) return { interestId: incoming.interestId, private: false, inboundInterestNotification: null, existingInbound: incoming };
+          if (!isVisibleInApplicantDashboard(row)) throw new Error("Interest already submitted for this event");
+          return { interestId: row._id, private: row.visibility === "internal_only", inboundInterestNotification: null };
+        }
+      }
+      throw new Error("You can submit a maximum of 3 interests per event");
+    }
+    // Count successful submissions too: withdrawal cannot reset the discovery budget.
+    if (budget) await ctx.db.patch(budget._id, { windowStart: fresh ? Date.now() : budget.windowStart, count: fresh ? 1 : budget.count + 1 });
+    else await ctx.db.insert("interestLookups", { registrationId: registration._id, windowStart: Date.now(), count: 1 });
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique()
       : null;
-    if (!target || target.archivedAt !== undefined || !matchesInterestFirstName(target.name, args.applicantName) ||
-        target._id === registration._id || target.gender === registration.gender || target.status !== "approved") {
+    if (!target || target.archivedAt !== undefined ||
+        target._id === registration._id || target.gender === registration.gender || target.status !== "approved" || target.profileCompletionStatus !== "completed") {
       throw new Error("Applicant details could not be verified");
     }
 
@@ -407,7 +452,7 @@ export const submitInterestNumber = mutation({
     if (incoming) return { interestId: incoming.interestId, private: false, inboundInterestNotification: null, existingInbound: incoming };
 
     const previous = await ctx.db.query("interests")
-      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3);
+      .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3);
     const retry = previous.find(row => row.toRegistrationId === target._id);
     if (retry) {
       if (!isVisibleInApplicantDashboard(retry)) throw new Error("Interest already submitted for this event");
@@ -418,7 +463,7 @@ export const submitInterestNumber = mutation({
       fromRegistrationId: registration._id,
       toRegistrationId: target._id,
       source: "platform_submission",
-      applicantName: args.applicantName,
+      applicantName: target.name.trim().split(/\s+/u)[0],
       notes:
         registration.gender === "female"
           ? `Private interest documented by applicant number: ${args.applicantNumber}`
@@ -565,11 +610,14 @@ export const withdrawOutbound = mutation({
     if (interest.fromRegistrationId !== registration._id) {
       throw new Error("Interest does not belong to this applicant");
     }
+    if (interest.status === "withdrawn" && interest.slotReturnedAt !== undefined) return interest._id;
+    await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
+    if (interest.matchId || (interest.femaleWorkflow && (interest.femaleWorkflow.state !== "private_documented" || interest.visibility !== "internal_only" || (interest.adminStatus ?? "pending") !== "pending"))) throw new Error("This interest can no longer be withdrawn");
     if (!["new", "queued", "active", "deferred"].includes(interest.status)) {
       throw new Error("This interest can no longer be withdrawn");
     }
 
-    const flow = await getFlowByInterestId(ctx, interest._id);
+    const flow = await ensureFlow(ctx, interest);
     const withdrawableFlowStatuses = new Set(["private_documented", "awaiting_inbound_response", "kept_open"] as const);
     if (flow && !withdrawableFlowStatuses.has(flow.flowStatus as "private_documented" | "awaiting_inbound_response" | "kept_open")) {
       throw new Error("This interest can no longer be withdrawn");
@@ -578,6 +626,7 @@ export const withdrawOutbound = mutation({
     const now = Date.now();
     await ctx.db.patch(interest._id, {
       status: "withdrawn",
+      ...(interest.source === "platform_submission" ? { slotReturnedAt: now } : {}),
       adminStatus: interest.adminStatus === "matched" ? interest.adminStatus : "declined",
       updatedAt: now,
     });

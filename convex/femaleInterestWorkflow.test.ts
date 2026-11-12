@@ -298,3 +298,23 @@ test('reset review stays absent and denied after reauthentication without revivi
   expect(await t.run(ctx => ctx.db.get(interestId))).toEqual(before);
   await expect(t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: 'missing', interestId })).rejects.toThrow('Unauthorized');
 });
+
+test("4257 private requirements stay hidden until brother accepts, inbound review remains authorized", async () => {
+ const f = await fixture();
+ await f.t.run(async ctx => { await ctx.db.patch(f.brother, { spouseRequirement1: "Private brother requirements" }); await ctx.db.patch(f.sister, { spouseRequirement1: "Inbound sister requirements" }); });
+ await f.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId: f.interestId, reviewTokenHash: hash });
+ expect((await f.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "sister", interestId: f.interestId })).profile.spouseRequirement1).toBeNull();
+ expect((await f.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId: f.interestId })).profile.spouseRequirement1).toBe("Inbound sister requirements");
+ await f.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: f.interestId, decision: "accept" });
+ expect((await f.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "sister", interestId: f.interestId })).profile.spouseRequirement1).toBe("Private brother requirements");
+});
+test("4257 admin share versus private withdrawal has one winner", async () => {
+ const f = await fixture();
+ const outcomes = await Promise.allSettled([
+ f.t.mutation(api.applicantInterests.withdrawOutbound, { sessionHash: "sister", interestId: f.interestId }),
+ f.t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId: f.interestId, reviewTokenHash: hash })]);
+ expect(outcomes.filter(x => x.status === "fulfilled")).toHaveLength(1);
+ const row = await f.t.run(ctx => ctx.db.get(f.interestId));
+ if (row?.status === "withdrawn") expect(row.slotReturnedAt).toEqual(expect.any(Number));
+ else expect(row?.slotReturnedAt).toBeUndefined();
+});
