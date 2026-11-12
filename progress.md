@@ -836,3 +836,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Request4388: filter both applicant closed-history projections by authenticated own decline/withdraw audit receipts; preserve audit/access gates and live167 banners; add functional/provenance/UI regressions. Preview only.
 
 - Combined requests4388/4397 on certified167; preserved both source patches and validated integration independently.
+
+## 2026-11-12
+- Request4433: shared exact brother/sister contact guidance across ordinary interests, inline/standalone reviews and matchmaker contacts; existing release gates/fields retained. Added exact-copy and synthetic desktop/mobile privacy regressions. Preview only.
+
+- Merge4455 reconciliation: preserved actual live PR171 own-closed/name lookup behavior and PR172 contact guidance while retaining source retirement and enrollment supersession. Fresh full suite1587/130, app+Convex types, lint0errors13warnings, build, real loopback concurrency/rollback proof; no production writes. <!-- project: github.com/moeghashim/clawscrewskill -->
