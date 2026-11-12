@@ -29,7 +29,12 @@ export async function POST(request: NextRequest) {
       photoSharingPermission,
       imageStorageIds,
       eventCode,
+      backgroundMatchmakingOptIn,
     } = body;
+
+    if (backgroundMatchmakingOptIn !== undefined && typeof backgroundMatchmakingOptIn !== "boolean") {
+      return NextResponse.json({ error: "Invalid matchmaking preference" }, { status: 400 });
+    }
 
     if (dateOfBirthError(dateOfBirth)) {
       return NextResponse.json({ error: "Enter a valid date of birth (age 18–99)." }, { status: 400 });
@@ -108,6 +113,7 @@ export async function POST(request: NextRequest) {
     // Save registration to Convex
     await convexClient.mutation(api.registrations.create, { adminSecret: getAdminSecret(),
       signupCapabilityHash: await getSignupUploadHash(),
+      backgroundMatchmakingOptIn,
       name,
       age,
       dateOfBirth,
