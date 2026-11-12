@@ -833,3 +833,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Final merge4358 repair verification: all 18 selected suites / 119 tests pass; recorded source inspection, hashes and coverage limits in evidence/merge4358/final-review.md and final-review-tests.log. No implementation or production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Merge4358: implemented atomic fingerprint-guarded merge/rollback, read-only live dry-run, durable source security retirement, enrollment supersession and audited consumers; repaired independent review consent/delivery findings. Full synthetic suite 1551 tests, types/lint/build passed; real local OCC proof passed; production remains unchanged pending eligibility and release approvals. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Request4388: filter both applicant closed-history projections by authenticated own decline/withdraw audit receipts; preserve audit/access gates and live167 banners; add functional/provenance/UI regressions. Preview only.
+
+- Combined requests4388/4397 on certified167; preserved both source patches and validated integration independently.

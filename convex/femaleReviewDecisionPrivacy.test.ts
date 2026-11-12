@@ -50,7 +50,25 @@ for(const decliner of ["brother","sister"])test("neutral closure preserves only 
  const {t,interestId}=await shared();
  if(decliner==="sister") {await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"accept"});await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId,confirmed:false});}
  else await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"decline"});
- for(const role of ["brother","sister"]){const rows=await t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash:role});expect(rows[0]).toMatchObject({state:"closed",ownAction:null,canView:false,ownDecision:role===decliner?"declined":"pending"});privatePayload(rows);await expect(t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:role,interestId})).rejects.toThrow("unavailable");}
+ for(const role of ["brother","sister"]){const rows=await t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash:role});if (role === decliner) expect(rows[0]).toMatchObject({state:"closed",ownAction:null,canView:false,ownDecision:"declined"}); else expect(rows).toEqual([]);privatePayload(rows);await expect(t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:role,interestId})).rejects.toThrow("unavailable");}
+});
+for (const action of ["initial", "brother-final", "sister-final", "withdraw"] as const) test("own closed shared-workflow receipt: " + action, async () => {
+ const {t,interestId}=action === "withdraw" ? await fixture() : await shared();
+ if(action === "withdraw") await t.mutation(api.applicantInterests.withdrawOutbound,{sessionHash:"sister",interestId});
+ else if(action === "initial") await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"decline"});
+ else {await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"accept"});
+ if(action === "brother-final") await t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"brother",interestId,approved:false});
+ else await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId,confirmed:false});}
+ const owner=action === "withdraw" || action === "sister-final" ? "sister" : "brother";
+ for(const sessionHash of ["brother","sister"]) {
+  const history=(await t.query(api.applicantInterests.getDashboard,{sessionHash})).history;
+  expect(history).toHaveLength(sessionHash === owner ? 1 : 0);
+  const rows=await t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash});
+  expect(rows).toHaveLength(sessionHash === owner ? 1 : 0);
+  if(sessionHash === owner) {expect(history[0].ownDecision).toBe(action === "withdraw" ? "withdrawn" : "declined");expect(rows[0]).toMatchObject({canView:false,ownAction:null});}
+  privatePayload(rows);
+  await expect(t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash,interestId})).rejects.toThrow("unavailable");
+ }
 });
 test("neutral email copy preserves delivery gates and frozen retry payloads",async()=>{
  const {t,interestId}=await shared();
