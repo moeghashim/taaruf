@@ -50,3 +50,24 @@ next-env.d.ts
 # remotion sub-project (tracked separately, not part of the Taaruf app)
 /remotion-video/
 
+/test-results/
+/ops/photo-runtime/
+/ops/security-release/
+/ops/security-runtime/
+/ops/*auth-contract.md
+/ops/coordinator-status.md
+/docs/issue58-review-blockers.md
+/ops/*private.md
+/ops/security-integration-notes.md
+/ops/security-runtime-hold.md
+/ops/security-*.log
+/*-consent-local-review/
+
+/ops/female-runtime/
+/ops/female-*.log
+/ops/female-coordinator-status.md
+
+/ops/all-origin-runtime/
+/ops/security-release-runtime/
+
+/ops/*-runtime*/

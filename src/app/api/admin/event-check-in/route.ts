@@ -1,3 +1,4 @@
+import { adminRequestError } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
@@ -9,6 +10,8 @@ function authorized(request: NextRequest) {
   return request.cookies.get("admin_token")?.value === expected;
 }
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!process.env.ATTENDANCE_ADMIN_SECRET) return NextResponse.json({ error: "Attendance service not configured" }, { status: 503 });
   try {

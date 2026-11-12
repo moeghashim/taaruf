@@ -1,0 +1,7 @@
+# Workbench reset history cleanup — request 4131
+
+Frontend-only change on exact live PR156 baseline 2f1b0d6aa8f09cb04fe443d593c96c28e7a0dc10. Exclude interests with testReset, matches with testResetAt (including zero), and matches whose linked interest is reset before event normalization. No database deletion, mutation, backend/schema/config change. Ordinary closed/declined history and the new test interest remain unaffected. Existing selection lookup and cleanup clear stale/reset links without choosing another record. Audit data and other admin views remain intact.
+
+Validation: 1,467 unit/backend tests; root typecheck; production build; scoped lint; independent read-only review (no findings); three browser cases at 1280/390/320px covering both selectors, stale IDs, event filters, empty state, refresh error/retry, normal history and overflow. Browser API requests intercepted, external requests blocked: synthetic UI proof only, no production participants or notifications. Initial legacy browser fixture used retired paginated-interest transport; new fixture uses current interests.getAll. Local installed Chrome used because bundled Chromium unavailable.
+
+Screenshots retained inside repository privateops/hide-reset4131/browser. Image viewer policy denies repository paths; no model screenshot inspection claimed and no outside-scope copies made. Impeccable detector returned no findings. Preview remains UI-review-only, backend API failclosed; no real submissions. Production release and exact-SHA public human DCO remain separately gated.

@@ -1,3 +1,4 @@
+import { dateOfBirthError } from "@/lib/date-of-birth";
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
@@ -23,17 +24,10 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
     }
 
     const imageStorageIds = registration.imageStorageIds || [];
-    const imageUrls = imageStorageIds.length
-      ? await convexClient.query(api.registrations.getImageUrls, { storageIds: imageStorageIds })
-      : [];
-    const images = imageUrls.flatMap((image) =>
-      image.url ? [{ storageId: image.storageId, url: image.url }] : []
-    );
+    // Consent/ownership and URLs are resolved in the same backend snapshot.
+    const images = registration.images;
     const fallbackInterestSubmissionNumbers = (registration.interestSubmission || "")
-      .match(/\d+/g)
-      ?.slice(0, 3)
-      .map((value) => Number(value))
-      .filter((value) => Number.isInteger(value) && value > 0) || [];
+      .match(/\d+/g)?.slice(0, 3).map(Number).filter(value => Number.isInteger(value) && value > 0) || [];
 
     return NextResponse.json(
       {
@@ -41,6 +35,8 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
           name: registration.name,
           gender: registration.gender,
           email: registration.email,
+          education: registration.education,
+          dateOfBirth: registration.dateOfBirth,
           ethnicity: registration.ethnicity || "",
           imageStorageIds,
           imageUrls: images.map((image) => image.url),
@@ -60,9 +56,9 @@ export async function GET(_: NextRequest, context: { params: Promise<{ token: st
       },
       { headers: { "Cache-Control": "no-store" } }
     );
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete request" },
       { status: 500 }
     );
   }
@@ -72,10 +68,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   try {
     const { token } = await context.params;
     const body = await request.json();
+    if (body.dateOfBirth !== undefined && dateOfBirthError(body.dateOfBirth)) {
+      return NextResponse.json({ error: "Enter a valid date of birth (age 18–99)." }, { status: 400 });
+    }
     const convexClient = getConvexClient();
 
     await convexClient.mutation(api.registrations.updateProfile, {
       token,
+      education: body.education,
+      ...(body.dateOfBirth !== undefined ? { dateOfBirth: body.dateOfBirth } : {}),
       ethnicity: body.ethnicity,
       imageStorageIds: body.imageStorageIds,
       prayerCommitment: body.prayerCommitment,
@@ -91,9 +92,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     });
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete request" },
       { status: 500 }
     );
   }

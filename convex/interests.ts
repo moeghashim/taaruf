@@ -1,9 +1,12 @@
+import { withCurrentAge } from "./birthdays";
+import { paginationOptsValidator } from "convex/server";
+import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
+import { assertNotArchived, assertMatchingParticipants } from "./interestRules";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   activateInterestAndQueueCompetitors,
   createInterestWithRules,
-  createMatchFromInterest,
 } from "./interestRules";
 
 const interestSource = v.union(
@@ -30,26 +33,28 @@ const interestAdminStatus = v.union(
 );
 
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interests = await ctx.db.query("interests").collect();
 
-    return await Promise.all(
+    return withoutCapabilities(await Promise.all(
       interests.map(async (interest) => {
         const fromRegistration = await ctx.db.get(interest.fromRegistrationId);
         const toRegistration = await ctx.db.get(interest.toRegistrationId);
-        const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+        const linkedMatch = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+        const match = linkedMatch?.testResetAt !== undefined ? null : linkedMatch;
         const event = interest.eventId ? await ctx.db.get(interest.eventId) : null;
 
         return {
           ...interest,
-          fromRegistration,
-          toRegistration,
+          fromRegistration: withoutCapabilities(await withCurrentAge(ctx, fromRegistration)),
+          toRegistration: withoutCapabilities(await withCurrentAge(ctx, toRegistration)),
           match,
           event,
         };
       })
-    );
+    ));
   },
 });
 
@@ -64,6 +69,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     if (args.source === "platform_submission") throw new Error("Use Submit Interest with a verified applicant session");
     const result = await createInterestWithRules(ctx, args);
@@ -72,16 +78,19 @@ export const create = mutation({
 });
 
 export const updateAdminStatus = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     adminStatus: interestAdminStatus,
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
+    if (args.adminStatus === "matched" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
+    if (args.adminStatus !== "declined") await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     await ctx.db.patch(args.id, {
       adminStatus: args.adminStatus,
       status: args.adminStatus === "declined" ? "declined" : interest.status,
@@ -93,12 +102,13 @@ export const updateAdminStatus = mutation({
 });
 
 export const claimDeclineNotification = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -120,6 +130,9 @@ export const claimDeclineNotification = mutation({
       throw new Error("Interest registration not found");
     }
 
+    assertNotArchived(requester);
+    assertNotArchived(target);
+    if ([requester, target].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) throw new Error("Historical archived workflow cannot send notifications");
     const targetNumber = target.publicApplicantNumber ?? null;
 
     await ctx.db.patch(args.id, {
@@ -140,13 +153,14 @@ export const claimDeclineNotification = mutation({
 });
 
 export const recordDeclineNotificationFailure = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     error: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -161,13 +175,14 @@ export const recordDeclineNotificationFailure = mutation({
 });
 
 export const updateNotes = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     notes: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -181,17 +196,26 @@ export const updateNotes = mutation({
 });
 
 export const updateStatus = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     status: interestStatus,
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
+    if (interest.femaleWorkflow) {
+      if (interest.matchId || !["closed", "declined"].includes(args.status)) throw new Error("Use female website workflow");
+      await ctx.db.patch(interest._id, { femaleWorkflow: { ...interest.femaleWorkflow, state: args.status === "declined" ? "declined" : "revoked" } });
+      const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
+      if (flow) await ctx.db.patch(flow._id, { flowStatus: args.status as "closed" | "declined", updatedAt: Date.now() });
+    }
+    if (args.status === "converted_to_match" && !interest.matchId) throw new Error("Participant final approvals must create the match first");
+    if (!["closed", "declined", "withdrawn"].includes(args.status)) await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     await ctx.db.patch(args.id, {
       status: args.status,
       adminStatus: args.status === "declined" ? "declined" : interest.adminStatus,
@@ -204,13 +228,14 @@ export const updateStatus = mutation({
 });
 
 export const updateRank = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
     rank: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -224,12 +249,13 @@ export const updateRank = mutation({
 });
 
 export const remove = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("interests"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
@@ -244,34 +270,38 @@ export const remove = mutation({
 });
 
 export const progressFirst = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     interestId: v.id("interests"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     return await activateInterestAndQueueCompetitors(ctx, args.interestId);
   },
 });
 
 export const convertToMatch = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     interestId: v.id("interests"),
     adminNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.interestId);
-    if (!interest) {
+    if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
 
-    return await createMatchFromInterest(ctx, interest, args.adminNotes);
+    if (interest.femaleWorkflow || (interest.source === "platform_submission" && interest.visibility === "internal_only")) throw new Error("Use female website workflow");
+    throw new Error("Matches are created automatically after both participant final approvals");
   },
 });
 
 export const getByRegistration = query({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     registrationId: v.id("registrations"),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const outbound = await ctx.db
       .query("interests")
       .withIndex("by_fromRegistrationId", (q) => q.eq("fromRegistrationId", args.registrationId))
@@ -281,16 +311,74 @@ export const getByRegistration = query({
       .withIndex("by_toRegistrationId", (q) => q.eq("toRegistrationId", args.registrationId))
       .collect();
 
-    const enrich = async (interest: (typeof outbound)[number]) => ({
-      ...interest,
-      fromRegistration: await ctx.db.get(interest.fromRegistrationId),
-      toRegistration: await ctx.db.get(interest.toRegistrationId),
-      match: interest.matchId ? await ctx.db.get(interest.matchId) : null,
-    });
+    const enrich = async (interest: (typeof outbound)[number]) => {
+      const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
+      return {
+        ...interest,
+        fromRegistration: withoutCapabilities(await withCurrentAge(ctx, await ctx.db.get(interest.fromRegistrationId))),
+        toRegistration: withoutCapabilities(await withCurrentAge(ctx, await ctx.db.get(interest.toRegistrationId))),
+        match: match?.testResetAt !== undefined ? null : match,
+      };
+    };
 
     return {
       outbound: await Promise.all(outbound.map(enrich)),
       inbound: await Promise.all(inbound.map(enrich)),
     };
+  },
+});
+
+export const workbenchPage = query({
+  args: { adminSecret: v.optional(v.string()), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const result = await ctx.db.query("interests").paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
+    const interests = result.page;
+    // Hydrate each distinct entity once per bounded page, not once per interest.
+    const registrationIds = [...new Set(interests.flatMap(i => [i.fromRegistrationId, i.toRegistrationId]))];
+    const registrations = new Map(await Promise.all(registrationIds.map(async id => [id, await withCurrentAge(ctx, await ctx.db.get(id))] as const)));
+    const matchIds = [...new Set(interests.flatMap(i => i.matchId ? [i.matchId] : []))];
+    const matches = new Map(await Promise.all(matchIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    const primaryIds = [...new Set([...matches.values()].flatMap(m => m?.interestId ? [m.interestId] : []))];
+    const primaries = new Map(await Promise.all(primaryIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    const eventIds = [...new Set(interests.map(i => i.eventId))];
+    const events = new Map(await Promise.all(eventIds.map(async id => [id, await ctx.db.get(id)] as const)));
+    return { ...result, page: withoutCapabilities(interests.map(interest => ({
+      ...interest,
+      fromRegistration: registrations.get(interest.fromRegistrationId) ?? null,
+      toRegistration: registrations.get(interest.toRegistrationId) ?? null,
+      match: (() => {
+        const match = interest.matchId ? matches.get(interest.matchId) : null;
+        const primary = match?.interestId ? primaries.get(match.interestId) : null;
+        return match && primary && !primary.testReset && primary.matchId === match._id && primary.eventId === interest.eventId ? match : null;
+      })(),
+      event: events.get(interest.eventId) ?? null,
+    }))) };
+  },
+});
+
+/** Lean legacy disclosure scan: no per-interest flow queries or capability fields. */
+export const disclosureEvidencePage = query({
+  args: { adminSecret: v.optional(v.string()), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const result = await ctx.db.query("interestFlows").paginate({ ...args.paginationOpts, numItems: Math.min(500, args.paginationOpts.numItems) });
+    return { ...result, page: result.page.filter(f => f.contactSharedAt !== undefined).map(f => ({
+      interestId: f.interestId, fromRegistrationId: f.fromRegistrationId, toRegistrationId: f.toRegistrationId, contactSharedAt: f.contactSharedAt!,
+    })) };
+  },
+});
+
+/** Used by server routes to revalidate previously claimed notification work. */
+export const assertNotificationEligible = mutation({
+  args: { adminSecret: v.string(), id: v.id("interests") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const interest = await ctx.db.get(args.id);
+    if (!interest) throw new Error("Interest not found");
+    await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
+    const participants = await Promise.all([ctx.db.get(interest.fromRegistrationId), ctx.db.get(interest.toRegistrationId)]);
+    if (interest.status === "closed" || participants.some(person => person?.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) throw new Error("Historical archived workflow cannot send notifications");
+    return true;
   },
 });

@@ -1,8 +1,9 @@
+import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getApplicantSessionHash } from "@/lib/applicant-session";
 import { getConvexClient } from "@/lib/convex";
-import { sendEventRegistrationReceivedEmail } from "@/lib/email";
+import { sendEventReceipt } from "@/lib/event-registration-receipt";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,8 @@ export async function GET() {
     return NextResponse.json(events, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
+      { error: "Unable to complete request" },
+      { status: isApplicantUnauthorized(error) ? 401 : 500 }
     );
   }
 }
@@ -31,6 +32,15 @@ export async function POST(request: NextRequest) {
     }
     const body = await request.json();
     const convex = getConvexClient();
+    if (body.action === "withdraw") {
+      if (typeof body.eventRegistrationId !== "string" || !body.eventRegistrationId) {
+        return NextResponse.json({ error: "eventRegistrationId is required" }, { status: 400 });
+      }
+      const eventRegistrationId = await convex.mutation(api.events.withdrawParticipation, {
+        sessionHash, eventRegistrationId: body.eventRegistrationId,
+      });
+      return NextResponse.json({ success: true, result: { eventRegistrationId } });
+    }
     if (body.action === "confirm") {
       if (!body.eventRegistrationId) {
         return NextResponse.json({ error: "eventRegistrationId is required" }, { status: 400 });
@@ -50,34 +60,12 @@ export async function POST(request: NextRequest) {
       sessionHash,
       eventId: body.eventId,
     });
-    const claim = await convex.mutation(api.events.claimRegistrationReceivedEmail, {
-      eventRegistrationId: result.eventRegistrationId,
-    });
-
-    if (claim.claimed && claim.name && claim.email && claim.eventTitle && claim.registrationStatus) {
-      const emailResult = await sendEventRegistrationReceivedEmail({
-        name: claim.name,
-        email: claim.email,
-        eventTitle: claim.eventTitle,
-      });
-      if (!emailResult.success) {
-        await convex.mutation(api.events.recordRegistrationReceivedEmailFailure, {
-          eventRegistrationId: result.eventRegistrationId,
-          error: emailResult.error || "Failed to send event registration email",
-        });
-        return NextResponse.json({
-          success: true,
-          result,
-          notification: { sent: false, error: emailResult.error },
-        });
-      }
-    }
-
-    return NextResponse.json({ success: true, result, notification: { sent: claim.claimed } });
+    const notification = await sendEventReceipt(convex, result.eventRegistrationId);
+    return NextResponse.json({ success: true, result, notification });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
+      { error: "Unable to complete request" },
+      { status: isApplicantUnauthorized(error) ? 401 : 500 }
     );
   }
 }

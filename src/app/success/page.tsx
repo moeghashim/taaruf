@@ -1,10 +1,8 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
 
 type Tone = "success" | "warning" | "error" | "pending";
@@ -56,10 +54,24 @@ function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
 
-  const registration = useQuery(
-    api.registrations.getByStripeSession,
-    sessionId ? { stripeSessionId: sessionId } : "skip"
-  );
+  const [registration, setRegistration] = useState<{ paymentStatus: string } | null>(null);
+  const [lookupError, setLookupError] = useState(false);
+  useEffect(() => {
+    if (!sessionId) return;
+    let stopped = false;
+    const controller = new AbortController();
+    const check = async () => {
+      try {
+        const response = await fetch("/api/checkout-status?session_id=" + encodeURIComponent(sessionId), { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error();
+        const result = await response.json();
+        if (!stopped) { setRegistration(result); setLookupError(false); }
+      } catch { if (!stopped) setLookupError(true); }
+    };
+    void check();
+    const timer = setInterval(check, 3000);
+    return () => { stopped = true; controller.abort(); clearInterval(timer); };
+  }, [sessionId]);
 
   let status: StatusViewModel;
 
@@ -70,6 +82,8 @@ function SuccessContent() {
       body: "Your registration has been received.",
       action: { label: "Return to home", href: "/" },
     };
+  } else if (lookupError) {
+    status = { tone: "warning", title: "Payment status unavailable", body: "We could not check your payment. We will retry automatically. You can also check your receipt or applicant dashboard.", action: { label: "Open applicant login", href: "/login" } };
   } else if (!registration || registration.paymentStatus === "pending") {
     status = {
       tone: "pending",
@@ -88,9 +102,9 @@ function SuccessContent() {
       tone: "success",
       title: "Welcome to 1Plus1.",
       body:
-        "Your payment has been received. We’ve sent you an email with a secure link to your applicant dashboard, where you can complete your profile.",
+        "Your payment has been received. Payment does not guarantee an event place or approval. Check your applicant dashboard and event receipt for your registration status.",
       bullets: [
-        "Check your email for your applicant dashboard link.",
+        "Open your applicant dashboard to check whether you are waitlisted, pending, or approved.",
         "Complete your profile so our team can review it.",
       ],
       action: { label: "Open applicant login", href: "/login" },

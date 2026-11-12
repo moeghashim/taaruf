@@ -41,10 +41,6 @@ export function Topbar({ crumb, onMenu }: Props) {
           {Ico.bell}
           <span className="dot" />
         </button>
-        <button className="btn btn-primary">
-          {Ico.plus}
-          <span className="btn-label">New match</span>
-        </button>
       </div>
     </div>
   );

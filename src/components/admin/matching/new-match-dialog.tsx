@@ -1,0 +1,60 @@
+"use client";
+import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Ico } from "@/components/admin/primitives/icons";
+
+export function NewMatchDialog() {
+  const [open, setOpen] = useState(false);
+  return <Dialog open={open} onOpenChange={setOpen}>
+    <DialogTrigger asChild><button type="button" className="btn btn-primary" aria-label="New match">{Ico.plus}<span>New match</span></button></DialogTrigger>
+    <DialogContent data-admin><DialogTitle>New match</DialogTitle><DialogDescription style={{ color: "var(--mute)" }}>Save a private draft for admin review. Applicants cannot see it and no notifications are sent. After saving, use Present to applicants in the workbench. Both applicants must explicitly opt in before presentation.</DialogDescription>
+      {open && <NewMatchForm onCreated={() => setOpen(false)} />}
+    </DialogContent>
+  </Dialog>;
+}
+
+function NewMatchForm({ onCreated }: { onCreated: () => void }) {
+  const [registrations, setRegistrations] = useState<Array<{ _id: string; name: string; gender: string; publicApplicantNumber?: number; backgroundMatchmakingOptIn?: boolean }>>();
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => { let active = true; fetch("/api/admin/match-candidates", { cache: "no-store" }).then(async r => { if (!r.ok) throw new Error("Unable to load eligible applicants. Refresh and try again."); return r.json(); }).then(rows => { if (active) setRegistrations(rows); }).catch(e => { if (active) setLoadError(String(e.message)); }); return () => { active = false; }; }, []);
+  const router = useRouter();
+  const [male, setMale] = useState("");
+  const [female, setFemale] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const eligible = registrations ?? [];
+  if (loadError) return <p role="alert">{loadError}</p>;
+  if (registrations === undefined) return <p role="status">Loading applicants…</p>;
+  return <form style={{ display: "grid", gap: 16, minWidth: 0 }} onSubmit={async event => {
+    event.preventDefault();
+    if (submitting.current || !male || !female) return;
+    submitting.current = true;
+    setBusy(true); setError(null);
+    try {
+      const response = await fetch("/api/admin/create-match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ maleRegistrationId: male, femaleRegistrationId: female, adminNotes: notes }) });
+      const result = await response.json();
+      if (response.ok) refreshAdminData();
+      if (!response.ok || typeof result.matchId !== "string") throw new Error(result.error || "Unable to create match. Please try again.");
+      router.push("/admin/workbench?match=" + encodeURIComponent(result.matchId));
+      onCreated();
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to create match. Please try again."); }
+    finally { submitting.current = false; setBusy(false); }
+  }}>
+    {(["male", "female"] as const).map(gender => <label key={gender} style={{ display: "grid", gap: 6, minWidth: 0 }}>
+      {gender === "male" ? "Male applicant" : "Female applicant"}
+      <select aria-label={gender === "male" ? "Male applicant" : "Female applicant"} required disabled={busy} value={gender === "male" ? male : female} onChange={e => (gender === "male" ? setMale : setFemale)(e.target.value)} style={{ width: "100%", minWidth: 0, padding: 10, border: "1px solid var(--line)", borderRadius: 6, fontSize: 16 }}>
+        <option value="">Select an applicant</option>
+        {eligible.filter(r => r.gender === gender).map(r => <option key={r._id} value={r._id}>#{r.publicApplicantNumber ?? "—"} {r.name}{r.backgroundMatchmakingOptIn === true ? " (opted in)" : ""}</option>)}
+      </select>
+      {!eligible.some(r => r.gender === gender) && <small>No eligible {gender} applicants. Profiles must be approved, complete, actively searching, and not in an active match.</small>}
+    </label>)}
+    <label style={{ display: "grid", gap: 6 }}>Admin notes (optional)<textarea maxLength={2000} disabled={busy} value={notes} onChange={e => setNotes(e.target.value)} style={{ width: "100%", padding: 10, border: "1px solid var(--line)", borderRadius: 6, fontSize: 16 }} /></label>
+    {error && <p role="alert">{error}</p>}
+    <button type="submit" className="btn btn-primary" disabled={busy || !male || !female}>{busy ? "Saving…" : "Save draft"}</button>
+  </form>;
+}

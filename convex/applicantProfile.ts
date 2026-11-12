@@ -1,3 +1,7 @@
+import { currentAge, ownerDateOfBirth, saveDateOfBirth } from "./birthdays";
+import { sessionAllowed } from "./capabilitySecurity";
+import { assertImageOwnership } from "./imageAuthorization";
+import { validateEducationUpdate } from "../src/lib/education";
 import { hijabResponse } from "./hijab";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -14,8 +18,7 @@ const prayerCommitment = v.union(
 );
 const photoSharingPermission = v.union(
   v.literal("yes"),
-  v.literal("no"),
-  v.literal("ask_me_first")
+  v.literal("no")
 );
 
 type ReadCtx = QueryCtx | MutationCtx;
@@ -30,7 +33,7 @@ async function getRegistrationForSession(ctx: ReadCtx, sessionHash: string) {
     .withIndex("by_sessionHash", (q) => q.eq("sessionHash", sessionHash))
     .unique();
 
-  if (!session || session.revokedAt || session.expiresAt <= Date.now()) {
+  if (!session || !(await sessionAllowed(ctx, session))) {
     throw new Error("Unauthorized");
   }
 
@@ -130,9 +133,14 @@ export const getProfile = query({
 
     return {
       registration: {
+        age: await currentAge(ctx, registration),
+        dateOfBirth: await ownerDateOfBirth(ctx, registration._id),
+        archivedAt: registration.archivedAt ?? null,
+        lastRestoredArchivedAt: registration.lastRestoredArchivedAt,
         name: registration.name,
         gender: registration.gender,
         email: registration.email,
+        education: registration.education,
         ethnicity: registration.ethnicity || "",
         imageStorageIds,
         imageUrls: images.map((image) => image.url),
@@ -156,6 +164,8 @@ export const getProfile = query({
 export const updateProfile = mutation({
   args: {
     sessionHash: v.string(),
+    dateOfBirth: v.optional(v.string()),
+    education: v.optional(v.string()),
     ethnicity: v.string(),
     imageStorageIds: v.array(v.id("_storage")),
     prayerCommitment,
@@ -172,6 +182,10 @@ export const updateProfile = mutation({
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
 
+    await assertImageOwnership(ctx, registration._id, args.imageStorageIds);
+    await saveDateOfBirth(ctx, registration._id, args.dateOfBirth);
+    validateEducationUpdate(args.education, registration.education);
+    if (registration.archivedAt != null) throw new Error("Profile is archived");
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
@@ -188,6 +202,7 @@ export const updateProfile = mutation({
     const shareableBio = args.shareableBio.trim();
     const lookingFor = legacyLookingForText(args);
     await ctx.db.patch(registration._id, {
+      ...(args.education !== undefined ? { education: args.education } : {}),
       ethnicity: args.ethnicity.trim(),
       imageStorageIds: args.imageStorageIds,
       prayerCommitment: args.prayerCommitment,

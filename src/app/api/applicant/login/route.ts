@@ -1,3 +1,5 @@
+import { applicantDestination } from "@/lib/applicant-destination";
+import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { getConvexClient } from "@/lib/convex";
@@ -12,14 +14,15 @@ function getAppUrl(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json();
+    const { email, next } = await request.json();
+    const destination = applicantDestination(next);
     if (!email || typeof email !== "string") {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
     const token = createToken();
     const convex = getConvexClient();
-    const registration = await convex.mutation(api.applicantAuth.createLoginToken, {
+    const registration = await convex.mutation(api.applicantAuth.createLoginToken, { adminSecret: getAdminSecret(),
       email,
       tokenHash: hashToken(token),
     });
@@ -29,11 +32,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    const loginUrl = `${getAppUrl(request)}/api/applicant/login/verify?token=${encodeURIComponent(token)}`;
+    const loginUrl = new URL("/api/applicant/login/verify", getAppUrl(request));
+    loginUrl.searchParams.set("token", token);
+    if (destination !== "/me") loginUrl.searchParams.set("next", destination);
     const emailResult = await sendApplicantMagicLoginEmail({
       name: registration.name,
       email: registration.email,
-      loginUrl,
+      loginUrl: loginUrl.toString(),
     });
 
     if (!emailResult.success) {
@@ -41,9 +46,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete request" },
       { status: 500 }
     );
   }

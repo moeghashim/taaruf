@@ -1,6 +1,6 @@
 # 1 Plus 1 Matching & Taaruf
 
-A premium Islamic matchmaking registration platform. Collects registrations with $10 Stripe payments, supports configurable male/female slot limits (default 40 each), and includes a full admin dashboard.
+A premium Islamic matchmaking registration platform. Collects registrations with $10 Stripe payments, supports event-specific male/female capacity and waitlists, and includes a full admin dashboard.
 
 ## Tech Stack
 
@@ -28,15 +28,7 @@ This will prompt you to create a Convex project and set `NEXT_PUBLIC_CONVEX_URL`
 
 ### 3. Configure environment variables
 
-Copy `.env.example` to `.env.local` and fill in:
-
-```
-NEXT_PUBLIC_CONVEX_URL=       # Set automatically by `npx convex dev`
-STRIPE_SECRET_KEY=            # From Stripe Dashboard > API Keys
-STRIPE_WEBHOOK_SECRET=        # From Stripe Dashboard > Webhooks
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=  # From Stripe Dashboard
-ADMIN_PASSWORD=               # Password for /admin dashboard
-```
+Copy [.env.example](.env.example) to `.env.local` and fill in its documented variables. Follow its separate Next server and Convex credential configuration instructions.
 
 ### 4. Run development server
 
@@ -56,11 +48,14 @@ stripe listen --forward-to localhost:3000/api/webhook
 
 | Route | Description |
 |-------|-------------|
-| `/` | Landing page with slot counters |
+| `/` | Landing page with open/waitlist labels |
 | `/register` | Registration form |
 | `/success` | Payment success page |
 | `/cancelled` | Payment cancelled page |
 | `/admin` | Admin dashboard (password protected) |
+| `/me` | Applicant profile, event registrations, and interests |
+
+For profile reviews, participant approvals, and final admin contact release, see the [interest workflow guide](docs/female-website-interest-flow.md). For event queue and confirmation behavior, see [event-only waitlists](docs/event-only-waitlists-review.md#implemented). For submission photo choices and revocation, see [photo consent](docs/issue58-photo-consent.md#behavior). For invalidated links and fresh sign-in recovery, see [capability cutoff and recovery](docs/capability-cutoff-recovery.md).
 
 ## Create GitHub Repo & Deploy
 

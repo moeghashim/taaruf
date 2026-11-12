@@ -600,3 +600,233 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-10-20
 - PR #39 preview build: declared and locked @playwright/test in package.json/package-lock.json; missing dependency was masked by shared local node_modules. Updated review documentation. 77 tests and isolated-URL production build pass; no backend/config changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-10-21
+- Local event-only waitlist implementation: shared gender-capacity/FIFO helper, authenticated explicit event approval bridge, checkout/admin/portal queue handling, removed profile waitlist views, additive legacy compatibility only; tests and migration decision gate documented in docs/event-only-waitlists-review.md. No live changes.
+
+- Parent audit correction: 23 existing eventWaitlistEntries (16 Approved/6 Pending profile links + 1 orphan), zero global/event waitlisted statuses. Removed unnecessary global schema widening; old records remain read-only/event-visible with orphan IDs; no Pending migration or profile changes. Staged queue compatibility documented.
+
+## 2026-10-23
+- Added persisted-status event receipt helper, portal/checkout/webhook/payment-repair integration, warm manual approval copy and 26 mocked tests; vitest config includes source tests. Backend retry/session-link follow-ups in docs/signup-receipt-review.md. No emails/deploys. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-03
+- Removed remaining gender availability numbers from homepage rendering, preserving open/waitlist labels and admin counts; added public-render regression coverage and JSX test transform. Preview approval required before production. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-03
+- Repair inert admin New match control with guarded suggestion creation, synthetic regression tests, and same-page selection; production remains preview-gated.
+
+- Verified New match against real loopback Convex + Next + desktop/mobile browsers; fixed browser-facing origin validation and proved live backend source parity.
+
+- Addressed independent auth review and added standalone-suggestion consent regression.
+
+## 2026-11-04
+- Correct New Match service credential mismatch; prove actual submit through both side-by-side requirements with isolated production-like credentials.
+
+## 2026-11-06
+- Integrate scoped PR55 on live 784bb73 with reactive eligibility and stale/cancellation safety; provenance recorded in docs/pr55-scoped-release.md. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-06
+- Issue58: added recipient-specific submission photo choice, owner revocation, atomic retry behavior, UI and 261-test validation on isolated ac5db90 lineage. Actual synthetic backend/browser passed portal behavior; independent review found inherited authorization blockers, so draft only and no live deployment.
+- Added explicit authenticated per-submission test reset, retained audit and quota indexes, stale-action/share guards, safe deletion feedback and backend/bridge regressions; preview-only, no live data reset. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-08
+- Resumed issue58 on current PR60/PR63 lineage; added authenticated server transport, backend authorization, durable photo ownership and atomic consent-aware URL reads. Preserved reset implementations and data; isolated347-test gate and final review/runtime validation, no live deployment pending operational decisions.
+
+## 2026-11-08
+- Issue #64: isolated female website-flow implementation from PR61 candidate; excluded synthetic runtime artifacts from Git and TypeScript compilation. No live deployment.
+
+## 2026-11-08
+- Extended issue #64 final contact approval to male and reciprocal flows with shared durable outbox, authenticated admin release, reciprocal consent synchronization, truthful UI, and synthetic coverage; no live operations.
+- Prepared centralized monotonic capability cutoff and authenticated recovery in convex auth/profile/share/settings paths; integrated explicit saved Yes/No editors, tests and release documentation. No production activation. <!-- project: github.com/moeghashim/clawscrewskill -->
+## 2026-11-09
+- Reconciled event participant profile drawer onto source-hash-verified production 9987fcc; preserved live API bridges/capacity behavior, fixed clean-editor remote-note synchronization, and added synthetic regression tests/provenance documentation. Production held for composition review.
+
+- Locally integrated exact PR61/65 provenance with live PR78 drawer; retained authenticated admin transport and PR65 interest presentation. New conflict resolution requires independent review and certification; no publication. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Adapted PR78 synthetic regression fixture to exercise the unchanged authenticated admin transport, added unauthenticated backend denial assertions, and validated drawer interactions at desktop/mobile widths. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Extracted PR #77 display-only confirmation badge removal and synthetic browser regression tests from aa7caabb553bfdf72d0d6e92e2ed9c243475a2a5 onto verified live 26accc9ef8d39ad7120b7347fe412e86eb144d3c. Preserves live PR61/65, drawer, reset helper and all backend behavior; no production deployment.
+
+- Omar2865/2870: remove repeated photo question, snapshot saved profile permission only for new interests, preserve historical recipient grants/denials/revocations, and extend synthetic tests. Production/recovery remain held. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Ported issue67 event-registration filter onto verified PR84 live ancestry; preserved ethnicity/photo/reset protections. Added authenticated paginated event catalog/membership, deduplication, combined filters, retry states and tests. No live deployment.
+
+- Replace recursive audit copies with complete-row SHA256 references in singleInterestTestReset; retain original history and drift/idempotency guards. Add size/repeated-reset regressions; 705 tests, typecheck, lint and isolated real-backend rollback proof pass. No production deploy. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Added fixed-ID admin-only #219↔#220 reset with confirmation, atomic audited preview, access retirement and pair-only quota restoration. 708 tests, build/typecheck/lint and isolated runtime repeated normal submissions in both directions plus mobile/desktop endpoint proof pass. No production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Clarified sister initial interest success with exact user3021 admin-review copy; preserved all other action outcomes and added polite atomic status. Added 24 mocked browser regressions (1440/390/320px); 708 unit tests, typecheck, build and independent review pass. No backend/workflow or production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Added prominent applicant review invitations and a deduplicated brother-review email stage in the existing outbox, with synthetic provider/browser regressions; preview-only, no live deployment or email.
+
+- PR91 release3068: merge the src alias into convex/tsconfig.json for API bridge test typechecking; all existing compiler settings preserved. Convex/root typechecks, 731 tests and enabled-typecheck backend dry-run pass; 51 candidate runtime modules byte-identical before/after repair, 50 live modules unchanged. Independent review approved. Fresh exact-SHA DCO certification required before deployment; no production/config/email changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Task3043: event ribbon, explicit provenance normalization, separate No recorded event, complete paginated workbench reads, stale-selection clearing and scoped detail actions; added unit/browser regressions and workflow documentation. Preview-only; global gates and prior reset/copy/email behavior preserved. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Profile3052/3055: unified review Age facts, explicit full-text Requirements and responsive uncropped photos; frontend-only atop verified live PR92. Independent static review and 735 tests/root+Convex types/Turbopack build pass. Browser harness initially sampled lazy images before decode; corrected test waits, no application fix. Screenshot visual-inspection tool denied project paths; computed-layout and saved screenshots available. No production/data/email/config changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Clarify sister final-approval notice in female-reviews.tsx using the existing prominent invitation style; add scoped wrapping CSS and synthetic 320/390/1280 consent/navigation/stale-state regression coverage. No backend or workflow changes.
+- Request3176: ported education editing, shared options and validation from PR42 onto verified PR93 live baseline; preserved capability/image security and added synthetic persistence/API/browser coverage. Preview only; no live writes.
+- Event capacity controls: allow lowering caps without changing existing registrations, add explicit authenticated one-person waitlist force-to-Pending with warning, preserve ordinary capacity/FIFO/auth rules. Added backend and bridge regressions; 744 tests, root/Convex types, scoped lint, production build and real synthetic local-backend/browser checks pass. Preview-only; no live cap/data/deployment changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Independent capacity review follow-up: preserve save feedback across data refresh; explicitly explain and test mixed decrease/increase all-row preservation, both genders and expired reservations. No backend behavioral change from reviewed implementation. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Contacts-ready3218: preserve latest serving ffe260e ancestry; show both portals a prominent notice only after authorized detail GET returns permitted contact fields; focus reauthorized details CTA, fail closed, add six synthetic responsive/privacy/pagination tests. No backend/config/email/production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Integrated authorized contact notice c14e265 and scoped focus-click e154e8c onto serving ffe260e in female-reviews.tsx; preserved contact gates and revalidation geometry, added stale-response/pending-POST browser coverage. No backend/config/email/live changes.
+## 2026-11-10
+- Add separately gated future-only sister final-approval email, recipient/acceptance freshness checks and synthetic tests; no production send, activation or deployment.
+
+## 2026-11-10
+- Added narrowly scoped combined brother/sister notification mode with independent cutoffs, stale recipient/sender retry cancellation, coexistence/security tests and activation checklist; no production changes.
+## 2026-11-10
+- Restore workbench New match as private Save draft; block draft bearer disclosure/notifications and availability reservation; preserve legacy contact-release provenance. Synthetic regression/browser checks; preview-only, no live deployment.
+
+## 2026-11-10
+- Implemented issue97 background matchmaking in convex lifecycle/schema, applicant tab/API, admin Present/release/followups and dedicated gated notification sender; added privacy/withdrawal/idempotency/race/mobile regression coverage. Preview only; no live backend/data/email changes.
+## 2026-11-10
+- Issue #46 isolated preview: private birthdays, owner profile editing, current-age projections/clock and privacy/legacy/eligibility tests; no live deployment. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Split applicant portal into four history-aware views; preserve forms/actions, legacy destinations and DOB privacy; add synthetic navigation/action coverage. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Applied Layla3403 DOB records/privacy copy and aligned six profile basics in one responsive grid; no required-field or age-validation changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Added isolated whole-profile rejection-notice transactional outbox, protected opt-in activation, immutable retries/reconciliation, synthetic tests, admin explanation and release documentation; no live activation.
+- Restrict applicant event logistics using current profile eligibility; retain status-only history, hide stale portal details on refresh, and add synthetic API/browser tests. No public-site, notification, live-data or deployment changes.
+- Combined rejection notice and logistics candidate: preserved lifetime dedup policy; hardened non-JSON rate-limit handling and synthetic browser external-origin blocking after independent review. Preview only, no activation or live deployment.
+
+## 2026-11-10
+- Added durable 15-minute rejection-notice grace and safe unsent re-rejection reset, authenticated admin status/reversal feedback, fake-clock/concurrency/legacy tests and synthetic browser coverage; preserved email text, bounded idempotent retries and live activation gate.
+
+## 2026-11-10
+- Completed isolated joined Chromium/real Next routes/real convex-test functions rejection E2E; retained evidence/joined harness and local-joined-result.md, no production code/config/sender changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Integrated confirmed Layla3350 grace policy additively; reran890 unit tests, joined real-route/function browser E2E,9 synthetic browser cases, types/lint/build; independent review PASS. No real mail/data/config/deploy changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Prepared rejection3391 additive release above feature97 and corrected birthday28b8aed; full1021 tests/types/lint/build plus9 synthetic browser and joined route gates passed; dedicated sender variables absent; production untouched pending parent slot. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Applicant copy3395: removed internal draft explanation; kept match presentation guidance. No admin draft behavior change.
+
+- Integrated PR118 b5320f9 live rejection/logistics baseline into four-view portal; added all-view privacy regression while retaining correction3403. Preview only. <!-- project: github.com/moeghashim/clawscrewskill -->
+## 2026-11-10
+- Harden workbench New match discoverability with an explicit accessible creation group before event filters; retain existing private draft/present flow and backend gates. Hide zero-date sentinel, add action and nine-state browser regressions. Fresh live screenshot mismatch remains unexplained; no deployment.
+## 2026-11-10 — cancellation integration
+- Preserved newest live b5320f9 and integrated only unchanged approved cancellation module/tests plus original additive audit table; no reset, sends or activation.
+
+## 2026-11-10
+- Prepare future-only matching emails: immutable activation stamps, explicit transactional transport reuse, fresh-Present-only send and readiness-gated applicant copy; no live activation.
+
+## 2026-11-10
+- Add admin workbench saved Ethnicity, Education and applicable Hijab comparison facts, responsive aligned rows, mapping and synthetic browser/auth regressions. No backend/public profile changes or live deployment.
+
+## 2026-11-10 — matching integration3430
+- Integrated cancellation94db707 with frontend120, future-only email121 and comparison122 in an isolated candidate; protected matching cutoff from generic settings mutation after independent review and added readiness regressions. Portal119 still pending; no live/config/email writes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Draft failure3445: map known shared availability validation to public ConvexErrors, preserving active-match guard and unknown-error redaction; add zero-write regression for missing activeMatchId.
+
+## 2026-11-10 — matching release3445
+- Reconciled approved matching and draft validation onto exact live portal; 1097 tests, build/types and portal/comparison/New match browser checks pass. Production remains unchanged pending final gates. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-10
+- Integrated only rejection shared-provider adaptation240503e on verified live matching/portal65cbfc8; 1101 tests, types, lint and build passed; activation remains parent-gated.
+
+## 2026-11-11
+- Hardened rejection claim against absent/invalid activation and preactivation queued work, including attempted rows; added six synthetic no-send/immutable-cutoff regressions.
+- Added fixed-scope audited #315→#217 Nov14 submission reopen backend/API and regression tests; preview only, no operational data changes. Existing profile shares and notification history remain unchanged.
+- Layla3472: applicant-only neutral decision notices and DTOs across event interests, female reviews, matchmaker introductions, and future email copy; own decisions/admin detail retained, progression/contact/bio gates unchanged. Preview-only; frozen email retries and workflow timing can still reveal historical/progression information.
+
+- Layla3477 supersedes earlier unchanged-bio scope: exact-interest initial acceptance now gates bios in applicant list/detail, female review, and linked shares. Existing context-free share grants and manual matchmaker lifecycle remain separate; no migration or progression change. Read-only email audit found zero frozen payloads.
+- Draft mutual-interest3455: server-complete reciprocal evidence, explicit open/completed badges and mutual filters; preview gate remains closed pending legacy evidence review and final validation.
+- Review fixes: legacy disclosure provenance, request-scoped consistent snapshots, linear evidence payload, and draft-preserving background refresh. Full1122tests/types/lint/serial build passed; no live writes.
+## 2026-11-11 — public event code badge
+- Removed only the homepage internal event-code badge; kept registration routing, event title/date/location and availability pills. Added all-four-status regression checks; 1097 tests, types, lint (8 existing warnings), production build pass. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — preserve3539
+- Preserve latest live public-event badge removal in release candidate; retain both histories and independent share issuance/access without changing consent or revocation gates. No deployment or data changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — archive3480 integration
+- Integrated approved archive/availability-only restore onto verified live54af1ab, preserving newer privacy/mutual-interest/public-event work. Archive cancels future bookings with genuine FIFO Pending promotion, suppresses old access/sends, and retains in-flight provider evidence. 1280 tests pass; root/Convex types, lint and build pass; isolated runtime and independent final review recorded privately. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — requests 3554/3557
+- Removed duplicate Profile reviews ribbon and promoted otherwise unique updates to primary notices; added actionable inbound banners with per-interest focus/scroll routing for both portals. Added synthetic production-build responsive regression coverage; no backend or production changes.
+
+- Extended3554/3557 scope per3561/3568: unified top notifications across portal pages for both directions, authorized private legacy reviews, event confirmations and matchmaker introductions; guarded freshness and exact pending-admin contact copy.
+
+## 2026-11-11 — independent test-pair reset3603
+- Decoupled fixed-pair reset from historical delivery state; audit-ID retirement epochs fence claims/retries/pre-send authorization and confine late results to old-job evidence. Preserved original provider payload/errors and immutable reset snapshots, token/share revocation, auth/fingerprint/idempotency and unrelated pairs. Updated admin warning and repeat/race tests; isolated synthetic runtime verifies four actual resubmission/reset cycles. No live operation or release. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Independent review follow-up: preserve every retired provider callback in append-only `retiredDeliveryResults` (including stale attempts), retain old-job summary separately, and recheck kind/token/current-recipient immediately before send. Deterministic interleaving and callback-isolation regressions added. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — archive placement3582
+- Moved unchanged participant archive/restore card to the final portal content position for both roles; added responsive all-view last-position, duplicate and confirmation-cancel no-write tests. No backend or live operations. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11 — workbench focus-click3639
+- Same-query paginated refresh now retains the last complete snapshot until success/failure; changed queries and failed/auth-denied reads still clear. Baseline mouse/touch Close interest lost POST on focus refresh; candidate preserves one POST. Added synthetic pointer/touch/keyboard/auth-denial regression script; no production/backend/data operations. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Reported Review profile links reproduced lost navigation during list focus refresh; keep non-sensitive invitation/confirmation links mounted while revalidating, clear on denial. Both-role mouse/touch pass; existing decision guards and 401/409/500 privacy clearing pass. <!-- project: github.com/moeghashim/clawscrewskill -->
+## 2026-11-11 — redundant workbench label3634
+- Hide only the private documented display label in FemaleWorkflowActions; retain its state, share action, other statuses and all permissions. Added markup/action regressions; no backend or live changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Added Omar3637 exact received-interest heading in initial inbound notifications for both roles; preserved body/CTAs and final/outbound/event wording. Added 12 desktop/mobile read-only browser cases. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Follow-up: exact admin Share requester control rapid double activation reproduced2POST; synchronous in-flight ref now sends1. Added unit regression; integrated certified copy ancestry98b04b8 without changing frozenPR137. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Consolidated applicant interest/workflow notices into one ID-keyed ribbon, preserving distinct connections, lifecycle copy, cursor completeness and authorized contact checks; added unit and synthetic production-browser coverage. No backend or live-data changes.
+- Polished both applicant review surfaces: consistent portal typography, complete requirements with separated prose, and stage-specific What happens next before decisions; preserved disclosure/mutation gates and first-click DOM behavior.
+- Independent review P2 fixed: optional contact verification failures no longer clear other reviews; verified generic actions remain available when the workflow list fails, without restoring ambiguous idle fallbacks. Added mixed-failure regression.
+
+## 2026-11-11
+- Added shared inline workflow reviews under Inbound Interests for both roles, exact-ID history navigation and delayed focus, preserving authorized detail/actions. 1308 unit tests and 20 synthetic browser regressions passed; no backend/deployment changes.
+- Omar3689: changed only generic outbound notice heading to exact "You Have Sent an Interest" in the shared portal projection; retained lifecycle/workflow precedence, received wording, body and CTAs. Added 18-unit suite and four read-only desktop/mobile male/female production-browser scenarios; types, scoped lint and build passed. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Requirements correction 3703: shared CSS/component now match incumbent Profile details heading and fact values; preserved full multiline answers, aligned row spacing/dividers. Added 18 read-only browser checks across both portals, private documented view, selected reviews, shared profiles and matchmaker at mobile/desktop sizes. Types, scoped lint and independent review passed. No backend or deployment changes.
+- Partial correction for Omar3710: generic outbound heading returns to exact Interest Update after own final approval; added unit/browser regression. Literal any-admin/user approval condition remains blocked by private public projections; no backend/data/deploy/certification.
+
+- Superseding Omar3715: exact You Have Sent An Interest until recipient acceptance unlocks the sender review; real female workflow waiting and post-review headings corrected using existing ownAction/ownDecision fields, no new backend disclosure. Added real Convex API lifecycle tests for both directions and real female projection browser coverage.
+
+- Integrated remaining typography/status bundle on certified live PR143, preserving inline /me review navigation and both source ancestries; preview-only verification. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Omar3761: suppress standalone review notification banners in inline mode only; preserve unified top ribbon, inbound list and selected profile actions. Added 12 both-role mobile/desktop regression checks; no backend/data changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Omar3779: remove standalone back link and ordinary review heading/subtitle only from embedded selected profiles in both portals; retain lifecycle notices and standalone routes. Added selected-state, switching, keyboard, lifecycle and standalone regression coverage. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Omar3782/3786: exact initial-review What happens next paragraphs for male/female recipients with correct counterpart pronouns; final guidance and workflow unchanged. Added exact-copy unit/browser regressions. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Omar3825: separate brother initial bio acceptance from authenticated final approval, retain sister decision/admin contact gate, add source-only consent provenance and historical ambiguity defenses, strengthen exact-interest bio/contact projections, and cover backend/API/browser transitions. Preview-only branch; no migration, deployment, real-user mutation, email or human signoff. <!-- project: github.com/moeghashim/clawscrewskill -->
+## 2026-11-11
+- Request3816: classify shared sister interests as Outbound using authorized review canView joined by interestId; preserve privacy/actions/headings and refresh after decisions. Added projection and desktop/mobile tests; no backend/live-data changes.
+
+- Superseding validation request: append-only merge of newly live PR148 ec45f483, preserve outbound routing/update events, adapt its lifecycle regression to separate brother final, and explicitly test/document legacy pending-match admin-release eligibility. Synthetic localhost full-stack validation only; no historical or production actions. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Request3861: route sister inline workflow reviews/status to Outbound, preserve brother Inbound, synchronize exact-ID selection and counts/empty states; added desktop/mobile regression coverage.
+
+## 2026-11-11 — request 3884
+- Styled viewer decisions with portal pills; moved decision/admin notice below bios in shared inline/standalone and regular details. Added responsive and unit coverage; no backend/action changes.
+
+## 2026-11-11 — styling recovery
+- Recovered request3884 in an isolated checkout; aligned standalone typography, placed decision immediately after Bio, expanded responsive/state/contact coverage, and preserved original PR153 ancestry.
+
+## 2026-11-11 — request3970
+- Added same-event authorized incoming-review interception before submission side effects, exact-ID portal routing, linked-match history dimming, and focused privacy/lifecycle/quota tests.
+## 2026-11-12
+- Integrated approved signup consent and strict opt-in dropdown labels onto verified serving c45880f; preserved portal and existing consent. Typed archive browser harness without lint rule suppression. Preview preparation only; no production deployment.
+- Requests Layla3987/3995: remove participant archive UI and disable own archive/restore at HTTP and Convex; preserve admin controls and remove only My Profile DOB helper; add regressions and requirement provenance. <!-- project: github.com/moeghashim/clawscrewskill -->
+- PR156 validation: append-only integration of certified PR155 ancestry; preserve both histories and current privacy/photo/signup/archive behavior. No live release. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-12
+- Hide reset4131: filter test-reset audit interests/matches from workbench records before event scoping; retain ordinary history and stored audit data. Add unit and responsive synthetic browser regression coverage.
+- Request4175: provide explicit stale-review URL recovery without hiding authentication/network failures; invalidate outdated reads and update login return destinations. Synthetic reset/reauth/read-only API regressions; no backend runtime changes or production actions.
+
+## 2026-11-12
+- Request4388: filter both applicant closed-history projections by authenticated own decline/withdraw audit receipts; preserve audit/access gates and live167 banners; add functional/provenance/UI regressions. Preview only.
+
+- Combined requests4388/4397 on certified167; preserved both source patches and validated integration independently.
+
+## 2026-11-12
+- Request4433: shared exact brother/sister contact guidance across ordinary interests, inline/standalone reviews and matchmaker contacts; existing release gates/fields retained. Added exact-copy and synthetic desktop/mobile privacy regressions. Preview only.

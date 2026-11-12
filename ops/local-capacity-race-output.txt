@@ -1,0 +1,5 @@
+boundary and independent {"male":{"reserved":60,"waitlisted":3,"total":63},"female":{"reserved":60,"waitlisted":3,"total":63}} {"male":{"reserved":1,"waitlisted":0,"total":1},"female":{"reserved":1,"waitlisted":0,"total":1}}
+concurrent four-client bounded waves 28 {"male":{"reserved":60,"waitlisted":10,"total":70},"female":{"reserved":60,"waitlisted":10,"total":70}}
+PASS FIFO -> Pending only; retries no duplicates; 140 full profile documents unchanged; independent event unchanged; zero email records
+final boundary {"male":{"reserved":60,"waitlisted":2,"total":63},"female":{"reserved":60,"waitlisted":2,"total":63}}
+final race {"male":{"reserved":60,"waitlisted":10,"total":70},"female":{"reserved":60,"waitlisted":10,"total":70}}

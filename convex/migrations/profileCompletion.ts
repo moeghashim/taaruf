@@ -1,3 +1,4 @@
+import { requireAdmin } from "../adminAuthorization";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internal } from "../_generated/api";
@@ -191,11 +192,12 @@ export const backfillLegacyProfileContentBatch = internalMutation({
 });
 
 export const backfillProfileCompletionStatuses = action({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     dryRun: v.optional(v.boolean()),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<BackfillResult> => {
+    requireAdmin(args.adminSecret);
     return await ctx.runMutation(internal.migrations.profileCompletion.backfillBatch, {
       dryRun: args.dryRun ?? true,
       limit: args.limit,
@@ -204,12 +206,13 @@ export const backfillProfileCompletionStatuses = action({
 });
 
 export const backfillLegacyProfileContent = action({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     dryRun: v.optional(v.boolean()),
     batchSize: v.optional(v.number()),
     maxBatches: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<LegacyProfileContentBackfillResult> => {
+    requireAdmin(args.adminSecret);
     const dryRun = args.dryRun ?? true;
     const batchSize = args.batchSize ?? 200;
     const maxBatches = args.maxBatches ?? 50;

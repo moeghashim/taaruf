@@ -1,3 +1,12 @@
+import { transition as rejectionNoticeTransition } from "./profileRejectionNotice";
+import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
+import { currentAge, ownerDateOfBirth, saveDateOfBirth, withCurrentAge } from "./birthdays";
+import { validateDateOfBirth } from "./age";
+import { capabilityAllowed, profileCapabilityAllowed } from "./capabilitySecurity";
+import { assertImageOwnership, claimSignupImages } from "./imageAuthorization";
+import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
+import { registrationStatusForCapacity, promoteWaitlist } from "./eventCapacity";
+import { isEducation, validateEducationUpdate } from "../src/lib/education";
 // INVARIANT (see AGENTS.md): `registrations.publicApplicantNumber` is the
 // permanent public identifier. Once assigned it is never patched and never
 // re-used, not even after deleteRegistration. The `create` mutation and the
@@ -20,8 +29,7 @@ const prayerCommitment = v.union(
 );
 const photoSharingPermission = v.union(
   v.literal("yes"),
-  v.literal("no"),
-  v.literal("ask_me_first")
+  v.literal("no")
 );
 const searchStatus = v.union(v.literal("active"), v.literal("paused"), v.literal("inactive"));
 
@@ -146,30 +154,6 @@ async function nextPublicApplicantNumber(ctx: MutationCtx) {
   return nextNumber;
 }
 
-async function countCapacityUsed(
-  ctx: MutationCtx,
-  eventId: Id<"events">,
-  gender: "male" | "female"
-) {
-  const rows = await ctx.db
-    .query("eventRegistrations")
-    .withIndex("by_eventId_and_gender_and_registrationStatus", (q) =>
-      q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", "approved")
-    )
-    .take(500);
-  return rows.length;
-}
-
-async function eventRegistrationStatusForCapacity(
-  ctx: MutationCtx,
-  event: Doc<"events">,
-  gender: "male" | "female"
-) {
-  const capacity = gender === "male" ? event.maleCapacity : event.femaleCapacity;
-  const used = await countCapacityUsed(ctx, event._id, gender);
-  return used < capacity ? "pending" as const : "pending" as const;
-}
-
 async function findExistingParticipantProfile(
   ctx: MutationCtx,
   args: {
@@ -214,14 +198,14 @@ async function findExistingParticipantProfile(
   }
 
   if (nameCanonical) {
-    const nameMatches = (await ctx.db
+    const nameMatches = (await Promise.all((await ctx.db
       .query("registrations")
       .withIndex("by_nameCanonical", (q) => q.eq("nameCanonical", nameCanonical))
-      .take(10))
+      .take(10)).map(registration => withCurrentAge(ctx, registration))))
       .filter((registration) => registration.gender === args.gender && registration.age === args.age);
     if (nameMatches.length === 1) return nameMatches[0];
 
-    const legacyNameMatches = (await ctx.db.query("registrations").take(1000)).filter(
+    const legacyNameMatches = (await Promise.all((await ctx.db.query("registrations").take(1000)).map(registration => withCurrentAge(ctx, registration)))).filter(
       (registration) =>
         normalizeName(registration.name) === nameCanonical &&
         registration.gender === args.gender &&
@@ -241,6 +225,7 @@ async function createOrRestoreEventRegistration(
     now: number;
   }
 ) {
+  requireEventMessagingEligibility(args.registration);
   if (
     typeof args.registration.publicApplicantNumber !== "number" &&
     typeof args.registration.applicantNumber !== "number"
@@ -258,12 +243,15 @@ async function createOrRestoreEventRegistration(
     throw new Error("This applicant is already registered for this event.");
   }
 
-  const registrationStatus = await eventRegistrationStatusForCapacity(ctx, args.event, args.registration.gender);
+  await promoteWaitlist(ctx, args.event._id, args.registration.gender);
+  const registrationStatus = await registrationStatusForCapacity(ctx, args.event, args.registration.gender);
   const payload = {
     eventId: args.event._id,
     registrationId: args.registration._id,
     gender: args.registration.gender,
     registrationStatus,
+    waitlistedAt: registrationStatus === "waitlisted" ? args.now : undefined,
+    approvedAt: undefined,
     confirmationStatus: "confirmed" as const,
     attendanceStatus: "not_checked_in" as const,
     eligibilityStatus: deriveEligibilityStatus(args.registration),
@@ -272,6 +260,9 @@ async function createOrRestoreEventRegistration(
     confirmationExpiresAt: undefined,
     cancelledAt: undefined,
     rejectedAt: undefined,
+    receiptAttempt: (existing?.receiptAttempt ?? 0) + 1,
+    registrationReceivedEmailSentAt: undefined,
+    registrationReceivedEmailError: undefined,
     createdAt: existing?.createdAt ?? args.now,
     updatedAt: args.now,
   };
@@ -391,9 +382,12 @@ function legacyLookingForText(args: {
 }
 
 export const create = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
+    signupCapabilityHash: v.optional(v.string()),
+    backgroundMatchmakingOptIn: v.optional(v.boolean()),
     name: v.string(),
-    age: v.number(),
+    age: v.optional(v.number()),
+    dateOfBirth: v.optional(v.string()),
     gender: v.union(v.literal("male"), v.literal("female")),
     maritalStatus: v.string(),
     education: v.string(),
@@ -423,14 +417,23 @@ export const create = mutation({
     eventCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const now = Date.now();
+    await assertImageOwnership(ctx, undefined, args.imageStorageIds ?? [], args.signupCapabilityHash);
+    // "College" was accepted by older clients/imports; retain that legacy input.
+    if (!isEducation(args.education) && args.education !== "College") {
+      throw new Error("Invalid education level");
+    }
+    const age = args.dateOfBirth !== undefined ? validateDateOfBirth(args.dateOfBirth) : args.age;
+    if (age === undefined || !Number.isInteger(age) || age < 18 || age > 99) throw new Error("Age must be between 18 and 99");
     const profileCompleted = hasCompletedProfile(args);
     const event = args.eventCode ? await validatePublicEventRegistration(ctx, args.eventCode) : null;
 
     const emailCanonical = normalizeEmail(args.email);
     const phoneCanonical = normalizePhone(args.phone);
     const nameCanonical = normalizeName(args.name);
-    const existingProfile = await findExistingParticipantProfile(ctx, args, Boolean(event));
+    const existingProfile = await findExistingParticipantProfile(ctx, { ...args, age }, Boolean(event));
+    if (existingProfile?.archivedAt != null) throw new Error("This profile is archived. Contact the team before registering again.");
     if (existingProfile && !event) {
       throw new Error("An applicant is already registered with this email.");
     }
@@ -442,15 +445,20 @@ export const create = mutation({
         stripeSessionId: args.stripeSessionId,
         paymentStatus: existingProfile.paymentStatus === "paid" ? "paid" : args.paymentStatus ?? "pending",
       });
-      await createOrRestoreEventRegistration(ctx, { event, registration: existingProfile, now });
+      const eventRegistrationId = await createOrRestoreEventRegistration(ctx, { event, registration: existingProfile, now });
+      await linkCheckout(ctx, args.stripeSessionId, existingProfile._id, eventRegistrationId);
       return existingProfile._id;
     }
 
     const registrationId = await ctx.db.insert("registrations", {
       applicantNumber: await nextApplicantNumber(ctx),
       publicApplicantNumber: await nextPublicApplicantNumber(ctx),
+      // Signup consent belongs only to a newly inserted profile. Never apply it
+      // in the existing-profile/event-registration branch above.
+      backgroundMatchmakingOptIn: args.backgroundMatchmakingOptIn === true,
+      backgroundMatchmakingConsentUpdatedAt: args.backgroundMatchmakingOptIn === undefined ? undefined : now,
       name: args.name.trim(),
-      age: args.age,
+      age,
       gender: args.gender,
       maritalStatus: args.maritalStatus,
       education: args.education,
@@ -469,6 +477,7 @@ export const create = mutation({
       searchStatus: "active",
       createdAt: now,
       profileAccessToken: args.profileAccessToken,
+      profileAccessTokenIssuedAt: args.profileAccessToken ? Date.now() : undefined,
       profileCompletionStatus: profileCompleted ? "completed" : "not_started",
       profileCompletedAt: profileCompleted ? now : undefined,
       profileLastUpdatedAt: profileCompleted ? now : undefined,
@@ -485,22 +494,28 @@ export const create = mutation({
       interestSubmissionNumbers: normalizeInterestSubmissionNumbers(args.interestSubmissionNumbers),
     });
 
+    await saveDateOfBirth(ctx, registrationId, args.dateOfBirth);
+    await claimSignupImages(ctx, registrationId, args.imageStorageIds ?? []);
+
     if (event) {
       const registration = await ctx.db.get(registrationId);
       if (!registration) throw new Error("Registration not found after creation");
-      await createOrRestoreEventRegistration(ctx, { event, registration, now });
+      const eventRegistrationId = await createOrRestoreEventRegistration(ctx, { event, registration, now });
+      await linkCheckout(ctx, args.stripeSessionId, registrationId, eventRegistrationId);
     }
 
+    if (!event) await linkCheckout(ctx, args.stripeSessionId, registrationId);
     return registrationId;
   },
 });
 
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const registrations = await ctx.db.query("registrations").collect();
 
-    return await Promise.all(
+    return withoutCapabilities(await Promise.all(
       registrations.map(async (registration) => {
         const imageStorageIds = registration.imageStorageIds || [];
         const imageUrls = await Promise.all(
@@ -515,11 +530,12 @@ export const getAll = query({
 
         return {
           ...registration,
+          age: await currentAge(ctx, registration),
           imageUrls: images.map((image) => image.url),
           images,
         };
       })
-    );
+    ));
   },
 });
 
@@ -539,9 +555,9 @@ export const getStats = query({
 });
 
 // Compatibility for older deployed admin bundles. Original registration waitlist
-// is retired, so old writes of "waitlisted" are normalized back to "pending".
+// is retired. Reject old writes rather than silently changing legacy records.
 export const updateStatus = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("registrations"),
     status: v.union(
       v.literal("pending"),
@@ -551,18 +567,27 @@ export const updateStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, { status: args.status === "waitlisted" ? "pending" : args.status });
+    requireAdmin(args.adminSecret);
+    if (args.status === "waitlisted") throw new Error("Global profile waitlisting is retired; use an event registration");
+    const previous = await ctx.db.get(args.id);
+    if (!previous) throw new Error("Profile not found");
+    if (previous.archivedAt != null) throw new Error("Profile is archived");
+    await rejectionNoticeTransition(ctx, previous, args.status);
+    await ctx.db.patch(args.id, { status: args.status });
     return args.id;
   },
 });
 
 export const updateSearchStatus = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("registrations"),
     searchStatus,
     searchStatusNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Profile is archived");
     await ctx.db.patch(args.id, {
       searchStatus: args.searchStatus,
       searchStatusNote: args.searchStatusNote,
@@ -571,28 +596,53 @@ export const updateSearchStatus = mutation({
   },
 });
 
+async function issueProfileAccessToken(ctx: MutationCtx, id: Id<"registrations">, token: string, recoveryOnly = false) {
+  const previous = await ctx.db.get(id);
+  if (previous?.archivedAt !== undefined && !recoveryOnly) throw new Error("Profile is archived");
+  const issuedAt = Date.now();
+  if (!previous || previous.profileAccessToken === token || await ctx.db.query("registrations").withIndex("by_profileAccessToken", q => q.eq("profileAccessToken", token)).first()) throw new Error("Use a fresh profile token");
+  if (!await capabilityAllowed(ctx, issuedAt)) throw new Error("Profile token issuance unavailable");
+  await ctx.db.patch(id, {
+    profileAccessToken: token,
+    profileAccessTokenIssuedAt: issuedAt,
+    ...(recoveryOnly ? {} : { profileCompletionStatus: "in_progress" as const, profileUpdateRequestedAt: issuedAt }),
+  });
+  return id;
+}
+
 export const setProfileAccessToken = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("registrations"),
     token: v.string(),
+    recoveryOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, {
-      profileAccessToken: args.token,
-      profileCompletionStatus: "in_progress",
-      profileUpdateRequestedAt: Date.now(),
-    });
-    return args.id;
+    requireAdmin(args.adminSecret);
+    return issueProfileAccessToken(ctx, args.id, args.token, args.recoveryOnly);
+  },
+});
+
+export const ensureProfileAccessToken = mutation({
+  args: { adminSecret: v.optional(v.string()), id: v.id("registrations"), token: v.string(), expectedEmail: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const registration = await ctx.db.get(args.id);
+    if (!registration) throw new Error("Registration not found");
+    if (registration.email !== args.expectedEmail) throw new Error("Email changed; refresh the profile");
+    if (registration.profileAccessToken && await profileCapabilityAllowed(ctx, registration)) return registration.profileAccessToken;
+    await issueProfileAccessToken(ctx, args.id, args.token, true);
+    return args.token;
   },
 });
 
 export const markProfileUpdateEmailSent = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("registrations"),
     sent: v.boolean(),
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     await ctx.db.patch(args.id, {
       profileUpdateRequestedAt: Date.now(),
       profileUpdateEmailSent: args.sent,
@@ -605,17 +655,19 @@ export const markProfileUpdateEmailSent = mutation({
 });
 
 export const generateImageUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { adminSecret: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     return await ctx.storage.generateUploadUrl();
   },
 });
 
 export const getImageUrls = query({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     storageIds: v.array(v.id("_storage")),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     return await Promise.all(
       args.storageIds.map(async (storageId) => ({
         storageId,
@@ -626,25 +678,36 @@ export const getImageUrls = query({
 });
 
 export const getById = query({
-  args: { id: v.id("registrations") },
+  args: { adminSecret: v.optional(v.string()), id: v.id("registrations") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    requireAdmin(args.adminSecret);
+    return await withCurrentAge(ctx, await ctx.db.get(args.id));
   },
 });
 
 export const getByProfileAccessToken = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const registration = await ctx.db
       .query("registrations")
       .withIndex("by_profileAccessToken", (q) => q.eq("profileAccessToken", args.token))
       .first();
+    if (!registration || !(await profileCapabilityAllowed(ctx, registration))) return null;
+    const { name, gender, email, education, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
+      spouseRequirement1, spouseRequirement2, spouseRequirement3, shareableBio, photoSharingPermission,
+      interestSubmission, interestSubmissionNumbers, applicantNotesToAdmin, profileCompletionStatus } = registration;
+    const images = (await Promise.all((imageStorageIds ?? []).map(async storageId => ({ storageId, url: await ctx.storage.getUrl(storageId) })))).filter((image): image is { storageId: typeof image.storageId; url: string } => image.url !== null);
+    return { age: await currentAge(ctx, registration), dateOfBirth: await ownerDateOfBirth(ctx, registration._id), images, name, gender, email, education, ethnicity, imageStorageIds, prayerCommitment, hijabResponse,
+      spouseRequirement1, spouseRequirement2, spouseRequirement3, shareableBio, photoSharingPermission,
+      interestSubmission, interestSubmissionNumbers, applicantNotesToAdmin, profileCompletionStatus };
   },
 });
 
 export const updateProfile = mutation({
   args: {
     token: v.string(),
+    dateOfBirth: v.optional(v.string()),
+    education: v.optional(v.string()),
     ethnicity: v.string(),
     imageStorageIds: v.array(v.id("_storage")),
     prayerCommitment,
@@ -664,10 +727,14 @@ export const updateProfile = mutation({
       .withIndex("by_profileAccessToken", (q) => q.eq("profileAccessToken", args.token))
       .first();
 
-    if (!registration) {
+    if (!registration || !(await profileCapabilityAllowed(ctx, registration))) {
       throw new Error("Profile not found");
     }
 
+    await assertImageOwnership(ctx, registration._id, args.imageStorageIds);
+    await saveDateOfBirth(ctx, registration._id, args.dateOfBirth);
+    validateEducationUpdate(args.education, registration.education);
+    if (registration.archivedAt != null) throw new Error("Profile is archived");
     if (!args.ethnicity.trim()) throw new Error("Ethnicity is required");
     if (args.imageStorageIds.length < 1 || args.imageStorageIds.length > 3) {
       throw new Error("Profile must include between 1 and 3 images");
@@ -685,6 +752,7 @@ export const updateProfile = mutation({
     const shareableBio = args.shareableBio.trim();
     const lookingFor = legacyLookingForText(args);
     await ctx.db.patch(registration._id, {
+      ...(args.education !== undefined ? { education: args.education } : {}),
       ethnicity: args.ethnicity.trim(),
       imageStorageIds: args.imageStorageIds,
       prayerCommitment: args.prayerCommitment,
@@ -713,13 +781,15 @@ export const updateProfile = mutation({
 });
 
 export const updatePaymentStatus = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     stripeSessionId: v.string(),
     paymentStatus: v.union(v.literal("paid"), v.literal("failed")),
     amountPaid: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const registration = await ctx.db
+    requireAdmin(args.adminSecret);
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    const registration = link ? await ctx.db.get(link.registrationId) : await ctx.db
       .query("registrations")
       .withIndex("by_stripeSessionId", (q) => q.eq("stripeSessionId", args.stripeSessionId))
       .first();
@@ -742,8 +812,9 @@ export const updatePaymentStatus = mutation({
 });
 
 export const getByEmail = query({
-  args: { email: v.string() },
+  args: { adminSecret: v.optional(v.string()), email: v.string() },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     const trimmed = args.email.trim();
     if (!trimmed) return null;
     const lowercased = normalizeEmail(trimmed);
@@ -751,36 +822,40 @@ export const getByEmail = query({
       .query("registrations")
       .withIndex("by_emailCanonical", (q) => q.eq("emailCanonical", lowercased))
       .first();
-    if (byCanonical) return byCanonical;
+    if (byCanonical) return await withCurrentAge(ctx, byCanonical);
     const byTrimmed = await ctx.db
       .query("registrations")
       .withIndex("by_email", (q) => q.eq("email", trimmed))
       .first();
-    if (byTrimmed) return byTrimmed;
+    if (byTrimmed) return await withCurrentAge(ctx, byTrimmed);
     if (lowercased === trimmed) return null;
-    return await ctx.db
+    return await withCurrentAge(ctx, await ctx.db
       .query("registrations")
       .withIndex("by_email", (q) => q.eq("email", lowercased))
-      .first();
+      .first());
   },
 });
 
 export const getByStripeSession = query({
-  args: { stripeSessionId: v.string() },
+  args: { adminSecret: v.optional(v.string()), stripeSessionId: v.string() },
   handler: async (ctx, args) => {
-    return await ctx.db
+    requireAdmin(args.adminSecret);
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    if (link) return await withCurrentAge(ctx, await ctx.db.get(link.registrationId));
+    return await withCurrentAge(ctx, await ctx.db
       .query("registrations")
       .withIndex("by_stripeSessionId", (q) => q.eq("stripeSessionId", args.stripeSessionId))
-      .first();
+      .first());
   },
 });
 
 export const updateAdminNotes = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("registrations"),
     adminNotes: v.string(),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
     await ctx.db.patch(args.id, {
       adminNotes: args.adminNotes,
     });
@@ -789,11 +864,13 @@ export const updateAdminNotes = mutation({
 });
 
 export const markEmailSent = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     stripeSessionId: v.string(),
   },
   handler: async (ctx, args) => {
-    const registration = await ctx.db
+    requireAdmin(args.adminSecret);
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    const registration = link ? await ctx.db.get(link.registrationId) : await ctx.db
       .query("registrations")
       .withIndex("by_stripeSessionId", (q) => q.eq("stripeSessionId", args.stripeSessionId))
       .first();
@@ -807,24 +884,81 @@ export const markEmailSent = mutation({
 });
 
 export const deleteRegistration = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     id: v.id("registrations"),
   },
   // The persisted high-water-mark in settings is intentionally left untouched
   // so the deleted applicant number can never be re-issued to a new registration.
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const registration = await ctx.db.get(args.id);
+    if (registration?.archivedAt != null) throw new Error("Archived profile history cannot be deleted through this action");
+    const birthday = await ctx.db.query("registrationBirthdays").withIndex("by_registrationId", q => q.eq("registrationId", args.id)).unique();
+    if (birthday) await ctx.db.delete(birthday._id);
     await ctx.db.delete(args.id);
     return args.id;
   },
 });
 
 export const revokeApproval = mutation({
-  args: { id: v.id("registrations"), adminSecret: v.string() },
+  args: { id: v.id("registrations"), adminSecret: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    if (!process.env.ADMIN_PASSWORD || args.adminSecret !== process.env.ADMIN_PASSWORD) throw new Error("Unauthorized");
+    requireAdmin(args.adminSecret);
+    requireAdmin(args.adminSecret);
     const person = await ctx.db.get(args.id);
     if (!person || person.status !== "approved") throw new Error("Applicant is not approved");
     await ctx.db.patch(args.id, { status: "pending" });
     return args.id;
+  },
+});
+
+async function linkCheckout(ctx: MutationCtx, stripeSessionId: string | undefined, registrationId: Id<"registrations">, eventRegistrationId?: Id<"eventRegistrations">) {
+  if (!stripeSessionId) return;
+  const existing = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", stripeSessionId)).unique();
+  if (existing) throw new Error("Checkout session already linked");
+  const row = eventRegistrationId ? await ctx.db.get(eventRegistrationId) : null;
+  await ctx.db.insert("checkoutLinks", { stripeSessionId, registrationId, eventRegistrationId, receiptAttempt: row?.receiptAttempt, createdAt: Date.now() });
+}
+export const resolveCheckoutReceipt = query({
+  args: { stripeSessionId: v.string(), adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    return await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+  },
+});
+
+export const claimWelcomeReceipt = mutation({
+  args: { stripeSessionId: v.string(), adminSecret: v.string(), token: v.string(), profileUrl: v.string(), tokenHash: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    if (!link || link.eventRegistrationId) throw new Error("No safe non-event checkout association");
+    const registration = await ctx.db.get(link.registrationId);
+    if (!registration || registration.paymentStatus !== "paid") throw new Error("Paid registration not found");
+    if (registration.confirmationEmailSent) return { claimed: false };
+    const key = "welcome/" + registration._id;
+    const existing = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", key)).unique();
+    const now = Date.now();
+    if (existing?.sentAt) return { claimed: false };
+    if (existing && existing.leaseUntil > now) return { claimed: false, error: "Welcome delivery in progress; retry later" };
+    if ((existing && now - existing.firstAttemptAt >= 23 * 3600000) || !await capabilityAllowed(ctx, existing?.firstAttemptAt ?? now)) return { claimed: false, error: "Welcome delivery uncertain; manual reconciliation required" };
+    if (existing) await ctx.db.patch(existing._id, { token: args.token, leaseUntil: now + 120000 });
+    else {
+      await ctx.db.insert("receiptDeliveries", { key, token: args.token, leaseUntil: now + 120000, firstAttemptAt: now, name: registration.name, email: registration.email, profileUrl: args.profileUrl });
+      await ctx.db.insert("applicantLoginTokens", { registrationId: registration._id, tokenHash: args.tokenHash, expiresAt: now + 7 * 86400000, createdAt: now });
+    }
+    return { claimed: true, key, name: existing?.name ?? registration.name, email: existing?.email ?? registration.email, profileUrl: existing?.profileUrl ?? args.profileUrl };
+  },
+});
+export const finishWelcomeReceipt = mutation({
+  args: { stripeSessionId: v.string(), adminSecret: v.string(), token: v.string(), error: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
+    const link = await ctx.db.query("checkoutLinks").withIndex("by_session", q => q.eq("stripeSessionId", args.stripeSessionId)).unique();
+    if (!link || link.eventRegistrationId) throw new Error("No safe checkout association");
+    const delivery = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", "welcome/" + link.registrationId)).unique();
+    if (!delivery || delivery.token !== args.token || delivery.sentAt) return;
+    await ctx.db.patch(delivery._id, { leaseUntil: 0, sentAt: args.error ? undefined : Date.now(), error: args.error });
+    if (!args.error) await ctx.db.patch(link.registrationId, { confirmationEmailSent: true });
   },
 });

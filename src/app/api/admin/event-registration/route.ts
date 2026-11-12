@@ -1,0 +1,43 @@
+import { adminRequestError } from "@/lib/admin-server";
+import crypto from "crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { api } from "../../../../../convex/_generated/api";
+import { getConvexClient } from "../../../../lib/convex";
+function authorized(request: NextRequest) {
+  if (!process.env.ADMIN_PASSWORD) return false;
+  const expected = crypto.createHash("sha256").update(process.env.ADMIN_PASSWORD + (process.env.ADMIN_TOKEN_SALT || "taaruf-admin-salt")).digest("hex");
+  return request.cookies.get("admin_token")?.value === expected;
+}
+export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
+  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const adminSecret = process.env.ATTENDANCE_ADMIN_SECRET;
+  if (!adminSecret) return NextResponse.json({ error: "Event service not configured" }, { status: 503 });
+  try {
+    const { action, ...body } = await request.json();
+    if (Object.keys(body).some(key => /secret|password|token|sessionHash/i.test(key))) return NextResponse.json({ error: "Client credentials are not accepted" }, { status: 400 });
+    const client = getConvexClient();
+    // Convex validates each action's exact arguments. Never forward a client secret.
+    const args = { ...body, adminSecret };
+    let result;
+    switch (action) {
+      case "create": result = await client.mutation(api.events.create, args); break;
+      case "deleteEvent": result = await client.mutation(api.events.deleteEvent, args); break;
+      case "forceRegisterWaitlisted": result = await client.mutation(api.events.forceRegisterWaitlisted, args); break;
+      case "updateRegistrationStatus": result = await client.mutation(api.events.updateRegistrationStatus, args); break;
+      case "updateRegistrationConfirmation": result = await client.mutation(api.events.updateRegistrationConfirmation, args); break;
+      case "requestConfirmation": result = await client.mutation(api.events.requestConfirmation, args); break;
+      case "carryOverRegistrations": result = await client.mutation(api.events.carryOverRegistrations, args); break;
+      case "addRegistration": result = await client.mutation(api.events.addRegistration, args); break;
+      case "update": result = await client.mutation(api.events.update, args); break;
+      default: return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    }
+    return NextResponse.json({ success: true, result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to update event";
+    // Convex validator errors may echo the entire argument object, including the server credential.
+    const safeMessage = message.includes("ArgumentValidationError") ? "Invalid event request" : message.split(adminSecret).join("[redacted]");
+    return NextResponse.json({ error: safeMessage }, { status: 400 });
+  }
+}

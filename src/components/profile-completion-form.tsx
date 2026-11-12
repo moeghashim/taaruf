@@ -1,10 +1,11 @@
 "use client";
+import { DateOfBirthField } from "@/components/date-of-birth-field";
+import { dateOfBirthError, changedDateOfBirth } from "@/lib/date-of-birth";
+import { educationOptionsFor } from "@/lib/education";
 
 import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 
 type PrayerCommitment = "sometimes" | "strive_five" | "always_five" | "five_and_sunnah" | "";
@@ -25,6 +26,8 @@ interface ProfileData {
   name: string;
   gender: "male" | "female";
   email: string;
+  dateOfBirth?: string;
+  education: string;
   ethnicity: string;
   imageStorageIds: string[];
   imageUrls: string[];
@@ -52,7 +55,6 @@ const prayerOptions = [
 const photoSharingOptions = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
-  { value: "ask_me_first", label: "Ask me first" },
 ] as const;
 
 function uploadedImagesFromProfile(registration: {
@@ -78,13 +80,13 @@ function uploadedImagesFromProfile(registration: {
 
 export function ProfileCompletionForm({ token }: { token: string }) {
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const generateUploadUrl = useMutation(api.registrations.generateImageUploadUrl);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -93,6 +95,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
       if (!response.ok) {
         throw new Error(data.error || "Failed to load profile");
       }
+      setOriginalDateOfBirth(data.registration.dateOfBirth);
       setProfile({
         ...data.registration,
         interestSubmissionNumbers: ((data.registration.interestSubmissionNumbers || []) as Array<string | number>).map((value) => String(value)),
@@ -129,11 +132,12 @@ export function ProfileCompletionForm({ token }: { token: string }) {
 
       for (const file of chosenFiles) {
         const preparedFile = await prepareImageFileForUpload(file);
-        const uploadUrl = await generateUploadUrl({});
-        const result = await fetch(uploadUrl, {
+        const result = await fetch("/api/photos/upload", {
           method: "POST",
           headers: {
             "Content-Type": preparedFile.type || "application/octet-stream",
+            "x-upload-context": "profile",
+            "x-profile-token": token,
           },
           body: preparedFile,
         });
@@ -165,10 +169,21 @@ export function ProfileCompletionForm({ token }: { token: string }) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!profile) return;
+    const birthdayChange = changedDateOfBirth(profile.dateOfBirth, originalDateOfBirth);
+    if (birthdayChange !== undefined) {
+      const birthdayError = dateOfBirthError(birthdayChange);
+      if (birthdayError) { setError(birthdayError); return; }
+    }
 
     setIsSaving(true);
     setMessage(null);
     setError(null);
+
+    if (profile.photoSharingPermission !== "yes" && profile.photoSharingPermission !== "no") {
+      setError("Please choose Yes or No for photo sharing. Your photos remain private until you choose Yes for a permitted recipient.");
+      setIsSaving(false);
+      return;
+    }
 
     if (uploadedImages.length < 1 || uploadedImages.length > 3) {
       setError("Please upload between 1 and 3 photos.");
@@ -182,6 +197,8 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ethnicity: profile.ethnicity,
+          education: profile.education,
+          ...(birthdayChange !== undefined ? { dateOfBirth: birthdayChange } : {}),
           imageStorageIds: uploadedImages.map((image) => image.storageId),
           prayerCommitment: profile.prayerCommitment,
           hijabResponse: profile.hijabResponse,
@@ -251,11 +268,22 @@ export function ProfileCompletionForm({ token }: { token: string }) {
         </div>
       </div>
       <form onSubmit={handleSubmit} className="profile-form">
+        <DateOfBirthField originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
         {!isComplete && (
           <p className="notice warning">Complete your profile to start matching.</p>
         )}
 
         <div className="profile-grid two">
+          <div className="field">
+            <label htmlFor="education">Education level *</label>
+            <select id="education" value={profile.education || ""}
+              onChange={(event) => setProfile({ ...profile, education: event.target.value })} required>
+              <option value="">Select education level</option>
+              {educationOptionsFor(profile.education).map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
           <div className="field">
             <label htmlFor="ethnicity">Ethnicity *</label>
             <input
@@ -306,7 +334,7 @@ export function ProfileCompletionForm({ token }: { token: string }) {
             <label htmlFor="photoSharingPermission">Photo sharing permission *</label>
             <select
               id="photoSharingPermission"
-              value={profile.photoSharingPermission}
+              value={profile.photoSharingPermission === "yes" || profile.photoSharingPermission === "no" ? profile.photoSharingPermission : ""}
               onChange={(event) =>
                 setProfile({
                   ...profile,
