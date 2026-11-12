@@ -246,7 +246,7 @@ export async function createApplicantInterestWithRules(
   const target = await getRegistrationOrThrow(ctx, args.toRegistrationId);
   if (target.status !== "approved") throw new Error("Applicant details could not be verified");
   const submissions = await ctx.db.query("interests")
-    .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", args.fromRegistrationId).eq("eventId", event._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3);
+    .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", args.fromRegistrationId).eq("eventId", event._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3);
   if (submissions.some(row => row.toRegistrationId === args.toRegistrationId)) throw new Error("Interest already submitted for this event");
   if (submissions.length >= 3) {
     throw new Error("You can submit a maximum of 3 interests per event");

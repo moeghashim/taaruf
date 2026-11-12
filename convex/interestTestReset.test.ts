@@ -176,7 +176,7 @@ test("retained test audit survives pair reset/deletion and stale share creation"
 });
 test("more than 100 retained reset rows cannot hide a fresh submission or defeat cap", async () => {
  const f = await fixture();
- for (let i = 0; i < 101; i++) { const row = await f.submit(0); await f.reset(row.interestId); }
+ for (let i = 0; i < 101; i++) { await f.t.run(async ctx => { const budget = await ctx.db.query("interestLookups").withIndex("by_registrationId", q => q.eq("registrationId", f.from)).unique(); if (budget) await ctx.db.patch(budget._id, { windowStart: 0 }); }); const row = await f.submit(0); await f.reset(row.interestId); }
  const fresh = await f.submit(0);
  const dashboard = await f.t.query(api.applicantInterests.getDashboard, { sessionHash: f.sessionHash });
  expect(dashboard.outbound).toHaveLength(1);

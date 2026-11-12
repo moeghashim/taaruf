@@ -56,7 +56,7 @@ test("explicit off blocks new writes but preserves interests, flows and response
   expect(await t.run(async ctx => ({ interest: await ctx.db.get(first.interestId), flows: await ctx.db.query("interestFlows").collect(), history: await ctx.db.query("interestFlowEvents").collect() }))).toEqual(snapshot);
   await t.mutation(api.applicantInterests.withdrawOutbound, { sessionHash: "session0", interestId: first.interestId });
   await toggle(older, true);
-  expect((await dashboard()).interestSubmissions).toHaveLength(1);
+  expect((await dashboard()).interestSubmissions).toHaveLength(0);
 });
 
 test("single active event requires explicit off; concurrent enables cannot both succeed", async () => {

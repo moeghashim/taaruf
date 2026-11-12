@@ -25,10 +25,10 @@ async function fixture() {
   const submit = (number = 2, name = "Person") => ({ photoConsent: "no" as const, expectedEventId: ids.event, sessionHash: "session0", applicantNumber: number, applicantName: name });
   return { t, ...ids, submit };
 }
-test("requires session and exact number/name; no applicant directory in either portal response", async () => {
+test("requires session and exact number; no applicant directory in either portal response", async () => {
   const { t, submit } = await fixture();
   await expect(t.mutation(api.applicantInterests.submitInterestNumber, { ...submit(), sessionHash: "forged" })).rejects.toThrow("Unauthorized");
-  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(2, "Wrong"))).rejects.toThrow("could not be verified");
+  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(2, "Wrong"))).resolves.toHaveProperty("interestId");
   await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(999))).rejects.toThrow("could not be verified");
   const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" });
   expect(dashboard).not.toHaveProperty("eligibleInterestTargets");
@@ -78,13 +78,13 @@ test("photo URLs require owner consent, even after contact sharing", async () =>
   await t.run(async ctx => { await ctx.db.patch(people[0], { photoSharingPermission: "yes" }); });
   expect((await dashboard()).inbound[0].counterparty?.imageUrls).toEqual([]);
 });
-test("max three submissions per event survives withdrawal", async () => {
+test("withdrawal returns exactly one of three event slots", async () => {
   const { t, submit } = await fixture();
   const first = await t.mutation(api.applicantInterests.submitInterestNumber, submit());
   await t.mutation(api.applicantInterests.withdrawOutbound, { sessionHash: "session0", interestId: first.interestId });
   await t.mutation(api.applicantInterests.submitInterestNumber, submit(3));
   await t.mutation(api.applicantInterests.submitInterestNumber, submit(4));
-  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(5))).rejects.toThrow("maximum of 3");
+  await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(5))).resolves.toHaveProperty("interestId");
 });
 test("retired attendance writer fails closed and preserves historical data", async () => {
   vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "test-secret");
@@ -178,4 +178,29 @@ for (const gender of ["male", "female"] as const) test("Events approved AND atte
     expect((await dashboard()).canSubmitInterest).toBe(false);
     expect((await t.query(list, { adminSecret: "test-secret", eventId: event })).total).toBe(5);
   } finally { vi.unstubAllEnvs(); }
+});
+
+for (const gender of ["male", "female"] as const) test("4257 atomic refund and replacement " + gender, async () => {
+  const { t, people, submit } = await fixture();
+  await t.run(async ctx => { for (let i = 0; i < people.length; i++) await ctx.db.patch(people[i], { gender: i === 0 ? gender : gender === "male" ? "female" : "male" }); });
+  const first = await t.mutation(api.applicantInterests.submitInterestNumber, submit());
+  await t.mutation(api.applicantInterests.submitInterestNumber, submit(3));
+  await t.mutation(api.applicantInterests.submitInterestNumber, submit(4));
+  const args = { sessionHash: "session0", interestId: first.interestId };
+  await Promise.all([t.mutation(api.applicantInterests.withdrawOutbound, args), t.mutation(api.applicantInterests.withdrawOutbound, args)]);
+  expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).interestSubmissions).toHaveLength(2);
+  const replacement = await t.mutation(api.applicantInterests.submitInterestNumber, submit(5));
+  expect(replacement.interestId).toBeTruthy();
+  expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).interestSubmissions).toHaveLength(3);
+  expect((await t.run(ctx => ctx.db.query("interestFlowEvents").collect())).filter(e => e.interestId === first.interestId && e.eventType === "outbound_withdrawn")).toHaveLength(1);
+});
+test("4257 exact first name only; failed lookup budget survives session rotation and blocks submit bypass", async () => {
+ const { t, people, event, submit } = await fixture();
+ const args = { sessionHash: "session0", applicantNumber: 2, expectedEventId: event };
+ await expect(t.mutation(api.applicantInterests.lookupInterestName, { ...args, sessionHash: "forged" })).rejects.toThrow("Unauthorized");
+ expect(await t.mutation(api.applicantInterests.lookupInterestName, args)).toEqual({ firstName: "Person" });
+ for (let i = 0; i < 11; i++) expect(await t.mutation(api.applicantInterests.lookupInterestName, { ...args, applicantNumber: 9999 })).toEqual({ firstName: null });
+ await t.run(ctx => ctx.db.insert("applicantSessions", { registrationId: people[0], sessionHash: "rotated", createdAt: Date.now(), expiresAt: Date.now() + 99999 }));
+ expect(await t.mutation(api.applicantInterests.lookupInterestName, { ...args, sessionHash: "rotated" })).toEqual({ firstName: null, limited: true });
+ await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).rejects.toThrow("Too many name checks");
 });
