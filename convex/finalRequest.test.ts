@@ -174,3 +174,26 @@ test("dedicated mode still sends activated future brother inbound only", async (
   expect(JSON.parse(provider.mock.calls[0][1].body).subject).toBe("New interest received in 1 Plus 1");
   expect(await rows(f)).toEqual([]);
 });
+
+for (const general of [true, false]) test("explicit shared transport preserves future-only bilateral sends " + general, async () => {
+  const f = await fixture(general);
+  configure();
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_CREDENTIAL_SOURCE", "shared-resend");
+  vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "");
+  vi.stubEnv("RESEND_API_KEY", "fake-shared-only");
+  vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "1Plus1 Match <contact@1plus1match.com>");
+  const provider = vi.fn().mockResolvedValue(new Response("{}", { status: 200 })); vi.stubGlobal("fetch", provider);
+  await f.t.mutation(internal.femaleWorkflowDelivery.activateFinalRequests, {});
+  // Final activation must not activate initial brother invitations.
+  expect(await f.t.run(ctx => ctx.db.query("settings").withIndex("by_key", q => q.eq("key", "brotherReviewEmailActivatedAt")).unique())).toBeNull();
+  vi.spyOn(Date, "now").mockReturnValue(Date.now() + 10);
+  await accept(f, general);
+  await Promise.all([f.t.action(internal.femaleWorkflowDelivery.drain, {}), f.t.action(internal.femaleWorkflowDelivery.drain, {})]);
+  expect(provider).toHaveBeenCalledTimes(2);
+  for (const call of provider.mock.calls) {
+    expect(call[1].headers.Authorization).toBe("Bearer fake-shared-only");
+    expect(JSON.parse(call[1].body).from).toBe("1Plus1 Match <contact@1plus1match.com>");
+  }
+  await f.t.action(internal.femaleWorkflowDelivery.drain, {});
+  expect(provider).toHaveBeenCalledTimes(2);
+});

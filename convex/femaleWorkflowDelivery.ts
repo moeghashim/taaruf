@@ -179,10 +179,17 @@ export const authorizeSend = internalMutation({ args: { id: v.id("femaleWorkflow
 export function deliveryConfig(email: string) {
   const allowed = (process.env.FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS ?? "").split(",").map(s => s.trim().toLowerCase());
   const portal = process.env.FEMALE_WORKFLOW_PORTAL_URL;
-  const key = process.env.FEMALE_WORKFLOW_RESEND_API_KEY;
+
   const from = process.env.FEMALE_WORKFLOW_EMAIL_FROM;
   const mode = process.env.FEMALE_WORKFLOW_EMAIL_MODE;
   const production = (mode === FINAL_REQUEST_MODE || mode === "production" || mode === BROTHER_REVIEW_MODE || mode === SISTER_CONFIRMATION_MODE || mode === COMBINED_REVIEW_MODE) && process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED === "true";
+  // Explicit selection, never fallback. Shared credentials are restricted to the
+  // approved brother-inbound + bilateral-final production scope, never isolation.
+  const credentialSource = process.env.FEMALE_WORKFLOW_EMAIL_CREDENTIAL_SOURCE ?? "dedicated";
+  if (!["dedicated", "shared-resend"].includes(credentialSource)) return null;
+  const shared = credentialSource === "shared-resend";
+  if (shared && (!production || mode !== FINAL_REQUEST_MODE || from !== "1Plus1 Match <contact@1plus1match.com>")) return null;
+  const key = shared ? process.env.RESEND_API_KEY : process.env.FEMALE_WORKFLOW_RESEND_API_KEY;
   if ((!production && mode !== "isolated") || (!production && !allowed.includes(email.trim().toLowerCase())) || !portal || !key || !from) return null;
   try {
     const url = new URL(portal);
