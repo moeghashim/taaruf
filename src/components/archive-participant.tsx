@@ -6,7 +6,7 @@ import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } 
 export function ArchiveParticipant({ archivedAt, lastRestoredArchivedAt, registrationId, name, onArchived, onRestored }: {
   archivedAt?: number | null;
   lastRestoredArchivedAt?: number;
-  registrationId?: string;
+  registrationId: string;
   name?: string;
   onArchived?: (archivedAt: number) => void;
   onRestored?: () => void;
@@ -26,9 +26,9 @@ export function ArchiveParticipant({ archivedAt, lastRestoredArchivedAt, registr
     try {
       const action = archived ? "restore" : "archive";
       const response = await fetch(
-        "/api/" + (registrationId ? "admin/" : "applicant/") + action, {
+        "/api/admin/" + action, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...(registrationId ? { registrationId } : {}), expectedArchivedAt: archivedAt ?? null, ...(!archived && lastRestoredArchivedAt !== undefined ? {expectedRestoredArchivedAt: lastRestoredArchivedAt} : {}), confirm: true }),
+          body: JSON.stringify({ registrationId, expectedArchivedAt: archivedAt ?? null, ...(!archived && lastRestoredArchivedAt !== undefined ? {expectedRestoredArchivedAt: lastRestoredArchivedAt} : {}), confirm: true }),
         });
       const payload = await response.json();
       if (response.status === 409) setConflict(true);
