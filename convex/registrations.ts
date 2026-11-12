@@ -384,6 +384,7 @@ function legacyLookingForText(args: {
 export const create = mutation({
   args: { adminSecret: v.optional(v.string()),
     signupCapabilityHash: v.optional(v.string()),
+    backgroundMatchmakingOptIn: v.optional(v.boolean()),
     name: v.string(),
     age: v.optional(v.number()),
     dateOfBirth: v.optional(v.string()),
@@ -452,6 +453,10 @@ export const create = mutation({
     const registrationId = await ctx.db.insert("registrations", {
       applicantNumber: await nextApplicantNumber(ctx),
       publicApplicantNumber: await nextPublicApplicantNumber(ctx),
+      // Signup consent belongs only to a newly inserted profile. Never apply it
+      // in the existing-profile/event-registration branch above.
+      backgroundMatchmakingOptIn: args.backgroundMatchmakingOptIn === true,
+      backgroundMatchmakingConsentUpdatedAt: args.backgroundMatchmakingOptIn === undefined ? undefined : now,
       name: args.name.trim(),
       age,
       gender: args.gender,
