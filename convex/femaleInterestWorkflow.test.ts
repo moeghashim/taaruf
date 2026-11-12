@@ -181,7 +181,7 @@ test("PR61 cutoff also denies female portal reads and actions for old sessions",
  expect((await t.run(ctx=>ctx.db.get(interestId)))?.femaleWorkflow?.state).toBe("awaiting_brother_review");
 });
 
-test("serialized brother review surfaces omit sister identity throughout approval and release", async () => {
+test("serialized brother review surfaces grant first name only after exact initial acceptance", async () => {
   const { t, interestId, sister, brother } = await fixture();
   await t.run(async ctx => {
     await ctx.db.patch(sister, { publicApplicantNumber: 73 });
@@ -190,16 +190,18 @@ test("serialized brother review surfaces omit sister identity throughout approva
     const reciprocal = await ctx.db.insert("interests", { fromRegistrationId: brother, toRegistrationId: sister, eventId: (await ctx.db.get(interestId))!.eventId, source: "admin_entered", status: "new", visibility: "admin_actionable", createdAt: now, updatedAt: now });
     await ctx.db.insert("interestFlows", { interestId: reciprocal, fromRegistrationId: brother, toRegistrationId: sister, flowStatus: "awaiting_inbound_response", recipientDecision: "pending", requesterFinalApproval: "pending", recipientFinalApproval: "pending", photoDecision: "pending", createdAt: now, updatedAt: now });
   });
-  async function check(state: string) {
+  async function check(state: string, accepted = false) {
     const review = await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId });
     expect(review.state).toBe(state);
-    expect(review.profile).not.toHaveProperty("name");
-    expect(review.profile.label).toBe("Applicant #73");
+    if (accepted) expect(review.profile.name).toBe("Synthetic");
+    else expect(review.profile).not.toHaveProperty("name");
+    expect(review.profile.label).toBe(accepted ? "Synthetic" : "Applicant #73");
     expect(JSON.stringify(review)).not.toContain("Synthetic Sister");
     const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash: "brother" });
     for (const row of dashboard.inbound) {
-      expect(row.counterparty).not.toHaveProperty("name");
-      expect(row.counterparty?.label).toBe("Applicant #73");
+      if (accepted) expect(row.counterparty?.name).toBe("Synthetic");
+      else expect(row.counterparty).not.toHaveProperty("name");
+      expect(row.counterparty?.label).toBe(accepted ? "Synthetic" : "Applicant #73");
     }
     expect(dashboard.inbound).toHaveLength(1);
     expect(dashboard.outbound).toHaveLength(1);
@@ -218,10 +220,10 @@ test("serialized brother review surfaces omit sister identity throughout approva
   await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
   await check("in_review");
   await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId, decision: "accept" });
-  await check("in_review");
+  await check("in_review", true);
   await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId, confirmed: true });
   await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: interestId, approved: true });
-  await check("in_review");
+  await check("in_review", true);
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated");
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "sister@example.com,brother@example.com");
   vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://synthetic.example.com");
@@ -231,7 +233,7 @@ test("serialized brother review surfaces omit sister identity throughout approva
   vi.stubGlobal("fetch", fetchMock);
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   await t.mutation(api.femaleInterestWorkflow.releaseContacts, { adminSecret, interestId });
-  await check("contacts_released");
+  await check("contacts_released", true);
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   const messages = fetchMock.mock.calls.map(call => JSON.parse(call[1]!.body as string));
   expect(messages).toHaveLength(4);
@@ -321,4 +323,25 @@ test("4257 admin share versus private withdrawal has one winner", async () => {
  const row = await f.t.run(ctx => ctx.db.get(f.interestId));
  if (row?.status === "withdrawn") expect(row.slotReturnedAt).toEqual(expect.any(Number));
  else expect(row?.slotReturnedAt).toBeUndefined();
+});
+
+for (const invalid of ["expired", "revoked", "reset", "closed", "archived", "restored", "missingAcceptance", "futureAcceptance", "wrongFlow", "pendingFlow"] as const) test("accepted first name fails closed: " + invalid, async () => {
+  const {t, interestId, sister} = await accepted();
+  await t.run(async ctx => {
+    const i = (await ctx.db.get(interestId))!;
+    const flow = (await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interestId)).unique())!;
+    if (invalid === "expired") await ctx.db.patch(interestId, {femaleWorkflow: {...i.femaleWorkflow!, reviewExpiresAt: Date.now()-1}});
+    if (invalid === "revoked") await ctx.db.patch(interestId, {femaleWorkflow: {...i.femaleWorkflow!, state: "revoked"}});
+    if (invalid === "reset") await ctx.db.patch(interestId, {testReset: {at:Date.now(),reason:"test",actor:"admin"}});
+    if (invalid === "closed") await ctx.db.patch(interestId, {status:"closed"});
+    if (invalid === "archived") await ctx.db.patch(sister, {archivedAt:Date.now()});
+    if (invalid === "restored") await ctx.db.patch(sister, {lastRestoredArchivedAt:Date.now()});
+    if (invalid === "missingAcceptance" || invalid === "futureAcceptance") await ctx.db.patch(interestId, {femaleWorkflow:{...i.femaleWorkflow!,brotherAcceptedAt:invalid === "futureAcceptance" ? Date.now()+60000 : undefined}});
+    if (invalid === "wrongFlow") await ctx.db.patch(flow._id, {toRegistrationId:sister});
+    if (invalid === "pendingFlow") await ctx.db.patch(flow._id, {recipientDecision:"pending"});
+  });
+  const dashboard = await t.query(api.applicantInterests.getDashboard, {sessionHash:"brother"});
+  expect(JSON.stringify(dashboard.inbound)).not.toContain("Synthetic");
+  try { const review = await t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"brother",interestId}); expect(review.profile).not.toHaveProperty("name"); }
+  catch (error) { expect(String(error)).toMatch(/unavailable|archived/i); }
 });
