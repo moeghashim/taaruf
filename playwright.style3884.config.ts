@@ -1,0 +1,2 @@
+import { defineConfig } from "@playwright/test";
+export default defineConfig({testDir:"./e2e",testMatch:"style3884.spec.ts",workers:1,reporter:"list",outputDir:"test-results/style3984",use:{baseURL:"http://127.0.0.1:3984",channel:"chrome",headless:true,serviceWorkers:"block"},webServer:{command:"npx next dev --hostname 127.0.0.1 --port 3984",url:"http://127.0.0.1:3984/me",reuseExistingServer:false,timeout:120000,env:{VERCEL_ENV:"preview",PREVIEW_BACKEND_ISOLATED:"false"}}});
