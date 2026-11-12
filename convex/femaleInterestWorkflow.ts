@@ -1,3 +1,4 @@
+import { ownClosedDecision } from "./ownClosedConnection";
 import { enqueueFinalRequests, currentFinalRequest } from "./finalRequest";
 import { assertNotArchived } from "./archiveRules";
 import { interestBioVisible } from "./bioVisibility";
@@ -110,7 +111,8 @@ async function visibleReviews(ctx: ReadCtx, person: Doc<"registrations">, rows: 
       if (match?.testResetAt !== undefined) continue;
       const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
       if (flow && (flow.fromRegistrationId !== row.fromRegistrationId || flow.toRegistrationId !== row.toRegistrationId)) continue;
-      result.push(applicantReview(row, role, flow, false, true));
+      const ownDecision = await ownClosedDecision(ctx, row, flow, person._id);
+      if (ownDecision) result.push({ ...applicantReview(row, role, flow, false, true), ownDecision });
     }
   }
   return result;

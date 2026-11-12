@@ -153,12 +153,16 @@ for (const sessionHash of ["brother", "sister"]) test(sessionHash + " discovers 
     const row = (await ctx.db.get(interestId))!;
     const { _id, _creationTime, ...copy } = row; void _id; void _creationTime;
     for (let n = 0; n < 110; n++) await ctx.db.insert("interests", { ...copy, status: "closed", femaleWorkflow: n % 2 ? undefined : { state: "declined" } });
-    return await ctx.db.insert("interests", copy);
+    const freshId = await ctx.db.insert("interests", copy);
+    const sourceFlow = (await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interestId)).unique())!;
+    const { _id: flowId, _creationTime: flowTime, ...flowCopy } = sourceFlow; void flowId; void flowTime;
+    await ctx.db.insert("interestFlows", { ...flowCopy, interestId: freshId });
+    return freshId;
   });
   const first = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { cursor: null, numItems: 50 } });
   expect(first.page.some(r => r.interestId === fresh)).toBe(true); expect(first.isDone).toBe(false);
   const empty = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { cursor: first.continueCursor, numItems: 50 } });
-  expect(empty.page).toHaveLength(sessionHash === "sister" ? 25 : 0);
+  expect(empty.page).toHaveLength(0);
   for (const row of empty.page) expect(row).toEqual({ interestId: expect.any(String), role: "sister", state: "closed", ownDecision: "pending", ownAction: null, ownActionStage: null, paused: false, reviewExpired: false, canPause: false, canView: false }); expect(empty.isDone).toBe(false); expect(empty.continueCursor).not.toBe(first.continueCursor);
   const last = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { cursor: empty.continueCursor, numItems: 50 } });
   expect(last.page.some(r => r.interestId === interestId)).toBe(true); expect(last.isDone).toBe(true);

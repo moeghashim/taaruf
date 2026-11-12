@@ -64,7 +64,7 @@ for(const female of [false,true]) {
   const result=await f.notices(sender);
   expect(result.notices.some(n=>n.heading==="You Have Sent An Interest")).toBe(false);
   if(female) expect(result.notices).toEqual([]);
-  else expect(result.dashboard.history[0].status).toBe("closed");
+  else expect(result.dashboard.history).toEqual([]);
  });
 }
 
