@@ -128,7 +128,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     if (panel) { panel.focus({ preventScroll: true }); panel.scrollIntoView({ block: "start" }); focusedSelection.current = selected; }
   }, [inline, active, selected, access, reviewLoading]);
   const reviewHref = (id: string, contacts = false) => inline
-    ? "/me?femaleReview=" + encodeURIComponent(id) + "#inbound-interests"
+    ? "/me?femaleReview=" + encodeURIComponent(id) + (rows.find(item => item.interestId === id)?.role === "sister" ? "#outbound-interests" : "#inbound-interests")
     : "/dashboard?femaleReview=" + encodeURIComponent(id) + (contacts ? "#contact-details" : "");
   async function act(body: Record<string, unknown>) {
     if (actionInFlight.current) return;
@@ -224,7 +224,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       {!rows.length && (!done || loading || selected) && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
       {rows.filter(item => item.interestId === selected).map(item => <div key={item.interestId}>
         {item.paused && <p>Paused</p>}
-        {/* The embedded profile already sits under Inbound Interests; standalone routes retain their review header. */}
+        {/* The embedded profile already sits under its interest direction; standalone routes retain their review header. */}
         {(!inline || reviewExpired(item) || item.state !== "in_review") && <><h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : item.ownAction === "review" ? "This connection is awaiting your review." : stateCopy[item.state]}</p></>}
         {item.ownDecision === "approved" && <p>Your decision: approved.</p>}{item.ownDecision === "approved" && item.state === "in_review" && !item.paused && !item.reviewExpired && <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>}
         {item.ownDecision === "declined" && <p>Your decision: declined.</p>}

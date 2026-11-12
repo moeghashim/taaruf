@@ -533,12 +533,16 @@ function Section({
   description,
   interests,
   children,
+  reviewIds = [],
+  reviewActive = false,
   requestedConnectionId,
   onAction,
   busy,
 }: {
   viewerGender?: string;
   children?: React.ReactNode;
+  reviewIds?: string[];
+  reviewActive?: boolean;
   requestedConnectionId?: string | null;
   title: string;
   description: string;
@@ -548,7 +552,7 @@ function Section({
 }) {
   const [selectedInterestId, setSelectedInterestId] = useState<string | null>(null);
   const selectedInterest =
-    interests.find((interest) => interest.interestId === (selectedInterestId ?? requestedConnectionId)) ?? (requestedConnectionId ? null : interests[0] ?? null);
+    interests.find((interest) => interest.interestId === (requestedConnectionId ?? selectedInterestId)) ?? (requestedConnectionId ? null : interests[0] ?? null);
 
   useEffect(() => {
     if (!interests.length) {
@@ -561,13 +565,23 @@ function Section({
   }, [interests, selectedInterestId, requestedConnectionId]);
 
   useEffect(() => {
-    if (!requestedConnectionId || selectedInterest?.interestId !== requestedConnectionId) return;
+    if (reviewActive || !requestedConnectionId || selectedInterest?.interestId !== requestedConnectionId) return;
     const section = document.getElementById(sectionId(title));
     const target = Array.from(section?.querySelectorAll<HTMLButtonElement>("[data-interest-id]") ?? []).find(button => button.dataset.interestId === requestedConnectionId);
     target?.focus();
     target?.scrollIntoView({ block: "center" });
-  }, [requestedConnectionId, selectedInterest?.interestId, title]);
+  }, [requestedConnectionId, selectedInterest?.interestId, title, reviewActive]);
 
+  const extraReviewIds = [...new Set(reviewIds)].filter(id => !interests.some(row => row.interestId === id));
+  const itemCount = interests.length + extraReviewIds.length;
+  function selectReview(id: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("connection");
+    url.searchParams.set("femaleReview", id);
+    url.hash = sectionId(title);
+    window.history.pushState(null, "", url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
   return (
     <section id={sectionId(title)} className="panel applicant-section">
       <div className="panel-head">
@@ -576,10 +590,11 @@ function Section({
           <p>{description}</p>
         </div>
         <span className="mono">
-          {interests.length} item{interests.length === 1 ? "" : "s"}
+          {itemCount} item{itemCount === 1 ? "" : "s"}
         </span>
       </div>
       {children}
+      {!!extraReviewIds.length && <div className="interest-list">{extraReviewIds.map((id, index) => <button type="button" className={`interest-row ${requestedConnectionId === id ? "selected" : ""}`} key={id} data-interest-id={id} aria-pressed={requestedConnectionId === id} onClick={() => selectReview(id)}>Review connection {index + 1}</button>)}</div>}
       <div className={`interest-workspace ${interests.length ? "" : "empty"}`}>
         {interests.length ? (
           <>
@@ -588,18 +603,27 @@ function Section({
                 <InterestRow
                   key={interest.interestId}
                   interest={interest}
-                  selected={interest.interestId === selectedInterest?.interestId}
-                  onSelect={() => setSelectedInterestId(interest.interestId)}
+                  selected={interest.interestId === (requestedConnectionId ?? selectedInterest?.interestId)}
+                  onSelect={() => {
+                    setSelectedInterestId(interest.interestId);
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("femaleReview");
+                    url.searchParams.delete("connection");
+                    url.searchParams.set(reviewIds.includes(interest.interestId) ? "femaleReview" : "connection", interest.interestId);
+                    url.hash = sectionId(title);
+                    window.history.pushState(null, "", url);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  }}
                 />
               ))}
             </div>
-            <ProfileSideCard viewerGender={viewerGender} interest={selectedInterest} onAction={onAction} busy={busy} />
+            {!reviewActive && <ProfileSideCard viewerGender={viewerGender} interest={selectedInterest} onAction={onAction} busy={busy} />}
           </>
-        ) : (
+        ) : !reviewActive && !itemCount ? (
           <div className="coming-soon compact">
             <div className="lede">Nothing to show right now.</div>
           </div>
-        )}
+        ) : null}
       </div>
     </section>
   );
@@ -608,6 +632,8 @@ function Section({
 export default function ApplicantDashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<ReviewNoticeInput[] | null>(null);
   const categories = interestCategories(data?.outbound ?? [], data?.privateDocumented ?? [], reviews ?? []);
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
@@ -638,7 +664,7 @@ export default function ApplicantDashboardPage() {
   const [expiredLogin, setExpiredLogin] = useState<string | null>(null);
   // Keep the editor mounted across navigation so Back/Forward never loses edits.
   useEffect(() => {
-    const sync = () => { setView(portalView(window.location.hash, window.location.search)); setSideOpen(false); };
+    const sync = () => { setSelectedConnectionId(new URLSearchParams(window.location.search).get("connection")); setSelectedReviewId(new URLSearchParams(window.location.search).get("femaleReview")); setView(portalView(window.location.hash, window.location.search)); setSideOpen(false); };
     sync();
     window.addEventListener("hashchange", sync);
     window.addEventListener("popstate", sync);
@@ -1436,27 +1462,34 @@ export default function ApplicantDashboardPage() {
                 title="Inbound Interests"
                 viewerGender={data.applicant.gender}
                 description="People who expressed interest in you."
-                requestedConnectionId={data.requestedConnectionId}
+                requestedConnectionId={selectedReviewId ?? selectedConnectionId}
                 interests={data.inbound}
+                reviewIds={data.applicant.gender === "male" ? (reviews ?? []).filter(row => row.role === "brother" && row.canView && row.state !== "closed").map(row => row.interestId) : []}
+                reviewActive={!archived && data.applicant.status === "approved" && data.applicant.gender === "male" && !!selectedReviewId}
                 onAction={async body => { await runAction(body); }}
                 busy={busy || archived}
               >
-                {!archived && data.applicant.status === "approved" && <FemaleReviews inline active={view === "interests"} />}
+                {!archived && data.applicant.status === "approved" && data.applicant.gender === "male" && <FemaleReviews inline active={view === "interests"} />}
               </Section>
               {data.applicant.gender === "female" && data.applicant.status === "approved" && !archived && reviews === null ? <p role="status">Loading interest categories…</p> : <>
               <Section
                 title="Outbound Interests"
                 description="Visible interests you sent."
-                requestedConnectionId={data.requestedConnectionId}
+                requestedConnectionId={selectedReviewId ?? selectedConnectionId}
                 interests={categories.outbound}
+                viewerGender={data.applicant.gender}
+                reviewIds={data.applicant.gender === "female" ? (reviews ?? []).filter(row => row.role === "sister" && row.canView && row.state !== "closed").map(row => row.interestId) : []}
+                reviewActive={!archived && data.applicant.status === "approved" && data.applicant.gender === "female" && !!selectedReviewId}
                 onAction={async body => { await runAction(body); }}
                 busy={busy || archived}
-              />
+              >
+                {!archived && data.applicant.status === "approved" && data.applicant.gender === "female" && <FemaleReviews inline active={view === "interests"} />}
+              </Section>
               {data.applicant.gender === "female" && (
                 <Section
                   title="Private Documented Interests"
                   description="Interests you documented for yourself and the admin team. These remain private until the team creates a recipient-specific review."
-                  requestedConnectionId={data.requestedConnectionId}
+                  requestedConnectionId={selectedReviewId ?? selectedConnectionId}
                   interests={categories.privateDocumented}
                   onAction={async body => { await runAction(body); }}
                   busy={busy || archived}

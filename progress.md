@@ -802,3 +802,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Request3816: classify shared sister interests as Outbound using authorized review canView joined by interestId; preserve privacy/actions/headings and refresh after decisions. Added projection and desktop/mobile tests; no backend/live-data changes.
 
 - Superseding validation request: append-only merge of newly live PR148 ec45f483, preserve outbound routing/update events, adapt its lifecycle regression to separate brother final, and explicitly test/document legacy pending-match admin-release eligibility. Synthetic localhost full-stack validation only; no historical or production actions. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-11
+- Request3861: route sister inline workflow reviews/status to Outbound, preserve brother Inbound, synchronize exact-ID selection and counts/empty states; added desktop/mobile regression coverage.
