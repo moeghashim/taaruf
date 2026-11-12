@@ -246,8 +246,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
             <div className="photo-grid">{profile.imageUrls.map((url, index) => <div key={url} className="photo-card"><Image src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 900px) 100vw, 1000px" unoptimized /></div>)}</div>
           </div>}
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
-          {row && <ReviewDecision decision={row.ownDecision} awaitingAdmin={row.state === "in_review" && !row.paused && !row.reviewExpired} />}
-          {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
+            {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
         {profile && !inline && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
           <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: formatEducation(profile.education) || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
