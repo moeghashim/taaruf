@@ -1,3 +1,4 @@
+import { FINAL_REQUEST_MODE, FINAL_REQUEST_ACTIVATION_KEY, finalRequestEnabled, currentFinalRequest } from "./finalRequest";
 import { SISTER_CONFIRMATION_ACTIVATION_KEY, SISTER_CONFIRMATION_MODE, currentSisterConfirmation } from "./sisterConfirmationActivation";
 import { BROTHER_REVIEW_ACTIVATION_KEY, BROTHER_REVIEW_MODE, COMBINED_REVIEW_MODE, reviewKindEnabled, deliveryAuthorized } from "./brotherReviewActivation";
 import { deliveryParticipants } from "./contactGate";
@@ -34,8 +35,17 @@ export const activateSisterConfirmation = internalMutation({ args: {}, handler: 
   await ctx.db.insert("settings", { key: SISTER_CONFIRMATION_ACTIVATION_KEY, value });
   return value;
 }});
+export const activateFinalRequests = internalMutation({ args: {}, handler: async ctx => {
+  if (!finalRequestEnabled() || !deliveryConfig("activation@example.invalid")) throw new Error("Dedicated final request production configuration missing");
+  const existing = await ctx.db.query("settings").withIndex("by_key", q => q.eq("key", FINAL_REQUEST_ACTIVATION_KEY)).unique();
+  if (existing) return existing.value;
+  const value = String(Date.now());
+  await ctx.db.insert("settings", { key: FINAL_REQUEST_ACTIVATION_KEY, value });
+  return value;
+}});
 function scopedKinds(): Array<Doc<"femaleWorkflowDeliveries">["kind"]> | null {
   const mode = process.env.FEMALE_WORKFLOW_EMAIL_MODE;
+  if (mode === FINAL_REQUEST_MODE) return ["brother_review", "final_request"];
   if (mode === COMBINED_REVIEW_MODE) return ["brother_review", "sister_confirmation"];
   if (mode === SISTER_CONFIRMATION_MODE) return ["sister_confirmation"];
   if (mode === BROTHER_REVIEW_MODE) return ["brother_review"];
@@ -56,7 +66,7 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
     if (!await deliveryAuthorized(ctx, row)) { await ctx.db.patch(row._id, { status: "failed", leaseUntil: undefined, error: "Delivery not authorized by activation boundary/kind; no backfill" }); continue; }
     if (row.firstAttemptAt !== undefined && now - row.firstAttemptAt >= 23 * 3600000) { await ctx.db.patch(row._id, { status: "failed", error: "Idempotency window expired; manual reconciliation required" }); continue; }
     try {
-      const { workflow, sister, brother } = await participants(ctx, row.interestId);
+      const { workflow, sister, brother } = await (row.kind === "final_request" ? currentFinalRequest(ctx, row) : participants(ctx, row.interestId));
       if (row.kind === "brother_review" && row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== brother.email)) throw new Error("stale brother recipient");
       if (row.kind === "sister_confirmation") {
         const interest = await ctx.db.get(row.interestId);
@@ -85,7 +95,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   let email: string;
   let review = false;
   try {
-    const { workflow, sister, brother } = await participants(ctx, row.interestId);
+    const { workflow, sister, brother } = await (row.kind === "final_request" ? currentFinalRequest(ctx, row) : participants(ctx, row.interestId));
       if (row.kind === "brother_review" && row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== brother.email)) throw new Error("stale brother recipient");
       if (row.kind === "sister_confirmation") {
         const interest = await ctx.db.get(row.interestId);
@@ -103,7 +113,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   if (row.firstAttemptAt !== undefined && !row.providerPayload) {
     await ctx.db.patch(row._id, { status: "failed", leaseUntil: undefined, error: "Prior attempt has no immutable payload; manual reconciliation required" }); return false;
   }
-  const subject = row.kind === "brother_review" ? "A profile is ready for your review" : row.kind === "sister_confirmation" ? "This connection is awaiting your review" : row.kind === "pending_review" ? "Your connection is being reviewed" : "Your contacts are ready in the portal";
+  const subject = row.kind === "final_request" ? "Your final approval is needed" : row.kind === "brother_review" ? "A profile is ready for your review" : row.kind === "sister_confirmation" ? "This connection is awaiting your review" : row.kind === "pending_review" ? "Your connection is being reviewed" : "Your contacts are ready in the portal";
   const portal = new URL(config.portal);
   portal.pathname = review ? "/dashboard" : "/me";
   portal.searchParams.set(review ? "femaleReview" : "connection", row.interestId);
@@ -151,7 +161,7 @@ export const authorizeSend = internalMutation({ args: { id: v.id("femaleWorkflow
   if (!row || row.resetAuditId !== undefined || row.status !== "sending" || row.attempts !== args.attempt || !row.leaseUntil || row.leaseUntil <= Date.now() || !row.providerPayload) return false;
   if (!await deliveryAuthorized(ctx, row)) return false;
   try {
-    const { workflow, sister, brother } = await participants(ctx, row.interestId);
+    const { workflow, sister, brother } = await (row.kind === "final_request" ? currentFinalRequest(ctx, row) : participants(ctx, row.interestId));
     const recipient = row.recipientId === sister._id ? sister : row.recipientId === brother._id ? brother : null;
     if (!recipient || row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== recipient.email) return false;
     if (row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) return false;
@@ -170,7 +180,7 @@ export function deliveryConfig(email: string) {
   const key = process.env.FEMALE_WORKFLOW_RESEND_API_KEY;
   const from = process.env.FEMALE_WORKFLOW_EMAIL_FROM;
   const mode = process.env.FEMALE_WORKFLOW_EMAIL_MODE;
-  const production = (mode === "production" || mode === BROTHER_REVIEW_MODE || mode === SISTER_CONFIRMATION_MODE || mode === COMBINED_REVIEW_MODE) && process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED === "true";
+  const production = (mode === FINAL_REQUEST_MODE || mode === "production" || mode === BROTHER_REVIEW_MODE || mode === SISTER_CONFIRMATION_MODE || mode === COMBINED_REVIEW_MODE) && process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED === "true";
   if ((!production && mode !== "isolated") || (!production && !allowed.includes(email.trim().toLowerCase())) || !portal || !key || !from) return null;
   try {
     const url = new URL(portal);

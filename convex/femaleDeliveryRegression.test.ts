@@ -118,6 +118,7 @@ test("failed pagination reaches row 101 beyond non-retryable failures and newer 
   const { t } = await accepted();
   await t.run(async ctx => { const review = await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_kind_and_status_and_nextAttemptAt", q => q.eq("kind", "brother_review")).first(); if (review) await ctx.db.delete(review._id); });
   const ids = await t.run(async ctx => {
+    for (const tombstone of await ctx.db.query("femaleWorkflowDeliveries").withIndex("by_kind_and_status_and_nextAttemptAt", q => q.eq("kind", "final_request")).take(10)) await ctx.db.delete(tombstone._id);
     const row = (await ctx.db.query("femaleWorkflowDeliveries").first())!;
     const { _id, _creationTime, ...copy } = row; void _creationTime;
     await ctx.db.delete(_id);

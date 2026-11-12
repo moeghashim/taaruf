@@ -1,3 +1,4 @@
+import { enqueueFinalRequests, currentFinalRequest } from "./finalRequest";
 import { assertNotArchived } from "./archiveRules";
 import { interestBioVisible } from "./bioVisibility";
 import { currentSisterConfirmation } from "./sisterConfirmationActivation";
@@ -157,7 +158,10 @@ export const respond = mutation({ args: { ...reviewArgs, decision: v.union(v.lit
     const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interest._id)).unique();
     if (flow) await ctx.db.patch(flow._id, { recipientDecision: "accepted", bioVisibleAt: flow.bioVisibleAt ?? Date.now(), flowStatus: "bio_review", updatedAt: Date.now() });
   }
-  if (args.decision === "accept") await enqueue(ctx, interest, sister._id, "sister_confirmation");
+  if (args.decision === "accept") {
+    await enqueueFinalRequests(ctx, interest._id);
+    await enqueue(ctx, interest, sister._id, "sister_confirmation");
+  }
   return { ownDecision: args.decision === "accept" ? "pending" as const : "declined" as const };
 }});
 export const brotherFinal = mutation({ args: { ...reviewArgs, approved: v.boolean() }, handler: async (ctx, args) => {
@@ -223,7 +227,8 @@ export const retryDelivery = mutation({ args: { adminSecret: v.optional(v.string
   if (!row || row.resetAuditId !== undefined || row.status !== "failed") throw new Error("Only failed delivery can retry");
   if (!await deliveryAuthorized(ctx, row)) throw new Error("Delivery unavailable: not authorized by activation boundary/kind");
   const interest = await ctx.db.get(row.interestId);
-  if (interest?.femaleWorkflow) {
+  if (row.kind === "final_request") await currentFinalRequest(ctx, row);
+  else if (interest?.femaleWorkflow) {
     const { workflow, brother, sister } = await active(ctx, row.interestId, true);
     if (row.kind === "sister_confirmation" && (!currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email))) throw new Error("Sister confirmation unavailable for retry");
     if (row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !workflow.reviewTokenHash || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) throw new Error("Review unavailable for retry");
