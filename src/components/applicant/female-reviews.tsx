@@ -257,6 +257,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4>{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
+        {row && <ReviewDecision decision={row.ownDecision} awaitingAdmin={row.state === "in_review" && !row.paused && !row.reviewExpired} />}
         {(brotherInitial || brotherFinal || sisterFinal) && <ReviewNextSteps stage={brotherInitial ? "workflow-initial" : "final"} recipientGender={access?.role === "brother" ? "male" : "female"} />}
         {actionable && access?.role === "brother" && !brotherInitial && !brotherFinal && <p role="status">This review needs to be refreshed before you can respond. Return to your portal and refresh.</p>}
         {sisterFinal && <div className="action-row">
