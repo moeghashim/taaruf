@@ -811,3 +811,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — styling recovery
 - Recovered request3884 in an isolated checkout; aligned standalone typography, placed decision immediately after Bio, expanded responsive/state/contact coverage, and preserved original PR153 ancestry.
+
+## 2026-11-12
+- Hide participant ArchiveParticipant card and restore entry across portal views; retain archived gating, consent, event withdrawal and all admin/backend behavior. Replace obsolete participant archive browser tests with synthetic visibility matrix and add source regression contracts (3984).

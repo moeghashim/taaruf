@@ -8,7 +8,6 @@ import { educationOptionsFor, formatEducation } from "@/lib/education";
 import { portalView, portalViews, type PortalView } from "@/lib/applicant-portal-view";
 import { applicantLoginHref } from "@/lib/applicant-destination";
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
-import { ArchiveParticipant } from "@/components/archive-participant";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -640,8 +639,7 @@ export default function ApplicantDashboardPage() {
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
-  const [locallyArchivedAt, setLocallyArchivedAt] = useState<number | null | undefined>(undefined);
-  const archivedAt = locallyArchivedAt === undefined ? profile?.archivedAt : locallyArchivedAt;
+  const archivedAt = profile?.archivedAt;
   const archived = archivedAt != null;
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
@@ -1333,7 +1331,7 @@ export default function ApplicantDashboardPage() {
                     {archived && <p>Archived profile details are read-only.</p>}
                     <fieldset disabled={archived} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
                     <div className="profile-grid two profile-basics">
-                    <DateOfBirthField externalHelp originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
+                    <DateOfBirthField hideHelp originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
                       <div className="field">
                         <label htmlFor="education">Education level *</label>
                         <select id="education" value={profile.education || ""}
@@ -1399,7 +1397,6 @@ export default function ApplicantDashboardPage() {
                         </select>
                       </div>
                     </div>
-                    <p id="birthday-help" className="muted">Please add your date of birth for our records and background checks. Only your age is shared with matches.</p>
 
                     <div className="photo-upload-box">
                       <div>
@@ -1527,7 +1524,6 @@ export default function ApplicantDashboardPage() {
               )}
               </>}
             </div>
-            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
           </div>
         </div>
       </div>

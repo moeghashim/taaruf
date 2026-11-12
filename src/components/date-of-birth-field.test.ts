@@ -36,3 +36,20 @@ test("owner field allows cleared legacy blank and unchanged age 100 but rejects 
     expect(html).toContain('aria-invalid="' + invalid + '"');
   }
 });
+
+test("My Profile hides helper but retains date control and accessible validation", () => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-11T02:00:00Z"));
+  for (const value of ["1990-01-02", "2010-01-01"]) {
+    const html = renderToStaticMarkup(createElement(DateOfBirthField, { hideHelp: true, value, originalValue: "1990-01-02", onChange: vi.fn() }));
+    expect(html).not.toContain("Please add your date of birth");
+    expect(html).not.toContain("birthday-help");
+    expect(html).toContain('for="dateOfBirth"');
+    expect(html).toContain('type="date"');
+    expect(html).toContain('autoComplete="bday"');
+    expect(html).toContain('value="' + value + '"');
+    expect(html).toContain('aria-describedby="birthday-error"');
+    expect(html).toContain('id="birthday-error"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('aria-invalid="' + (value === "2010-01-01") + '"');
+  }
+});
