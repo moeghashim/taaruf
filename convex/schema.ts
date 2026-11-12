@@ -517,6 +517,9 @@ export default defineSchema({
     photoDecision: photoDecision,
     photoRequestedByRegistrationId: v.optional(v.id("registrations")),
     bioVisibleAt: v.optional(v.number()),
+    // Explicit source action, not pair-wide propagation (legacy flags are ambiguous).
+    requesterExplicitFinalAt: v.optional(v.number()),
+    recipientExplicitFinalAt: v.optional(v.number()),
     requesterFinalApprovalAt: v.optional(v.number()),
     recipientFinalApprovalAt: v.optional(v.number()),
     photoRequestedAt: v.optional(v.number()),

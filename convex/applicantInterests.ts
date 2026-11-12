@@ -232,7 +232,7 @@ async function serializeInterest(
   const paused = released && interest.matchId ? (await ctx.db.get(interest.matchId))?.status === "paused" : false;
   const closed = ["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(internalStatus);
   const canRespond = viewer.status === "approved" && !closed && !paused && !interest.femaleWorkflow && direction === "inbound" && interest.visibility !== "internal_only" && ["awaiting_inbound_response", "kept_open"].includes(internalStatus);
-  const canFinalApprove = viewer.status === "approved" && !closed && !interest.femaleWorkflow && !paused && Boolean(flow?.bioVisibleAt) && ownFinalApproval === "pending" && !["contact_shared", "declined", "closed"].includes(internalStatus);
+  const canFinalApprove = viewer.status === "approved" && !closed && !interest.femaleWorkflow && !paused && await interestBioVisible(ctx, interest) && ownFinalApproval === "pending" && !["contact_shared", "declined", "closed"].includes(internalStatus);
   return {
     interestId: interest._id,
     ...(interest.femaleWorkflow ? { femaleWorkflow: true } : {}),
@@ -640,7 +640,7 @@ export const giveFinalApproval = mutation({
     if (["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(flow.flowStatus)) {
       throw new Error("Interest is no longer active");
     }
-    if (!flow.bioVisibleAt) {
+    if (!(await interestBioVisible(ctx, interest))) {
       throw new Error("Bio review is not open for this interest");
     }
 

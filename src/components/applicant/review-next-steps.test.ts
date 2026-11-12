@@ -15,3 +15,7 @@ for(const gender of ["male","female",undefined])test("final unchanged "+gender,(
  "Contact sharing requires both applicants’ agreement and final admin approval.",
  "Decline closes this connection without sharing contact details."]));
 test("unknown initial recipient retains neutral copy",()=>expect(paragraphs("initial")[0]).toBe("Accept to continue to the bio review stage. You can then review the bio before giving your final approval. Accepting now does not share contact details."));
+
+test("workflow initial neutral copy distinguishes final approval",()=>{
+ expect(paragraphs("workflow-initial")[0]).toBe("Accept to unlock the bio, then review it before giving your separate final approval. Initial acceptance is not final approval and does not share contact details.");
+});

@@ -43,3 +43,23 @@ test("origin uses incoming host while preserving protocol and host checks", asyn
  for (const origin of ["https://127.0.0.1:3491", "ftp://127.0.0.1:3491", "http://evil.invalid", "null"]) expect((await POST(make(origin))).status).toBe(403);
  expect(mutation).toHaveBeenCalledOnce();
 });
+
+for (const approved of [true, false]) test("brother final explicit boolean " + approved, async () => {
+ const reviewToken = "b".repeat(64);
+ expect((await POST(post({ action: "brother_final", interestId: "id", approved, reviewToken }))).status).toBe(200);
+ expect(mutation.mock.calls[0][1]).toEqual({sessionHash:"cookie-hash",interestId:"id",approved,reviewTokenHash:createHash("sha256").update(reviewToken).digest("hex")});
+});
+for (const extra of [{}, {approved:"true"}, {approved:1}, {approved:null}, {approved:true,sessionHash:"forged"}, {approved:true,decision:"accept"}, {approved:true,reviewToken:"bad"}, {approved:true,reviewToken:null}]) test("reject malformed brother final " + JSON.stringify(extra), async () => {
+ expect((await POST(post({action:"brother_final",interestId:"id",...extra}))).status).toBe(400); expect(mutation).not.toHaveBeenCalled();
+});
+test("brother final requires cookie and same origin", async () => {
+ const body={action:"brother_final",interestId:"id",approved:true};
+ expect((await POST(post(body,"https://evil.invalid"))).status).toBe(403);
+ session.mockResolvedValue(null); expect((await POST(post(body))).status).toBe(401); expect(mutation).not.toHaveBeenCalled();
+});
+test("stale final decisions return generic private conflict",async()=>{
+ mutation.mockRejectedValue(new Error("counterparty declined secret"));
+ const response=await POST(post({action:"brother_final",interestId:"id",approved:false}));
+ expect(response.status).toBe(409); expect(JSON.stringify(await response.json())).not.toContain("counterparty");
+ expect(response.headers.get("cache-control")).toContain("no-store");
+});

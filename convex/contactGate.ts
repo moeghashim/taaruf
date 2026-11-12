@@ -120,20 +120,26 @@ export async function assertParticipantsAvailable(ctx: ReadCtx, maleId: Id<"regi
   return { male, female };
 }
 
-export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
-  assertNotArchived(await ctx.db.get(interest.fromRegistrationId));
-  assertNotArchived(await ctx.db.get(interest.toRegistrationId));
-  if (interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
-  if (interest.fromRegistrationId === interest.toRegistrationId) throw new Error("Linked pair mismatch");
-  const rows = [];
+/** Include inactive rows as negative provenance only, never as reusable consent. */
+async function pairHistory(ctx: ReadCtx, interest: Doc<"interests">) {
+  const rows: Doc<"interests">[] = [];
   for (const [from, to] of [[interest.fromRegistrationId, interest.toRegistrationId], [interest.toRegistrationId, interest.fromRegistrationId]]) {
     const direction = await ctx.db.query("interests").withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", q => q.eq("fromRegistrationId", from).eq("toRegistrationId", to).eq("eventId", interest.eventId)).take(1001);
     if (direction.length > 1000) throw new Error("Pair history requires manual review");
     rows.push(...direction);
   }
+  return rows;
+}
+
+export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
+  assertNotArchived(await ctx.db.get(interest.fromRegistrationId));
+  assertNotArchived(await ctx.db.get(interest.toRegistrationId));
+  if (interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
+  if (interest.fromRegistrationId === interest.toRegistrationId) throw new Error("Linked pair mismatch");
+  const rows = await pairHistory(ctx, interest);
   const result = [];
   for (const row of rows) {
-    if (row.testReset || ["closed", "declined", "withdrawn"].includes(row.status)) continue;
+    if (row.testReset || ["closed", "declined", "withdrawn"].includes(row.status) || (row.femaleWorkflow && ["declined", "revoked"].includes(row.femaleWorkflow.state))) continue;
     const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
     if (!flow) throw new Error("Linked flow missing; explicit consent required");
     if (flow.fromRegistrationId !== row.fromRegistrationId || flow.toRegistrationId !== row.toRegistrationId) throw new Error("Linked flow identity mismatch");
@@ -151,37 +157,67 @@ export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
   return result;
 }
 
+/** Provenance belongs only to the source explicit action, never propagated flags. */
 export async function recordPairApproval(ctx: MutationCtx, interest: Doc<"interests">, actorId: Id<"registrations">, approved: boolean) {
   if (![interest.fromRegistrationId, interest.toRegistrationId].includes(actorId)) throw new Error("Unauthorized");
   const rows = await pairFlows(ctx, interest);
+  if (interest.matchId && rows.some(r => r.interest.femaleWorkflow)) {
+    if (approved) return interest.matchId;
+    throw new Error("Close or pause the official connection instead");
+  }
+  const source = rows.find(r => r.interest._id === interest._id);
+  if (!source) throw new Error("Interest unavailable");
   const now = Date.now();
-  for (const { interest: row, flow } of rows) {
-    const requester = flow.fromRegistrationId === actorId;
-    const previous = requester ? flow.requesterFinalApproval : flow.recipientFinalApproval;
-    const decision = approved ? "approved" as const : "declined" as const;
-    if (previous !== "pending" && previous !== decision) throw new Error("Final approval has already been recorded for this interest");
-    if (previous === decision) continue;
-    await ctx.db.patch(flow._id, {
-      ...(requester ? { requesterFinalApproval: decision, requesterFinalApprovalAt: now } : { recipientFinalApproval: decision, recipientFinalApprovalAt: now }),
-      ...(!approved ? { flowStatus: "declined" as const } : flow.bioVisibleAt ? { flowStatus: "awaiting_final_approvals" as const } : {}), updatedAt: now,
-    });
-    await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: row._id, actor: "applicant", actorRegistrationId: actorId, eventType: approved ? "final_approval_given" : "final_approval_declined", createdAt: now });
-    if (!approved) await ctx.db.patch(row._id, { status: "declined", adminStatus: "declined", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: "declined" as const } } : {}), updatedAt: now });
-    else if (row.femaleWorkflow?.reviewTokenHash && row.femaleWorkflow.state !== "private_documented" && actorId === row.toRegistrationId && !row.matchId) {
-      await ctx.db.patch(row._id, { femaleWorkflow: { ...row.femaleWorkflow, state: "awaiting_sister_confirmation", brotherAcceptedAt: now }, updatedAt: now });
+  const requester = source.flow.fromRegistrationId === actorId;
+  const previous = requester ? source.flow.requesterFinalApproval : source.flow.recipientFinalApproval;
+  const evidence = requester ? source.flow.requesterExplicitFinalAt : source.flow.recipientExplicitFinalAt;
+  if (previous === "declined" || (evidence !== undefined && !approved)) throw new Error("Final approval has already been recorded for this interest");
+  if (approved) {
+    if (evidence === undefined) {
+      await ctx.db.patch(source.flow._id, {
+        ...(requester ? { requesterFinalApproval: "approved" as const, requesterFinalApprovalAt: now, requesterExplicitFinalAt: now } : { recipientFinalApproval: "approved" as const, recipientFinalApprovalAt: now, recipientExplicitFinalAt: now }), updatedAt: now,
+      });
+      await ctx.db.insert("interestFlowEvents", { interestFlowId: source.flow._id, interestId: interest._id, actor: "applicant", actorRegistrationId: actorId, eventType: "explicit_final_approval_given", createdAt: now });
+    }
+    return await joinApprovedPair(ctx, interest);
+  }
+  for (const {interest: row, flow} of rows) {
+    await ctx.db.patch(flow._id, { ...(flow.fromRegistrationId === actorId ? { requesterFinalApproval: "declined" as const, requesterFinalApprovalAt: now } : { recipientFinalApproval: "declined" as const, recipientFinalApprovalAt: now }), flowStatus: "declined", updatedAt: now });
+    await ctx.db.patch(row._id, { status: "declined", adminStatus: "declined", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: "declined" as const } } : {}), updatedAt: now });
+    await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: row._id, actor: "applicant", actorRegistrationId: actorId, eventType: "final_approval_declined", createdAt: now });
+  }
+  return null;
+}
+
+/** Old final events were propagated. Acceptance-time male events are ambiguous
+ * even on reciprocal rows; retain them as history, not consent for a new join. */
+async function pairDecisions(ctx: ReadCtx, rows: Awaited<ReturnType<typeof pairFlows>>) {
+  const decisions = new Map<Id<"registrations">, number>();
+  const history = rows.length ? await pairHistory(ctx, rows[0].interest) : [];
+  const hasFemaleWorkflow = history.some(row => row.femaleWorkflow);
+  // A contradictory active final is not resolved by row order or propagation.
+  if (rows.some(({flow}) => flow.requesterFinalApproval === "declined" || flow.recipientFinalApproval === "declined")) return decisions;
+  for (const {interest, flow} of rows) {
+    for (const [id, approval, explicit, at] of [
+      [flow.fromRegistrationId, flow.requesterFinalApproval, flow.requesterExplicitFinalAt, flow.requesterFinalApprovalAt],
+      [flow.toRegistrationId, flow.recipientFinalApproval, flow.recipientExplicitFinalAt, flow.recipientFinalApprovalAt],
+    ] as const) {
+      if (approval !== "approved") continue;
+      if (explicit !== undefined) { decisions.set(id, explicit); continue; }
+      if (!hasFemaleWorkflow) { decisions.set(id, at ?? flow.updatedAt); continue; }
+      const ambiguous = history.some(row => row.femaleWorkflow && row.toRegistrationId === id && (row._id === interest._id || row.femaleWorkflow.brotherAcceptedAt === undefined || row.femaleWorkflow.brotherAcceptedAt === at));
+      if (ambiguous || at === undefined) continue;
+      const events = await ctx.db.query("interestFlowEvents").withIndex("by_interestId", q => q.eq("interestId", interest._id)).take(1001);
+      if (events.length > 1000) throw new Error("Consent history requires manual review");
+      if (events.some(e => e.actor === "applicant" && e.actorRegistrationId === id && e.eventType === "final_approval_given" && e.createdAt === at)) decisions.set(id, at);
     }
   }
-  if (!approved) return null;
-  return await joinApprovedPair(ctx, interest);
+  return decisions;
 }
 
 export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interests">) {
   const rows = await pairFlows(ctx, interest);
-  const decisions = new Map<Id<"registrations">, number>();
-  for (const { flow } of rows) {
-    if (flow.requesterFinalApproval === "approved") decisions.set(flow.fromRegistrationId, flow.requesterFinalApprovalAt ?? flow.updatedAt);
-    if (flow.recipientFinalApproval === "approved") decisions.set(flow.toRegistrationId, flow.recipientFinalApprovalAt ?? flow.updatedAt);
-  }
+  const decisions = await pairDecisions(ctx, rows);
   if (!decisions.has(interest.fromRegistrationId) || !decisions.has(interest.toRegistrationId)) return null;
   let matchId = rows.find(r => r.interest.matchId)?.interest.matchId;
   const from = await ctx.db.get(interest.fromRegistrationId);
@@ -196,7 +232,7 @@ export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interest
   const releasedAt = match.adminReleasedAt ?? rows.find(r => r.flow.contactSharedAt !== undefined)?.flow.contactSharedAt;
   const released = match.contactGate === "contacts_released" || (!match.contactGate && releasedAt !== undefined);
   for (const { interest: row, flow } of rows) {
-    await ctx.db.patch(row._id, { matchId, status: "converted_to_match", adminStatus: "matched", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: row.femaleWorkflow.state === "private_documented" || !row.femaleWorkflow.reviewTokenHash ? "private_documented" as const : released ? "contacts_released" as const : "pending_admin_approval" as const, brotherAcceptedAt: decisions.get(maleId), sisterConfirmedAt: decisions.get(femaleId), ...(released ? { adminReleasedAt: releasedAt } : {}) } } : {}), updatedAt: now });
+    await ctx.db.patch(row._id, { matchId, status: "converted_to_match", adminStatus: "matched", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: row.femaleWorkflow.state === "private_documented" || !row.femaleWorkflow.reviewTokenHash ? "private_documented" as const : released ? "contacts_released" as const : "pending_admin_approval" as const, brotherAcceptedAt: row.femaleWorkflow.brotherAcceptedAt, sisterConfirmedAt: decisions.get(femaleId), ...(released ? { adminReleasedAt: releasedAt } : {}) } } : {}), updatedAt: now });
     await ctx.db.patch(flow._id, { requesterFinalApproval: "approved", recipientFinalApproval: "approved", requesterFinalApprovalAt: decisions.get(row.fromRegistrationId), recipientFinalApprovalAt: decisions.get(row.toRegistrationId), flowStatus: released ? "contact_shared" : "awaiting_final_approvals", bioVisibleAt: flow.bioVisibleAt ?? now, ...(released ? { contactSharedAt: flow.contactSharedAt ?? releasedAt } : {}), updatedAt: now });
   }
   if (!released) await queuePendingReview(ctx, matchId);

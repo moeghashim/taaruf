@@ -55,7 +55,8 @@ test("both kinds coexist, duplicate drains safe, GET sends nothing and only conf
  await Promise.all([f.t.action(internal.femaleWorkflowDelivery.drain,{}),f.t.action(internal.femaleWorkflowDelivery.drain,{})]);
  expect(provider).toHaveBeenCalledTimes(2);expect(provider.mock.calls.map(c=>JSON.parse(c[1].body).to[0])).toEqual(["brother@example.com","sister@example.com"]);
  await f.t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"sister",interestId:f.interestId});expect(provider).toHaveBeenCalledTimes(2);expect(await f.t.run(ctx=>ctx.db.query("matches").take(10))).toEqual([]);
- await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId:f.interestId,confirmed:true});expect(await f.t.run(ctx=>ctx.db.query("matches").take(10))).toHaveLength(1);
+ await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId:f.interestId,confirmed:true});expect(await f.t.run(ctx=>ctx.db.query("matches").take(10))).toHaveLength(0);
+ await f.t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"brother",interestId:f.interestId,approved:true});expect(await f.t.run(ctx=>ctx.db.query("matches").take(10))).toHaveLength(1);
  await f.t.action(internal.femaleWorkflowDelivery.drain,{});expect(provider).toHaveBeenCalledTimes(2);
 });
 

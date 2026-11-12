@@ -44,6 +44,7 @@ async function fixture(source: Doc<"interests">["source"], female: boolean, olde
     await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret: secret, interestId: id, reviewTokenHash: "a".repeat(64) });
     await t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "brother", interestId: id });
     await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: id, decision: "accept" });
+    await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: id, approved: true });
     await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId: id, confirmed: true });
   } else if (complete) {
     const discovered = await t.query(api.applicantInterests.getDashboard, { sessionHash: "sister", connectionId: id });
@@ -185,7 +186,7 @@ for (const confirmed of [false, true]) test(`selected older female review suppor
   mocks.session.mockResolvedValue("sister");
   const firstPage = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "sister", paginationOpts: { cursor: null, numItems: 50 } });
   expect(firstPage.page).toHaveLength(50); expect(firstPage.isDone).toBe(false);
-  for (const row of firstPage.page) expect(row).toEqual({ interestId: expect.any(String), role: "sister", state: "closed", ownDecision: "pending", ownAction: null, paused: false, reviewExpired: false, canPause: false, canView: false });
+  for (const row of firstPage.page) expect(row).toEqual({ interestId: expect.any(String), role: "sister", state: "closed", ownDecision: "pending", ownAction: null, ownActionStage: null, paused: false, reviewExpired: false, canPause: false, canView: false });
   expect(firstPage.page.some(row => row.interestId === id)).toBe(false);
   const get = () => reviewGET(new NextRequest(`https://synthetic.invalid/api/applicant/female-review?interestId=${id}`));
   expect((await (await get()).json()).state).toBe("in_review");
@@ -200,6 +201,8 @@ for (const confirmed of [false, true]) test(`selected older female review suppor
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({error: "Pause unavailable until contact release"});
   }
+  expect((await t.run(ctx => ctx.db.get(id)))?.matchId).toBeUndefined();
+  await t.mutation(api.femaleInterestWorkflow.brotherFinal, {sessionHash: "brother", interestId: id, approved: true});
   await t.mutation(api.femaleInterestWorkflow.releaseContacts, {adminSecret: secret, interestId: id});
   for (const paused of [true, false]) {
     const action = paused ? "pause_connection" : "resume_connection";
@@ -339,6 +342,8 @@ test("real sister projection moves at actual share before target acceptance", as
  await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId:id,decision:"accept"});
  expect((await categories()).outbound.map(row=>row.interestId)).toEqual([id]);
  await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId:id,confirmed:true});
+ expect((await t.run(ctx=>ctx.db.get(id)))!.matchId).toBeUndefined();
+ await t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"brother",interestId:id,approved:true});
  const matchId=(await t.run(ctx=>ctx.db.get(id)))!.matchId!;
  await t.mutation(api.matches.updateStatus,{adminSecret:secret,id:matchId,status:"contact_shared"});
  expect((await categories()).outbound[0].counterparty?.email).toBe("brother@example.invalid");

@@ -797,5 +797,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 - Omar3782/3786: exact initial-review What happens next paragraphs for male/female recipients with correct counterpart pronouns; final guidance and workflow unchanged. Added exact-copy unit/browser regressions. <!-- project: github.com/moeghashim/clawscrewskill -->
 
+- Omar3825: separate brother initial bio acceptance from authenticated final approval, retain sister decision/admin contact gate, add source-only consent provenance and historical ambiguity defenses, strengthen exact-interest bio/contact projections, and cover backend/API/browser transitions. Preview-only branch; no migration, deployment, real-user mutation, email or human signoff. <!-- project: github.com/moeghashim/clawscrewskill -->
 ## 2026-11-11
 - Request3816: classify shared sister interests as Outbound using authorized review canView joined by interestId; preserve privacy/actions/headings and refresh after decisions. Added projection and desktop/mobile tests; no backend/live-data changes.
+
+- Superseding validation request: append-only merge of newly live PR148 ec45f483, preserve outbound routing/update events, adapt its lifecycle regression to separate brother final, and explicitly test/document legacy pending-match admin-release eligibility. Synthetic localhost full-stack validation only; no historical or production actions. <!-- project: github.com/moeghashim/clawscrewskill -->

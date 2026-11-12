@@ -3,7 +3,7 @@ export type InterestNoticeInput = {
   paused?: boolean; canRespond: boolean; canFinalApprove: boolean; ownFinalApproval: string;
   contactSharedAt: number | null; counterparty: { email?: string | null; phone?: string | null } | null;
 };
-export type ReviewNoticeInput = { interestId: string; state: string; role: string; ownDecision?: string; ownAction?: string | null; paused?: boolean; reviewExpired?: boolean; canView?: boolean };
+export type ReviewNoticeInput = { interestId: string; state: string; role: string; ownDecision?: string; ownAction?: string | null; ownActionStage?: "initial" | "final" | null; paused?: boolean; reviewExpired?: boolean; canView?: boolean };
 export type ConnectionNotice = { id: string; heading: string; copy: string; href?: string; action?: string; priority: number };
 const closedStates = ["closed", "declined", "withdrawn", "revoked", "expired"];
 export const approvedCopy = "Contact details will be shared after the admin reviews and approves the match.";
@@ -32,9 +32,9 @@ export function receivedInterestUpdates(interests: InterestNoticeInput[], review
     const ready = !closed && !item.paused && !item.reviewExpired && readyIds.includes(item.interestId);
     result.set(item.interestId, {
       id: item.interestId, priority: pending ? 0 : ready ? 1 : 2,
-      heading: closed ? "Connection closed" : item.reviewExpired ? "Review invitation expired" : item.paused ? "Connection paused" : ready ? "Contacts are ready" : pending ? item.role === "brother" ? "You Have Received An Interest" : "Your review is needed" : item.role === "sister" ? item.ownDecision === "approved" ? "Interest Update" : "You Have Sent An Interest" : "Interest update",
+      heading: closed ? "Connection closed" : item.reviewExpired ? "Review invitation expired" : item.paused ? "Connection paused" : ready ? "Contacts are ready" : pending ? item.role === "brother" && item.ownActionStage !== "final" ? "You Have Received An Interest" : "Your review is needed" : item.role === "sister" ? item.ownDecision === "approved" ? "Interest Update" : "You Have Sent An Interest" : "Interest update",
       copy: closed ? closedCopy : item.reviewExpired ? "Please contact the matchmaking team to request a new review invitation." : item.paused ? "This connection is paused." : ready ? "The team has approved sharing contact details. Open your review to see the contact details available to you." : pending ? "This connection is awaiting your review." : item.ownDecision === "approved" ? approvedCopy : "This connection is being reviewed. Contact details remain private until the team approves sharing them.",
-      ...(!closed && !item.reviewExpired && (pending || item.canView) ? { href: "/me?femaleReview=" + encodeURIComponent(item.interestId) + "#inbound-interests", action: ready ? "View contact details" : pending ? item.role === "sister" ? "Review profile and respond" : "Review profile" : "View review" } : {}),
+      ...(!closed && !item.reviewExpired && (pending || item.canView) ? { href: "/me?femaleReview=" + encodeURIComponent(item.interestId) + "#inbound-interests", action: ready ? "View contact details" : pending ? item.role === "sister" || item.ownActionStage === "final" ? "Review profile and respond" : "Review profile" : "View review" } : {}),
     });
   }
   return [...result.values()].sort((a, b) => a.priority - b.priority);

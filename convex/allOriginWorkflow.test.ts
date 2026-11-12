@@ -60,6 +60,7 @@ for (const source of sources) for (const femaleOrigin of [false, true]) test(`${
     await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId, decision: "accept" });
     expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
     await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId, confirmed: true });
+  await w.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "session-0", interestId: interestId, approved: true });
   } else {
     const first = await w.approve(interestId, 0);
     expect(JSON.stringify(first)).not.toContain("Sister Private");
@@ -113,11 +114,13 @@ for (const source of sources) for (const femaleFirst of [false, true]) for (cons
     expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
     await w.approve(male, 1);
   }
+  await w.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "session-0", interestId: female, approved: true });
   const matches = await w.t.run(ctx => ctx.db.query("matches").collect());
   expect(matches).toHaveLength(1);
   for (const id of ids) expect((await w.t.run(ctx => ctx.db.get(id)))?.matchId).toBe(matches[0]._id);
   await w.approve(male, 0);
   await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId: female, confirmed: true });
+  await w.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "session-0", interestId: female, approved: true });
   await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matches[0]._id, status: "contact_shared" });
   await w.approve(male, 1);
   await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId: female, decision: "accept" });
@@ -176,6 +179,7 @@ for (const femaleOrigin of [false, true]) test(`new frozen notification routes t
   if (femaleOrigin) {
     await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId: id, decision: "accept", reviewTokenHash: reviewHash });
     await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId: id, confirmed: true });
+  await w.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "session-0", interestId: id, approved: true });
   } else { await w.approve(id, 0); await w.approve(id, 1); }
   vi.stubEnv("FEMALE_WORKFLOW_EMAIL_MODE", "isolated"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS", "person0@example.invalid,person1@example.invalid"); vi.stubEnv("FEMALE_WORKFLOW_PORTAL_URL", "https://isolated.example.invalid"); vi.stubEnv("FEMALE_WORKFLOW_EMAIL_FROM", "test@example.invalid"); vi.stubEnv("FEMALE_WORKFLOW_RESEND_API_KEY", "synthetic-only");
   const send = vi.fn<typeof fetch>().mockImplementation(async () => new Response("{}", { status: 200 })); vi.stubGlobal("fetch", send);
@@ -205,11 +209,19 @@ for (const afterRelease of [false, true]) test(`female completion joins unopened
   await w.open(female, true);
   await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId: female, decision: "accept" });
   const result = await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId: female, confirmed: true });
+  await w.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "session-0", interestId: female, approved: true });
   expect(result).toEqual({ ownDecision: "approved" });
   const matchId = (await w.t.run(ctx => ctx.db.get(female)))!.matchId!;
   if (afterRelease) await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "contact_shared" });
   await w.open(male);
-  await w.approve(male, 0); await w.approve(male, 1);
+  if (afterRelease) {
+    await w.approve(male, 0); await w.approve(male, 1);
+  } else {
+    // Linking and a synthetic bio timestamp are not this sibling's initial acceptance.
+    // respondToInbound on an already linked row is deliberately a no-op.
+    await expect(w.approve(male, 0)).rejects.toThrow("Bio review is not open");
+    await expect(w.approve(male, 1)).rejects.toThrow("Bio review is not open");
+  }
   expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
   expect((await w.t.run(ctx => ctx.db.get(male)))?.matchId).toBe(matchId);
   expect((await w.t.run(ctx => ctx.db.query("femaleWorkflowDeliveries").collect())).filter(d => d.kind === "contacts_ready")).toHaveLength(afterRelease ? 2 : 0);
@@ -220,6 +232,7 @@ test("female and generic approval paths share participant reservations", async (
   const female = await w.submit("whatsapp", 1, 0); await w.open(female, true);
   await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId: female, decision: "accept" });
   const generic = await w.submit("email", 2, 1); await w.open(generic); await w.approve(generic, 2); await w.approve(generic, 1);
+  await w.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "session-0", interestId: female, approved: true });
   await expect(w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId: female, confirmed: true })).rejects.toThrow("active match");
   expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
 });
@@ -325,11 +338,13 @@ for (const female of [false, true]) test("real counterpart join does not change 
     for (const sessionHash of ["session-0", "session-1"]) for (const paused of [false, true])
       await expect(w.t.mutation(api.matches.setPausedForApplicant, { sessionHash, interestId, paused })).rejects.toThrow("Pause unavailable until contact release");
   };
+  if (female) await w.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "session-0", interestId, approved: true });
   const before = await payload();
   const receipt = await retry();
   expect(receipt).not.toHaveProperty("matchId");
   await probe();
-  if (female) await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId, confirmed: true });
+  if (female) { await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId, confirmed: true });
+  await w.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "session-0", interestId: interestId, approved: true }); }
   else await w.t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "session-1", interestId, approved: true });
   const matchId = (await w.t.run(ctx => ctx.db.get(interestId)))!.matchId!;
   expect(matchId).toBeTruthy();

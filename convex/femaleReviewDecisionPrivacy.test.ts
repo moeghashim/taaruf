@@ -35,10 +35,11 @@ test("both applicant roles receive only neutral status and their own decision/ac
  expect((await list("brother")).page[0]).toMatchObject({state:"in_review",ownAction:"review",ownDecision:"pending"});
  expect((await list("sister")).page[0]).toMatchObject({state:"in_review",ownAction:null,ownDecision:"pending"});
  const accepted=await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"accept"});
- expect(accepted).toEqual({ownDecision:"approved"});
+ expect(accepted).toEqual({ownDecision:"pending"});
  for(const role of ["brother","sister"]){privatePayload(await list(role));privatePayload(await t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:role,interestId}));}
  expect((await list("sister")).page[0]).toMatchObject({ownAction:"review",ownDecision:"pending"});
- expect((await list("brother")).page[0]).toMatchObject({ownAction:null,ownDecision:"approved"});
+ expect((await list("brother")).page[0]).toMatchObject({ownAction:"review",ownActionStage:"final",ownDecision:"pending"});
+ await t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"brother",interestId,approved:true});
  expect(await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId,confirmed:true})).toEqual({ownDecision:"approved"});
  for(const role of ["brother","sister"]){ const detail=await t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:role,interestId});privatePayload(detail);expect(detail).toMatchObject({state:"in_review",ownDecision:"approved",ownAction:null,profile:{email:null,phone:null}}); }
  expect((await t.run(ctx=>ctx.db.get(interestId)))?.femaleWorkflow?.state).toBe("pending_admin_approval");
@@ -49,7 +50,7 @@ for(const decliner of ["brother","sister"])test("neutral closure preserves only 
  const {t,interestId}=await shared();
  if(decliner==="sister") {await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"accept"});await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId,confirmed:false});}
  else await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"decline"});
- for(const role of ["brother","sister"]){const rows=await t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash:role});expect(rows[0]).toMatchObject({state:"closed",ownAction:null,canView:false,ownDecision:role===decliner?"declined":role==="brother"?"approved":"pending"});privatePayload(rows);await expect(t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:role,interestId})).rejects.toThrow("unavailable");}
+ for(const role of ["brother","sister"]){const rows=await t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash:role});expect(rows[0]).toMatchObject({state:"closed",ownAction:null,canView:false,ownDecision:role===decliner?"declined":"pending"});privatePayload(rows);await expect(t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:role,interestId})).rejects.toThrow("unavailable");}
 });
 test("neutral email copy preserves delivery gates and frozen retry payloads",async()=>{
  const {t,interestId}=await shared();
@@ -71,6 +72,7 @@ test("expiry, reset, pause and authorization retain their gates",async()=>{
  await t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret,interestId,reviewTokenHash:hash});
  await t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"brother",interestId,decision:"accept"});
  await t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"sister",interestId,confirmed:true});
+  await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: interestId, approved: true });
  await t.run(async ctx=>{const row=(await ctx.db.get(interestId))!;await ctx.db.patch(row.matchId!,{status:"paused"});});
  expect(await t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"sister",interestId})).toMatchObject({paused:false,ownAction:null,profile:{email:null,phone:null}});
  await expect(t.mutation(api.femaleInterestWorkflow.releaseContacts,{adminSecret,interestId})).rejects.toThrow("unavailable");

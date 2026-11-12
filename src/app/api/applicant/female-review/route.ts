@@ -43,6 +43,9 @@ export async function POST(request: NextRequest) {
     if (body.action === "respond") {
       if (Object.keys(body).some(key => !["action", "interestId", "decision", "reviewToken"].includes(key)) || !["accept", "decline"].includes(body.decision) || (body.reviewToken !== undefined && !validToken(body.reviewToken))) return privateJson({ error: "Choose accept or decline." }, 400);
       await convex.mutation(api.femaleInterestWorkflow.respond, { sessionHash, interestId: body.interestId as Id<"interests">, decision: body.decision, ...(body.reviewToken ? { reviewTokenHash: createHash("sha256").update(body.reviewToken).digest("hex") } : {}) });
+    } else if (body.action === "brother_final") {
+      if (Object.keys(body).some(key => !["action", "interestId", "approved", "reviewToken"].includes(key)) || typeof body.approved !== "boolean" || (body.reviewToken !== undefined && !validToken(body.reviewToken))) return privateJson({ error: "An explicit approval or decline is required." }, 400);
+      await convex.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash, interestId: body.interestId as Id<"interests">, approved: body.approved, ...(body.reviewToken ? { reviewTokenHash: createHash("sha256").update(body.reviewToken).digest("hex") } : {}) });
     } else if (body.action === "confirm") {
       if (Object.keys(body).some(key => !["action", "interestId", "confirmed"].includes(key)) || typeof body.confirmed !== "boolean") return privateJson({ error: "An explicit confirmation is required." }, 400);
       await convex.mutation(api.femaleInterestWorkflow.confirm, { sessionHash, interestId: body.interestId as Id<"interests">, confirmed: body.confirmed });

@@ -13,7 +13,7 @@ export function ReviewNextSteps({ stage, recipientGender }: { stage: Stage; reci
     <p>{stage === "initial"
       ? "Accept to continue to the bio review stage. You can then review the bio before giving your final approval. Accepting now does not share contact details."
       : stage === "workflow-initial"
-        ? "Accept to record your approval and continue the connection review. The bio becomes available after this initial acceptance. Accepting does not share contact details."
+        ? "Accept to unlock the bio, then review it before giving your separate final approval. Initial acceptance is not final approval and does not share contact details."
         : "Confirm your interest after reviewing the profile and bio. Your approval does not automatically share contact details."}</p>
     <p>Contact sharing requires both applicants’ agreement and final admin approval.</p>
     <p>Decline closes this connection without sharing contact details.</p>

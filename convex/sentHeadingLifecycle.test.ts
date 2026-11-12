@@ -50,6 +50,7 @@ for(const female of [false,true]) {
   if(female) await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:sender,interestId:f.interestId,confirmed:true});
   else await f.t.mutation(api.applicantInterests.giveFinalApproval,{sessionHash:sender,interestId:f.interestId,approved:true});
   expect((await f.notices(sender)).notices[0]).toMatchObject({heading:"Interest Update",copy:"Contact details will be shared after the admin reviews and approves the match."});
+  if(female) await f.t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:target,interestId:f.interestId,approved:true});
   if(!female) await f.t.mutation(api.applicantInterests.giveFinalApproval,{sessionHash:target,interestId:f.interestId,approved:true});
   expect((await f.notices(sender)).notices[0].heading).toBe("Interest Update");
   if(female) await f.t.mutation(api.femaleInterestWorkflow.releaseContacts,{adminSecret,interestId:f.interestId});
