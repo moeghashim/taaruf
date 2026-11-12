@@ -32,7 +32,7 @@ for (const state of ["approved","pending","waitlisted","rejected","withdrawn"] a
  expect(JSON.stringify(await t.query(api.events.getApplicantEvents,{sessionHash:"synthetic"}))).toContain("Secret venue");
  await t.run(ctx=>ctx.db.patch(registrationId,{status:"rejected"}));
  const result=await t.query(api.events.getApplicantEvents,{sessionHash:"synthetic"});
- expect(result).toEqual({logisticsRestricted:true,upcoming:[],canSubmitInterest:false,history:[{_id:eventRegistrationId,registrationStatus:state,confirmationStatus:"confirmed",attendanceStatus:"attended",event:null}]});
+ expect(result).toEqual({logisticsRestricted:true,upcoming:[],canSubmitInterest:false,history:[{_id:eventRegistrationId,registrationStatus:state,confirmationStatus:"confirmed",attendanceStatus:"attended",event:null,canWithdraw:false}]});
  const response=await eventsGET(); expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toBe("no-store"); expect(await response.json()).toEqual(result);
  const dashboard=await meGET(new NextRequest("https://synthetic.invalid/api/applicant/me"));
  expect(dashboard.status).toBe(200); const body=await dashboard.json(); expect(body.eventLogisticsRestricted).toBe(true);
