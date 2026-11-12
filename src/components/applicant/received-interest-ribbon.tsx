@@ -29,13 +29,13 @@ export function ReceivedInterestRibbon({ interests, approved, onReviews }: { int
       } while (cursor);
       if (request.signal.aborted) return;
       setReviews(rows); onReviews?.(rows); setLoaded(true);
-      for (const item of rows.filter(item => item.state === "contacts_released" && !item.paused && !item.reviewExpired)) {
+      for (const item of rows.filter(item => item.canView === true && item.state === "contacts_released" && !item.paused && !item.reviewExpired)) {
         try {
         const response = await fetch("/api/applicant/female-review?interestId=" + encodeURIComponent(item.interestId), { cache: "no-store", signal: request.signal });
         if (!response.ok) continue;
         const detail = await response.json();
         const profile = detail.profile || detail.counterparty;
-        if (!request.signal.aborted && detail.state === "contacts_released" && !detail.paused && (profile?.email?.trim() || profile?.phone?.trim())) setReadyIds(previous => [...previous, item.interestId]);
+        if (!request.signal.aborted && detail.state === "contacts_released" && !detail.paused && !detail.reviewExpired && (profile?.email?.trim() || profile?.phone?.trim())) setReadyIds(previous => [...previous, item.interestId]);
         } catch { /* An optional contact check must not hide other invitations. */ }
       }
     } catch { if (!request.signal.aborted) { setReviews([]); setReadyIds([]); setError(true); setLoaded(false); } }
