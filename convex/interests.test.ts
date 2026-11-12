@@ -819,6 +819,28 @@ describe("interest rules", () => {
   expect(await t.run(ctx => ctx.db.get(flow!._id))).toMatchObject({recipientFinalApproval:"declined", flowStatus:"declined"});
  });
 
+for (const action of ["initial", "male-final", "female-final", "withdraw"] as const) test("own closed history uses real ordinary action: " + action, async () => {
+ const t=convexTest(schema,modules); const male=await createRegistration(t,"Own Male","male"), female=await createRegistration(t,"Own Female","female");
+ const ms=await createSession(t,male), fs=await createSession(t,female);
+ const {interestId}=await t.mutation(api.applicantInterests.submitInterestNumber,{sessionHash:ms,expectedEventId:await getTestEvent(t),applicantNumber:2,applicantName:"Own"});
+ if(action === "initial") await t.mutation(api.applicantInterests.respondToInbound,{sessionHash:fs,interestId,decision:"decline"});
+ else if(action === "withdraw") await t.mutation(api.applicantInterests.withdrawOutbound,{sessionHash:ms,interestId});
+ else { await t.mutation(api.applicantInterests.respondToInbound,{sessionHash:fs,interestId,decision:"accept"}); await t.mutation(api.applicantInterests.giveFinalApproval,{sessionHash:action === "male-final" ? ms : fs,interestId,approved:false}); }
+ const owner = action === "male-final" || action === "withdraw" ? ms : fs;
+ for(const sessionHash of [ms,fs]) {
+  const dashboard=await t.query(api.applicantInterests.getDashboard,{sessionHash});
+  expect(dashboard.history).toHaveLength(sessionHash === owner ? 1 : 0);
+  if(sessionHash === owner) expect(dashboard.history[0]).toMatchObject({interestId,ownDecision:action === "withdraw" ? "withdrawn" : "declined"});
+  expect(dashboard.inbound).toEqual([]); expect(dashboard.outbound).toEqual([]);
+  expect(JSON.stringify(dashboard.history)).not.toMatch(/counterparty|actorRegistrationId|email|phone|closedReason/);
+ }
+ const audit = await t.run(ctx=>ctx.db.query("interestFlowEvents").withIndex("by_interestId",q=>q.eq("interestId",interestId)).collect());
+ expect(audit.length).toBeGreaterThan(0);
+ // Losing authoritative provenance must not reinterpret legacy state as own action.
+ await t.run(async ctx=>{for(const e of audit) await ctx.db.delete(e._id);});
+ expect((await t.query(api.applicantInterests.getDashboard,{sessionHash:owner})).history).toEqual([]);
+});
+
 test("public final approval receipts hide delivery eligibility and preserve own closed history", async () => {
  const t=convexTest(schema,modules);const male=await createRegistration(t,"Receipt Male","male");const female=await createRegistration(t,"Receipt Female","female");
  const ms=await createSession(t,male),fs=await createSession(t,female);
@@ -830,5 +852,5 @@ test("public final approval receipts hide delivery eligibility and preserve own 
  expect(second).toMatchObject({flowId:null,matchId:null,finalApprovalNotification:null});
  expect(await t.run(ctx=>ctx.db.get(interestId))).toMatchObject({matchId:expect.any(String)});
  await t.run(ctx=>ctx.db.patch(interestId,{status:"closed"}));
- for(const sessionHash of [ms,fs]){const d=await t.query(api.applicantInterests.getDashboard,{sessionHash});expect(d.history).toEqual([{interestId,status:"closed",ownDecision:null,ownFinalApproval:"approved",ownInitialDecision:sessionHash===fs?"accepted":null}]);}
+ for(const sessionHash of [ms,fs]){const d=await t.query(api.applicantInterests.getDashboard,{sessionHash});expect(d.history).toEqual([]);}
 });

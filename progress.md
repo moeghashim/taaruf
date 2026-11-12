@@ -822,3 +822,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-12
 - Hide reset4131: filter test-reset audit interests/matches from workbench records before event scoping; retain ordinary history and stored audit data. Add unit and responsive synthetic browser regression coverage.
 - Request4175: provide explicit stale-review URL recovery without hiding authentication/network failures; invalidate outdated reads and update login return destinations. Synthetic reset/reauth/read-only API regressions; no backend runtime changes or production actions.
+
+## 2026-11-12
+- Request4388: filter both applicant closed-history projections by authenticated own decline/withdraw audit receipts; preserve audit/access gates and live167 banners; add functional/provenance/UI regressions. Preview only.
+
+- Combined requests4388/4397 on certified167; preserved both source patches and validated integration independently.

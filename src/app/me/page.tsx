@@ -16,6 +16,7 @@ import { ReviewDecision } from "@/components/applicant/review-decision";
 import { ReviewNextSteps } from "@/components/applicant/review-next-steps";
 import { MatchmakerNotifications } from "@/components/applicant/matchmaker-notifications";
 import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
+import { ownClosedHistory } from "@/lib/own-closed-history";
 import { FemaleReviews } from "@/components/applicant/female-reviews";
 import { ReceivedInterestRibbon } from "@/components/applicant/received-interest-ribbon";
 import { LogoMark } from "@/components/admin/primitives/logo-mark";
@@ -637,6 +638,7 @@ export default function ApplicantDashboardPage() {
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<ReviewNoticeInput[] | null>(null);
+  const closedHistory = ownClosedHistory(data?.history ?? []);
   const categories = interestCategories(data?.outbound ?? [], data?.privateDocumented ?? [], reviews ?? []);
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -881,7 +883,7 @@ export default function ApplicantDashboardPage() {
       const result = await response.json();
       if (lookupRequests.current[index] !== requestId) return;
       setInterestRows(rows => rows.map((row, i) => i === index && row.number === number ? { ...row, name: response.ok ? result.firstName ?? "" : "" } : row));
-      if (!response.ok || !result.firstName) setMessage(response.status === 429 ? "Too many name checks. Please try again in an hour." : "Applicant details could not be verified. Check the applicant number.");
+      if (!response.ok || !result.firstName) setMessage("Applicant details could not be verified. Check the applicant number.");
     } catch { if (lookupRequests.current[index] === requestId) setMessage("Unable to check the name. Please try again."); }
   }
 
@@ -1516,7 +1518,7 @@ export default function ApplicantDashboardPage() {
 
             </div>
             <div hidden={view !== "interests"} className="applicant-sections">
-              {!!data.history?.length && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{data.history.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
+              {!!closedHistory.length && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{closedHistory.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
               <Section
                 title="Inbound Interests"
                 viewerGender={data.applicant.gender}

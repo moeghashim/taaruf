@@ -275,6 +275,7 @@ export default defineSchema({
     providerPayload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string() })),
     firstAttemptAt: v.optional(v.number()), sentAt: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(),
   }).index("by_kind_and_status_and_nextAttemptAt", ["kind", "status", "nextAttemptAt"]).index("by_key", ["key"]).index("by_interestId", ["interestId"]).index("by_interestId_and_status", ["interestId", "status"]).index("by_status_and_nextAttemptAt", ["status", "nextAttemptAt"]).index("by_providerCooldownUntil", ["providerCooldownUntil"]),
+  // Legacy hourly counters retained for compatibility; no longer read or written.
   interestLookups: defineTable({ registrationId: v.id("registrations"), windowStart: v.number(), count: v.number() }).index("by_registrationId", ["registrationId"]),
   interests: defineTable({
     slotReturnedAt: v.optional(v.number()),
