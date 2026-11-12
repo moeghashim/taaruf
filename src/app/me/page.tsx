@@ -8,7 +8,6 @@ import { educationOptionsFor, formatEducation } from "@/lib/education";
 import { portalView, portalViews, type PortalView } from "@/lib/applicant-portal-view";
 import { applicantLoginHref } from "@/lib/applicant-destination";
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
-import { ArchiveParticipant } from "@/components/archive-participant";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -640,8 +639,7 @@ export default function ApplicantDashboardPage() {
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
-  const [locallyArchivedAt, setLocallyArchivedAt] = useState<number | null | undefined>(undefined);
-  const archivedAt = locallyArchivedAt === undefined ? profile?.archivedAt : locallyArchivedAt;
+  const archivedAt = profile?.archivedAt;
   const archived = archivedAt != null;
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
@@ -1527,7 +1525,6 @@ export default function ApplicantDashboardPage() {
               )}
               </>}
             </div>
-            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
           </div>
         </div>
       </div>
