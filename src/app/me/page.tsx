@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
+import { ReviewDecision } from "@/components/applicant/review-decision";
 import { ReviewNextSteps } from "@/components/applicant/review-next-steps";
 import { MatchmakerNotifications } from "@/components/applicant/matchmaker-notifications";
 import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
@@ -366,11 +367,6 @@ function ProfileSideCard({
         <p className="notice warning">Keep Open expires {formatDate(interest.keepOpenExpiresAt)}.</p>
       )}
 
-      {interest.ownInitialDecision && interest.ownInitialDecision !== "pending" && <p className="notice">Your initial response: {titleize(interest.ownInitialDecision)}.</p>}
-      {viewerFinalApproval === "approved" && !interest.contactSharedAt && !["contact_shared", "closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) && (
-        <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>
-      )}
-
       {(canRespond || canFinalApprove) && (
         <p className="notice warning">This connection is awaiting your review.</p>
       )}
@@ -425,6 +421,9 @@ function ProfileSideCard({
           <p>{counterparty.shareableBio}</p>
         </div>
       )}
+
+      {interest.ownInitialDecision && interest.ownInitialDecision !== "pending" && <p className="notice">Your initial response: {titleize(interest.ownInitialDecision)}.</p>}
+      <ReviewDecision decision={viewerFinalApproval} awaitingAdmin={!interest.contactSharedAt && !["contact_shared", "closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status)} />
 
       {interest.contactSharedAt && counterparty?.email && counterparty.phone && (
         <div className="contact-box">

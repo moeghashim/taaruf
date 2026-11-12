@@ -1296,3 +1296,9 @@
 [data-admin] .review-next-steps p { font-size: 16px; line-height: 1.6; color: var(--ink); }
 [data-admin] .review-next-steps p + p { margin-top: 12px; }
 [data-admin] .selected-profile-review .action-row { flex-wrap: wrap; gap: 12px; }
+
+/* Viewer-owned decisions belong with the reviewed bio, not the section heading. */
+[data-admin] .review-decision { display: grid; gap: 10px; min-width: 0; font-family: var(--font-admin-sans), sans-serif; font-size: 13px; line-height: 1.5; }
+[data-admin] .review-decision-label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--ink-2); }
+[data-admin] .review-decision .pill { text-transform: capitalize; }
+[data-admin] .review-decision .notice { margin: 0; }

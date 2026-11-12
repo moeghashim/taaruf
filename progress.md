@@ -805,3 +805,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11
 - Request3861: route sister inline workflow reviews/status to Outbound, preserve brother Inbound, synchronize exact-ID selection and counts/empty states; added desktop/mobile regression coverage.
+
+## 2026-11-11 — request 3884
+- Styled viewer decisions with portal pills; moved decision/admin notice below bios in shared inline/standalone and regular details. Added responsive and unit coverage; no backend/action changes.
