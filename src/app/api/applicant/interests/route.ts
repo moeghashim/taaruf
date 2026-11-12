@@ -1,3 +1,4 @@
+import { ACTIVE_MATCH_CONFLICT_MESSAGE, isApplicantActiveMatchConflict } from "@/lib/applicant-match-conflict";
 import { isApplicantUnauthorized } from "@/lib/applicant-auth-error";
 import { getAdminSecret } from "@/lib/admin-server";
 import { NextRequest, NextResponse } from "next/server";
@@ -16,6 +17,7 @@ function rawErrorMessage(error: unknown) {
 }
 
 function applicantInterestErrorResponse(error: unknown) {
+  if (isApplicantActiveMatchConflict(error)) return NextResponse.json({ error: ACTIVE_MATCH_CONFLICT_MESSAGE }, { status: 409 });
   const message = rawErrorMessage(error);
   if (/interest submissions|submission event|approved and have attended|expectedEventId/i.test(message)) {
     return NextResponse.json({ error: "Interest availability has changed. Submissions require an enabled event and approved, confirmed, checked-in attendance. Please check the updated availability and try again." }, { status: 409 });

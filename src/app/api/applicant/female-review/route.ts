@@ -1,3 +1,4 @@
+import { ACTIVE_MATCH_CONFLICT_MESSAGE, isApplicantActiveMatchConflict } from "@/lib/applicant-match-conflict";
 import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 import type { Id } from "../../../../../convex/_generated/dataModel";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 const validId = (value: unknown): value is string => typeof value === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value);
 const validToken = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 function failure(error: unknown) {
+  if (isApplicantActiveMatchConflict(error)) return privateJson({ error: ACTIVE_MATCH_CONFLICT_MESSAGE }, 409);
   const unauthorized = error instanceof Error && /Unauthorized/.test(error.message);
   return privateJson({ error: unauthorized ? "Please sign in to your applicant account." : "This review is unavailable or has changed. Return to your portal and refresh." }, unauthorized ? 401 : 409);
 }
