@@ -805,3 +805,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11
 - Request3861: route sister inline workflow reviews/status to Outbound, preserve brother Inbound, synchronize exact-ID selection and counts/empty states; added desktop/mobile regression coverage.
+
+## 2026-11-11
+- Request3840: optional unchecked new-profile matchmaking consent in registration form/API/atomic Convex insert, shared portal wording, and strict validation/new-only retry preservation regression tests. No production deployment or real-data/provider actions.
