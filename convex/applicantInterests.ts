@@ -1,3 +1,4 @@
+import { existingInboundReview } from "./existingInboundReview";
 import { interestBioVisible } from "./bioVisibility";
 import { currentAge } from "./birthdays";
 import { canReceiveEventMessages } from "./eventMessagingEligibility";
@@ -375,6 +376,11 @@ export const submitInterestNumber = mutation({
         target._id === registration._id || target.gender === registration.gender || target.status !== "approved") {
       throw new Error("Applicant details could not be verified");
     }
+
+    // Read the reverse indexed range in this same transaction: concurrent sends/shares
+    // must serialize before any quota charge, flow, photo grant or notification write.
+    const incoming = await existingInboundReview(ctx, registration, target, selected._id);
+    if (incoming) return { interestId: incoming.interestId, private: false, inboundInterestNotification: null, existingInbound: incoming };
 
     const previous = await ctx.db.query("interests")
       .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined)).take(3);

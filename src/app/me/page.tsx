@@ -842,6 +842,21 @@ export default function ApplicantDashboardPage() {
         if (response.status === 409) await load();
         throw new Error(payload.error || "Action failed");
       }
+      if (body.action === "submit_number" && payload.existingInbound) {
+        const incoming = payload.existingInbound;
+        if (typeof incoming.interestId !== "string" || !["connection", "femaleReview"].includes(incoming.route)) throw new Error("Refresh your interests and try again.");
+        setMessage(payload.message);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("connection");
+        url.searchParams.delete("femaleReview");
+        url.searchParams.set(incoming.route, incoming.interestId);
+        url.hash = "applicant-interests";
+        window.history.pushState({}, "", url);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        // Existing dashboard/review endpoints reauthorize this exact ID on load.
+        await Promise.all([load(), loadEvents()]);
+        return false; // Not a submission: preserve the entered details and quota.
+      }
       setMessage(body.action === "submit_number" && data?.applicant.gender === "female"
         ? "Your interest has been submitted for admin review. An admin will review it before sharing it with the brother."
         : typeof payload.message === "string" ? payload.message : "Updated.");

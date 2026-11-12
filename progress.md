@@ -811,3 +811,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — styling recovery
 - Recovered request3884 in an isolated checkout; aligned standalone typography, placed decision immediately after Bio, expanded responsive/state/contact coverage, and preserved original PR153 ancestry.
+
+## 2026-11-11 — request3970
+- Added same-event authorized incoming-review interception before submission side effects, exact-ID portal routing, linked-match history dimming, and focused privacy/lifecycle/quota tests.

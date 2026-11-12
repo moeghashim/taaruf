@@ -8,7 +8,7 @@ import { useProfileEventPages } from "@/components/admin/hooks/use-profile-event
 import { workbenchEventLabel } from "@/lib/workbench-event-label";
 import { matchEventId, inEventScope, scopedWorkbenchRecords } from "@/lib/workbench-event-filter";
 import Link from "next/link";
-import { canReleaseContacts, interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
+import { canReleaseContacts, interestLifecycle, isArchivedInterest, isResolvedInterest } from "@/lib/interest-lifecycle";
 import { FemaleWorkflowActions, FemaleWorkflowOutbox } from "./female-workflow-actions";
 import { MatchmakerActions, isMatchmaker } from "./matchmaker-actions";
 import { NewMatchDialog } from "./new-match-dialog";
@@ -616,7 +616,7 @@ function InterestRow({
   onMessage: (message: string) => void;
 }) {
   return (
-    <tr style={{ opacity: isArchivedInterest(interest) ? 0.6 : 1 }}>
+    <tr style={{ opacity: isArchivedInterest(interest) || isResolvedInterest(interest) ? 0.6 : 1 }}>
       <td>
         <div style={{ display: "grid", gap: 8 }}>
           <ApplicantLink
@@ -684,9 +684,9 @@ function MutualBadge({ interest }: { interest?: InterestRecord | null }) {
   if (!interest || !evidence) return null;
   const number = (id: string) => id === interest.fromRegistrationId ? interest.fromRegistration?.publicApplicantNumber : interest.toRegistration?.publicApplicantNumber;
   return <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
-    <Pill tone={evidence.state === "open" ? "green" : "plain"}>{evidence.state === "open" ? "Mutual interest · Open" : "Mutual interest · Completed"}</Pill>
+    <Pill tone={evidence.state === "open" ? "green" : "plain"}>{isResolvedInterest(interest) && evidence.state === "open" ? "Mutual interest · Matched" : evidence.state === "open" ? "Mutual interest · Open" : "Mutual interest · Completed"}</Pill>
     <details><summary style={{ cursor: "pointer" }}>Both submissions</summary>
-      <p>{interest.event?.title ?? "Recorded event"}{evidence.state === "completed" ? " · Contacts shared — historical evidence, not an open request." : " · Same-event reciprocal submissions."}</p>
+      <p>{interest.event?.title ?? "Recorded event"}{isResolvedInterest(interest) && evidence.state === "open" ? " · Converted to the linked match — submissions retained." : evidence.state === "completed" ? " · Contacts shared — historical evidence, not an open request." : " · Same-event reciprocal submissions."}</p>
       <ul>{evidence.submissions.map(s => <li key={s.id}>#{number(s.fromRegistrationId) ?? "?"} → #{number(s.toRegistrationId) ?? "?"} · {s.source === "platform_submission" ? "Applicant submission" : titleize(s.source)} · {formatDateTime(s.createdAt)}</li>)}</ul>
     </details>
   </div>;
