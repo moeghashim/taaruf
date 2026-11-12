@@ -1,3 +1,4 @@
+import { isCurrentEnrollment, enrollmentRegistrationId, requireCurrentEnrollment, enrollmentForEvent, enrollmentsForRegistration } from "./eventEnrollmentIdentity";
 import { withCurrentAge } from "./birthdays";
 import { canReceiveEventMessages, requireEventMessagingEligibility } from "./eventMessagingEligibility";
 import { paginationOptsValidator } from "convex/server";
@@ -63,7 +64,7 @@ type ConfirmationStatus = "confirmed" | "not_confirmed" | "cancelled";
 // Withdrawal releases only the caller's reservation. Profile restrictions must not
 // trap an existing reservation or disclose event logistics.
 function canWithdrawRegistration(row: EventRegistration, event: Doc<"events"> | null, now: number) {
-  return Boolean(event && event.status === "scheduled" && event.startsAt > now &&
+  return Boolean(isCurrentEnrollment(row) && event && event.status === "scheduled" && event.startsAt > now &&
     row.attendanceStatus === "not_checked_in" &&
     ["pending", "approved", "waitlisted"].includes(row.registrationStatus));
 }
@@ -111,7 +112,7 @@ function confirmationStatusForRow(row: EventRegistration): ConfirmationStatus {
 async function serializeEventRegistration(ctx: ReadCtx, row: EventRegistration) {
   const [event, registration] = await Promise.all([
     ctx.db.get(row.eventId),
-    ctx.db.get(row.registrationId),
+    ctx.db.get(enrollmentRegistrationId(row)),
   ]);
   return withoutCapabilities({ ...row, confirmationStatus: confirmationStatusForRow(row), event, registration: await withCurrentAge(ctx, registration) });
 }
@@ -158,12 +159,7 @@ async function carryOverRegistrationsFromEvent(
       return;
     }
 
-    const existing = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId_and_registrationId", (q) =>
-        q.eq("eventId", args.targetEvent._id).eq("registrationId", registration._id)
-      )
-      .unique();
+    const existing = await enrollmentForEvent(ctx, args.targetEvent._id, registration._id);
     if (existing) {
       alreadyExists += 1;
       return;
@@ -191,7 +187,7 @@ async function carryOverRegistrationsFromEvent(
   for (const sourceStatus of args.sourceStatuses) {
     if (sourceStatus === "waitlisted") {
       for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_registrationStatus", q => q.eq("eventId", sourceEvent._id).eq("registrationStatus", "waitlisted"))) {
-        await copyRegistration(row.registrationId, sourceEvent._id);
+        if (isCurrentEnrollment(row)) await copyRegistration(enrollmentRegistrationId(row), sourceEvent._id);
       }
       // Existing holding-list records are read-only pending Danielle's retirement/orphan decision.
       continue;
@@ -205,7 +201,7 @@ async function carryOverRegistrationsFromEvent(
       .take(500);
 
     for (const row of rows.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime)) {
-      await copyRegistration(row.registrationId, sourceEvent._id);
+      if (isCurrentEnrollment(row)) await copyRegistration(enrollmentRegistrationId(row), sourceEvent._id);
     }
   }
 
@@ -233,7 +229,7 @@ export const getAll = query({
           .withIndex("by_eventId_and_registrationStatus", q => q.eq("eventId", event._id).eq("registrationStatus", status))
           .take(1001);
         if (statusRows.length > 1000) throw new Error(status + " roster exceeds 1000 rows. Complete counts unavailable; paginated review is required.");
-        return statusRows;
+        return statusRows.filter(isCurrentEnrollment);
       })
     )).flat();
         return {
@@ -356,7 +352,7 @@ export const getDetail = query({
           .withIndex("by_eventId_and_registrationStatus", q => q.eq("eventId", args.eventId).eq("registrationStatus", status))
           .take(1001);
         if (statusRows.length > 1000) throw new Error(status + " roster exceeds 1000 rows. Complete counts unavailable; paginated review is required.");
-        return statusRows;
+        return statusRows.filter(isCurrentEnrollment);
       })
     )).flat();
     const waitlistRows = await ctx.db.query("eventWaitlistEntries")
@@ -396,10 +392,7 @@ export const getApplicantEvents = query({
   args: { sessionHash: v.string() },
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
-    const eventRegistrations = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_registrationId", (q) => q.eq("registrationId", registration._id))
-      .take(100);
+    const eventRegistrations = await enrollmentsForRegistration(ctx, registration._id);
     // Read current profile in this transaction; allowlist history to exclude
     // descriptions, title/date hints, and nested profile notes for blocked viewers.
     if (!canReceiveEventMessages(registration)) {
@@ -443,10 +436,7 @@ export const getByRegistration = query({
   args: { adminSecret: v.optional(v.string()), registrationId: v.id("registrations") },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
-    const rows = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_registrationId", (q) => q.eq("registrationId", args.registrationId))
-      .take(100);
+    const rows = await enrollmentsForRegistration(ctx, args.registrationId);
     return withoutCapabilities(await Promise.all(rows.map((row) => serializeEventRegistration(ctx, row))));
   },
 });
@@ -698,12 +688,7 @@ export const registerForEvent = mutation({
     if (event.registrationOpensAt && event.registrationOpensAt > now) throw new Error("Event registration is not open yet");
     if (event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
 
-    const existing = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId_and_registrationId", (q) =>
-        q.eq("eventId", event._id).eq("registrationId", registration._id)
-      )
-      .unique();
+    const existing = await enrollmentForEvent(ctx, event._id, registration._id);
     if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
       return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
@@ -733,7 +718,7 @@ export const registerForEvent = mutation({
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, payload);
+      await ctx.db.patch(existing._id, { ...payload, registrationId: existing.registrationId });
       return { eventRegistrationId: existing._id, registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
 
@@ -762,12 +747,7 @@ export const addRegistration = mutation({
     if (event.registrationOpensAt && event.registrationOpensAt > now) throw new Error("Event registration is not open yet");
     if (event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
 
-    const existing = await ctx.db
-      .query("eventRegistrations")
-      .withIndex("by_eventId_and_registrationId", (q) =>
-        q.eq("eventId", event._id).eq("registrationId", registration._id)
-      )
-      .unique();
+    const existing = await enrollmentForEvent(ctx, event._id, registration._id);
     if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
       return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
@@ -794,7 +774,7 @@ export const addRegistration = mutation({
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, payload);
+      await ctx.db.patch(existing._id, { ...payload, registrationId: existing.registrationId });
       return { eventRegistrationId: existing._id, registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
 
@@ -813,7 +793,7 @@ export const forceRegisterWaitlisted = mutation({
   handler: async (ctx, args) => {
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row) throw new Error("Event registration not found");
+    requireCurrentEnrollment(row);
     if (row.registrationStatus !== "waitlisted") throw new Error("Only an existing waitlisted registration can be force-registered");
     const event = await ctx.db.get(row.eventId);
     if (!event) throw new Error("Event not found");
@@ -821,7 +801,7 @@ export const forceRegisterWaitlisted = mutation({
     if (event.status === "cancelled" || event.status === "completed") throw new Error("Event registration is closed");
     if (event.registrationOpensAt && event.registrationOpensAt > now) throw new Error("Event registration is not open yet");
     if (event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
-    const registration = await ctx.db.get(row.registrationId);
+    const registration = await ctx.db.get(enrollmentRegistrationId(row));
     if (!registration) throw new Error("Profile not found");
     assertNotArchived(registration);
     if (confirmationExpired(row, now) || row.confirmationStatus === "cancelled") throw new Error("Renew the applicant's confirmation before force-registering");
@@ -843,12 +823,12 @@ export const updateRegistrationStatus = mutation({
   handler: async (ctx, args) => {
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row) throw new Error("Event registration not found");
+    requireCurrentEnrollment(row);
     const event = await ctx.db.get(row.eventId);
     if (!event) throw new Error("Event not found");
     const now = Date.now();
 
-    if (["pending", "approved", "waitlisted"].includes(args.registrationStatus)) assertNotArchived(await ctx.db.get(row.registrationId));
+    if (["pending", "approved", "waitlisted"].includes(args.registrationStatus)) assertNotArchived(await ctx.db.get(enrollmentRegistrationId(row)));
     if (args.overrideCapacity) throw new Error("Capacity overrides are not allowed");
     if (args.registrationStatus === "approved" && row.registrationStatus !== "pending" && row.registrationStatus !== "approved") throw new Error("Only Pending registrations may be approved");
     if (args.registrationStatus === "waitlisted") throw new Error("Waitlisting is determined by capacity");
@@ -884,7 +864,7 @@ export const updateAttendanceStatus = mutation({
   handler: async (ctx, args) => {
     if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row) throw new Error("Event registration not found");
+    requireCurrentEnrollment(row);
     const now = Date.now();
     await ctx.db.patch(row._id, {
       attendanceStatus: args.attendanceStatus,
@@ -905,9 +885,9 @@ export const updateRegistrationConfirmation = mutation({
   handler: async (ctx, args) => {
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row) throw new Error("Event registration not found");
-    if (args.confirmationStatus === "confirmed") requireEventMessagingEligibility(await ctx.db.get(row.registrationId));
-    if (args.confirmationStatus !== "cancelled") assertNotArchived(await ctx.db.get(row.registrationId));
+    requireCurrentEnrollment(row);
+    if (args.confirmationStatus === "confirmed") requireEventMessagingEligibility(await ctx.db.get(enrollmentRegistrationId(row)));
+    if (args.confirmationStatus !== "cancelled") assertNotArchived(await ctx.db.get(enrollmentRegistrationId(row)));
     if (row.registrationStatus === "rejected" && args.confirmationStatus === "confirmed") {
       throw new Error("Rejected event registrations cannot be confirmed");
     }
@@ -942,7 +922,7 @@ export const verifyEventRegistrationStatusAxes = query({
   args: { adminSecret: v.optional(v.string()),},
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
-    const rows = await ctx.db.query("eventRegistrations").take(1000);
+    const rows = (await ctx.db.query("eventRegistrations").take(1000)).filter(isCurrentEnrollment);
     return {
       checked: rows.length,
       byRegistrationStatus: rows.reduce<Record<string, number>>((counts, row) => {
@@ -965,9 +945,9 @@ export const requestConfirmation = mutation({
   handler: async (ctx, args) => {
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row) throw new Error("Event registration not found");
-    requireEventMessagingEligibility(await ctx.db.get(row.registrationId));
-    assertNotArchived(await ctx.db.get(row.registrationId));
+    requireCurrentEnrollment(row);
+    requireEventMessagingEligibility(await ctx.db.get(enrollmentRegistrationId(row)));
+    assertNotArchived(await ctx.db.get(enrollmentRegistrationId(row)));
     const event = await ctx.db.get(row.eventId);
     if (!event) throw new Error("Event not found");
     if (event.status === "completed" || event.status === "cancelled") {
@@ -990,7 +970,7 @@ export const withdrawParticipation = mutation({
   handler: async (ctx, args) => {
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
+    if (!row || !isCurrentEnrollment(row) || enrollmentRegistrationId(row) !== registration._id) throw new Error("Event registration not found");
     // Safe retries neither rewrite timestamps nor affect other applicants.
     if (row.registrationStatus === "withdrawn" && row.confirmationStatus === "cancelled") return row._id;
     const now = Date.now();
@@ -1017,7 +997,7 @@ export const confirmParticipation = mutation({
     requireEventMessagingEligibility(registration);
     assertNotArchived(registration);
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
+    if (!row || !isCurrentEnrollment(row) || enrollmentRegistrationId(row) !== registration._id) throw new Error("Event registration not found");
     if ((reservesCapacity(row.registrationStatus) || row.registrationStatus === "waitlisted") && confirmationStatusForRow(row) === "confirmed") {
       return row._id;
     }
@@ -1075,8 +1055,8 @@ export const claimRegistrationReceivedEmail = mutation({
   handler: async (ctx, args) => {
     if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row) throw new Error("Event registration not found");
-    requireEventMessagingEligibility(await ctx.db.get(row.registrationId));
+    requireCurrentEnrollment(row);
+    requireEventMessagingEligibility(await ctx.db.get(enrollmentRegistrationId(row)));
     if (args.receiptAttempt !== undefined && args.receiptAttempt !== (row.receiptAttempt ?? 0)) return { claimed: false };
     if (row.registrationReceivedEmailSentAt || !["pending", "waitlisted"].includes(row.registrationStatus)) return { claimed: false };
     const key = "event-registration-received/" + row._id + "/" + (row.receiptAttempt ?? 0);
@@ -1085,11 +1065,11 @@ export const claimRegistrationReceivedEmail = mutation({
     if (existing?.sentAt) return { claimed: false };
     if (existing && existing.leaseUntil > now) return { claimed: false, error: "Receipt delivery in progress; retry later" };
     if (existing && now - existing.firstAttemptAt >= 23 * 60 * 60 * 1000) return { claimed: false, error: "Receipt delivery uncertain; manual reconciliation required" };
-    const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(row.registrationId)]);
+    const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(enrollmentRegistrationId(row))]);
     if (!event || !registration) throw new Error("Missing receipt records");
     assertNotArchived(registration);
     const payload = { name: registration.name, email: registration.email, eventTitle: event.title, registrationStatus: row.registrationStatus as "pending" | "waitlisted" };
-    if (existing && existing.registrationStatus !== row.registrationStatus) return { claimed: false, error: "Receipt status changed; manual reconciliation required" };
+    if (existing && (existing.registrationStatus !== row.registrationStatus || existing.email !== registration.email)) return { claimed: false, error: "Receipt status changed; manual reconciliation required" };
     if (existing) await ctx.db.patch(existing._id, { token: args.token, leaseUntil: now + 120000 });
     else await ctx.db.insert("receiptDeliveries", { key, token: args.token, leaseUntil: now + 120000, firstAttemptAt: now, ...payload });
     return { claimed: true, key, name: existing?.name ?? payload.name, email: existing?.email ?? payload.email, eventTitle: existing?.eventTitle ?? payload.eventTitle, registrationStatus: payload.registrationStatus };
@@ -1102,9 +1082,12 @@ export const validateRegistrationReceivedEmail = mutation({
     if (!process.env.ATTENDANCE_ADMIN_SECRET || args.adminSecret !== process.env.ATTENDANCE_ADMIN_SECRET) throw new Error("Unauthorized");
     const row = await ctx.db.get(args.eventRegistrationId);
     const delivery = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", args.key)).unique();
-    if (!row || !delivery || delivery.token !== args.token || delivery.sentAt || delivery.leaseUntil <= Date.now()
+    if (!row || !isCurrentEnrollment(row) || !delivery || delivery.token !== args.token || delivery.sentAt || delivery.leaseUntil <= Date.now()
       || args.key !== "event-registration-received/" + row._id + "/" + (row.receiptAttempt ?? 0)) throw new Error("Receipt claim is no longer current");
-    assertNotArchived(await ctx.db.get(row.registrationId));
+    const recipient = await ctx.db.get(enrollmentRegistrationId(row));
+    assertNotArchived(recipient);
+    requireEventMessagingEligibility(recipient);
+    if (!recipient || recipient.email !== delivery.email) throw new Error("Receipt recipient changed");
     if (!["pending", "waitlisted"].includes(row.registrationStatus) || row.registrationStatus !== delivery.registrationStatus) throw new Error("Receipt status changed");
   },
 });
@@ -1131,8 +1114,8 @@ export const claimEventRegistrationEmail = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
-    if (!row) throw new Error("Event registration not found");
-    const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(row.registrationId)]);
+    requireCurrentEnrollment(row);
+    const [event, registration] = await Promise.all([ctx.db.get(row.eventId), ctx.db.get(enrollmentRegistrationId(row))]);
     if (!event || !registration) throw new Error("Event registration is missing related records");
     requireEventMessagingEligibility(registration);
     assertNotArchived(registration);
@@ -1154,12 +1137,13 @@ export const claimEventRegistrationEmail = mutation({
     const emailId = existing?._id ?? await ctx.db.insert("eventRegistrationEmails", {
       eventRegistrationId: row._id,
       eventId: row.eventId,
-      registrationId: row.registrationId,
+      registrationId: enrollmentRegistrationId(row),
       kind: args.kind,
       createdAt: now,
       updatedAt: now,
     });
     await ctx.db.patch(emailId, {
+      registrationId: enrollmentRegistrationId(row),
       error: undefined,
       updatedAt: now,
     });
@@ -1185,7 +1169,11 @@ export const validateEventRegistrationEmail = mutation({
     requireAdmin(args.adminSecret);
     const email = await ctx.db.get(args.emailId);
     if (!email) throw new Error("Email claim not found");
-    assertNotArchived(await ctx.db.get(email.registrationId));
+    const enrollment = await ctx.db.get(email.eventRegistrationId);
+    requireCurrentEnrollment(enrollment);
+    requireEventMessagingEligibility(await ctx.db.get(enrollmentRegistrationId(enrollment)));
+    assertNotArchived(await ctx.db.get(enrollmentRegistrationId(enrollment)));
+    if (email.registrationId !== enrollmentRegistrationId(enrollment)) throw new Error("Email ownership changed; create a new claim");
     const event = await ctx.db.get(email.eventId);
     if (!event || event.status === "completed" || event.status === "cancelled") throw new Error("Notification actions are locked for completed or cancelled events");
   },
@@ -1243,12 +1231,7 @@ export const verifyEventBackfill = query({
     let approvedMissingAprilAttendance = 0;
     if (aprilEvent) {
       for (const registration of approvedRegistrations) {
-        const row = await ctx.db
-          .query("eventRegistrations")
-          .withIndex("by_eventId_and_registrationId", (q) =>
-            q.eq("eventId", aprilEvent._id).eq("registrationId", registration._id)
-          )
-          .unique();
+        const row = await enrollmentForEvent(ctx, aprilEvent._id, registration._id);
         if (!row || row.registrationStatus !== "approved" || row.attendanceStatus !== "attended") {
           approvedMissingAprilAttendance += 1;
         }
@@ -1290,6 +1273,6 @@ export const profileFilterMembership = query({
     requireAdmin(args.adminSecret);
     const result = await ctx.db.query("eventRegistrations").withIndex("by_eventId", q => q.eq("eventId", args.eventId))
       .paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
-    return { ...result, page: result.page.map(({ registrationId, registrationStatus }) => ({ registrationId, registrationStatus })) };
+    return { ...result, page: result.page.filter(isCurrentEnrollment).map(row => ({ registrationId: enrollmentRegistrationId(row), registrationStatus: row.registrationStatus })) };
   },
 });

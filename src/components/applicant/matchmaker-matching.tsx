@@ -1,4 +1,5 @@
 "use client";
+import { ContactGuidance } from "@/components/applicant/contact-guidance";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { matchmakingConsentLabel } from "@/lib/matchmaking-consent";
@@ -11,7 +12,7 @@ type Followup = { status: keyof typeof followupLabels; updatedAt: number };
 type Match = { _id: string; status: string; presentedAt?: number; contactShared: boolean; canWithdraw: boolean; canApprove: boolean; myApproval: boolean; withdrawnAt?: number; myFollowup?: Followup; partner: { publicApplicantNumber?: number; age?: number; gender?: string; maritalStatus?: string; education?: string; job?: string; ethnicity?: string; shareableBio?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string; name?: string; email?: string; phone?: string; images: {url: string; storageId: string}[] } | null };
 type Data = { emailEnabled?: boolean; optedIn: boolean; consentUpdatedAt?: number; matches: Match[] };
 const date = (time: number) => new Date(time).toLocaleString();
-export function MatchmakerMatching({ archived = false, onSessionExpired }: { archived?: boolean; onSessionExpired?: () => void } = {}) {
+export function MatchmakerMatching({ archived = false, viewerGender, onSessionExpired }: { archived?: boolean; viewerGender?: string; onSessionExpired?: () => void } = {}) {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -95,7 +96,7 @@ export function MatchmakerMatching({ archived = false, onSessionExpired }: { arc
             {match.partner.shareableBio && <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{match.partner.shareableBio}</p>}
             <ProfileRequirements profile={match.partner} />
             {match.partner.images?.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,220px),1fr))", gap: 12 }}>{match.partner.images.map((image, index) => <Image key={image.storageId} src={image.url} width={600} height={800} unoptimized alt={"Match profile photo " + (index + 1)} style={{ width: "100%", height: "auto", maxHeight: 480, objectFit: "contain" }} />)}</div>}
-            {match.contactShared && <div><h4>Contact details</h4><p style={{ overflowWrap: "anywhere" }}>{match.partner.email || "Email unavailable"}<br />{match.partner.phone || "Phone unavailable"}</p></div>}
+            {match.contactShared && <div><h4>Contact details</h4><ContactGuidance viewerGender={viewerGender} /><p style={{ overflowWrap: "anywhere" }}>{match.partner.email || "Email unavailable"}<br />{match.partner.phone || "Phone unavailable"}</p></div>}
           </>}
           {match.canWithdraw && <><p>Contact details stay private until you both agree and an admin explicitly shares them.</p><div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}><button className="btn btn-primary" disabled={busy || loading || !match.canApprove || match.myApproval} onClick={() => { if (window.confirm("Agree to this introduction? Your contacts remain private until both applicants agree and the team shares them.")) void act({ action: "approve", matchId: match._id }, "Your agreement has been saved."); }}>{match.myApproval ? "You agreed" : "Agree to this introduction"}</button><button className="btn" disabled={busy || loading} onClick={() => { if (window.confirm("Withdraw from this introduction? This does not change your preference for future matches.")) void act({ action: "withdraw", matchId: match._id }, "You withdrew from this introduction."); }}>Withdraw</button></div></>}
           {match.contactShared && <div><label style={{ display: "grid", gap: 8 }}>Your follow-up status<select aria-label="Your follow-up status" className="input" style={{ width: "100%", minWidth: 0, padding: 10, fontSize: 16 }} disabled={busy || loading} value={match.myFollowup?.status || ""} onChange={event => void act({ action: "followup", matchId: match._id, status: event.target.value }, "Your follow-up status has been saved.")}><option value="" disabled>Select a status</option>{Object.entries(followupLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{match.myFollowup && <small>You updated this {date(match.myFollowup.updatedAt)}. The team can see your response.</small>}<p style={{ color: "var(--mute)", fontSize: 13 }}>Your update does not overwrite the other applicant’s response.</p></div>}

@@ -1,3 +1,4 @@
+import { isSecurityRetired, assertContactsNotRetired } from "./registrationSecurity";
 import { withCurrentAge } from "./birthdays";
 import { sessionAllowed, capabilityAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
@@ -17,6 +18,7 @@ export const createLoginToken = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const email = args.email.trim().toLowerCase();
+    try { await assertContactsNotRetired(ctx, email); } catch { return null; }
     const exactRegistration = await ctx.db
       .query("registrations")
       .withIndex("by_email", (q) => q.eq("email", email))
@@ -28,7 +30,7 @@ export const createLoginToken = mutation({
       ) ??
       null;
 
-    if (!registration) {
+    if (!registration || isSecurityRetired(registration)) {
       return null;
     }
 
@@ -65,7 +67,7 @@ export const claimLoginToken = mutation({
     }
 
     const registration = await ctx.db.get(loginToken.registrationId);
-    if (!registration) {
+    if (!registration || isSecurityRetired(registration)) {
       return null;
     }
 
@@ -107,7 +109,7 @@ export const getSession = query({
     }
 
     const registration = await ctx.db.get(session.registrationId);
-    if (!registration) {
+    if (!registration || isSecurityRetired(registration)) {
       return null;
     }
 

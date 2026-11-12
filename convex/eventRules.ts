@@ -1,3 +1,4 @@
+import { enrollmentForEvent } from "./eventEnrollmentIdentity";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
@@ -109,12 +110,7 @@ export async function ensureEventRegistration(
     waitlistCarryoverFromEventId?: Id<"events">;
   }
 ) {
-  const existing = await ctx.db
-    .query("eventRegistrations")
-    .withIndex("by_eventId_and_registrationId", (q) =>
-      q.eq("eventId", args.eventId).eq("registrationId", args.registration._id)
-    )
-    .unique();
+  const existing = await enrollmentForEvent(ctx, args.eventId, args.registration._id);
   const now = Date.now();
   const patch = {
     gender: args.registration.gender,
@@ -152,8 +148,7 @@ export async function ensureEventRegistration(
 }
 
 export async function hasApprovedEventAttendance(ctx: ReadCtx, eventId: Id<"events">, registrationId: Id<"registrations">) {
-  const registration = await ctx.db.query("eventRegistrations")
-    .withIndex("by_eventId_and_registrationId", q => q.eq("eventId", eventId).eq("registrationId", registrationId)).unique();
+  const registration = await enrollmentForEvent(ctx, eventId, registrationId);
   return registration?.registrationStatus === "approved" && registration.confirmationStatus === "confirmed" && registration.attendanceStatus === "attended";
 }
 // Only an explicit admin selection opens submissions. Missing flags are off.

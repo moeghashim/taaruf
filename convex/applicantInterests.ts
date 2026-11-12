@@ -1,3 +1,5 @@
+import { isSecurityRetired } from "./registrationSecurity";
+import { ownClosedDecision } from "./ownClosedConnection";
 import { enqueueFinalRequests, finalRequestEnabled } from "./finalRequest";
 import { existingInboundReview } from "./existingInboundReview";
 import { interestBioVisible } from "./bioVisibility";
@@ -146,7 +148,7 @@ async function safeCounterparty(
   interest: Interest
 )
  {
-  if (!counterparty || viewer.archivedAt !== undefined || counterparty.archivedAt !== undefined) return null;
+  if (!counterparty || (viewer.archivedAt !== undefined || isSecurityRetired(viewer)) || (counterparty.archivedAt !== undefined || isSecurityRetired(counterparty))) return null;
   if ([viewer, counterparty].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) return null;
   const bioVisible = await interestBioVisible(ctx, interest);
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
@@ -362,14 +364,16 @@ export const getDashboard = query({
         visibleOutbound.map((interest) => serializeInterest(ctx, registration, interest, byId, "outbound"))
       ),
       // Closed rows carry only the viewer's own receipt, never restored profile access.
-      history: await Promise.all([...inboundRows, ...outboundRows].filter(row => !row.testReset && !row.femaleWorkflow && !isVisibleInApplicantDashboard(row) && (row.fromRegistrationId === registration._id || row.visibility !== "internal_only")).map(async row => {
+      history: (await Promise.all([...inboundRows, ...outboundRows].filter(row => !row.testReset && !isVisibleInApplicantDashboard(row) && (row.fromRegistrationId === registration._id || row.visibility !== "internal_only" || !!row.femaleWorkflow?.reviewTokenHash)).map(async row => {
         const flow = await ensureFlowForQuery(ctx, row);
+        const ownDecision = await ownClosedDecision(ctx, row, flow, registration._id);
+        if (!ownDecision) return null;
         return { interestId: row._id, status: "closed",
           ownInitialDecision: row.toRegistrationId === registration._id ? flow?.recipientDecision ?? "pending" : null,
           ownFinalApproval: (row.fromRegistrationId === registration._id ? flow?.requesterFinalApproval : flow?.recipientFinalApproval) ?? "pending",
-          ownDecision: row.fromRegistrationId === registration._id && row.status === "withdrawn" ? "withdrawn" : null,
+          ownDecision,
         };
-      })),
+      }))).filter(row => row !== null),
       privateDocumented: await Promise.all(
         privateDocumented.map((interest) => serializeInterest(ctx, registration, interest, byId, "private"))
       ),
@@ -379,7 +383,7 @@ export const getDashboard = query({
   },
 });
 
-// Exact-number only; per-applicant budget survives session rotation and failed lookups.
+// Exact-number, authenticated and event-scoped; disclose only the first name.
 export const lookupInterestName = mutation({
   args: { sessionHash: v.string(), applicantNumber: v.number(), expectedEventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -387,15 +391,9 @@ export const lookupInterestName = mutation({
     assertNotArchived(person);
     const event = await findEligibleInterestSubmissionEvent(ctx, person._id);
     if (person.status !== "approved" || !event || event._id !== args.expectedEventId) return { firstName: null };
-    const now = Date.now();
-    const budget = await ctx.db.query("interestLookups").withIndex("by_registrationId", q => q.eq("registrationId", person._id)).unique();
-    const fresh = !budget || now - budget.windowStart >= 3600000;
-    if (!fresh && budget.count >= 12) return { firstName: null, limited: true };
-    if (budget) await ctx.db.patch(budget._id, { windowStart: fresh ? now : budget.windowStart, count: fresh ? 1 : budget.count + 1 });
-    else await ctx.db.insert("interestLookups", { registrationId: person._id, windowStart: now, count: 1 });
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique() : null;
-    if (!target || target.archivedAt !== undefined || target.status !== "approved" || target.gender === person.gender || target._id === person._id) return { firstName: null };
+    if (!target || (target.archivedAt !== undefined || isSecurityRetired(target)) || target.status !== "approved" || target.gender === person.gender || target._id === person._id) return { firstName: null };
     return { firstName: target.name.trim().split(/\s+/u)[0] };
   },
 });
@@ -417,16 +415,13 @@ export const submitInterestNumber = mutation({
       throw new Error("Interest submissions are unavailable or the selected event changed. You must be approved, confirmed, and checked in to the event that is ON.");
     }
     if (registration.profileCompletionStatus !== "completed") throw new Error("Requester must complete their profile before matching can begin");
-    const budget = await ctx.db.query("interestLookups").withIndex("by_registrationId", q => q.eq("registrationId", registration._id)).unique();
-    const fresh = !budget || Date.now() - budget.windowStart >= 3600000;
-    if (!fresh && budget.count >= 12) throw new Error("Too many name checks. Please try again in an hour.");
     // Reject quota-full callers before inspecting the target: failed attempts reveal no target eligibility.
     const charged = await ctx.db.query("interests").withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3);
     if (charged.length >= 3) {
       // Permit exact idempotent retries using only the already-authorized charged rows.
       for (const row of charged) {
         const known = await ctx.db.get(row.toRegistrationId);
-        if (known?.publicApplicantNumber === args.applicantNumber) {
+        if (known?.publicApplicantNumber === args.applicantNumber && !isSecurityRetired(known)) {
           const incoming = await existingInboundReview(ctx, registration, known, selected._id);
           if (incoming) return { interestId: incoming.interestId, private: false, inboundInterestNotification: null, existingInbound: incoming };
           if (!isVisibleInApplicantDashboard(row)) throw new Error("Interest already submitted for this event");
@@ -435,13 +430,10 @@ export const submitInterestNumber = mutation({
       }
       throw new Error("You can submit a maximum of 3 interests per event");
     }
-    // Count successful submissions too: withdrawal cannot reset the discovery budget.
-    if (budget) await ctx.db.patch(budget._id, { windowStart: fresh ? Date.now() : budget.windowStart, count: fresh ? 1 : budget.count + 1 });
-    else await ctx.db.insert("interestLookups", { registrationId: registration._id, windowStart: Date.now(), count: 1 });
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique()
       : null;
-    if (!target || target.archivedAt !== undefined ||
+    if (!target || (target.archivedAt !== undefined || isSecurityRetired(target)) ||
         target._id === registration._id || target.gender === registration.gender || target.status !== "approved" || target.profileCompletionStatus !== "completed") {
       throw new Error("Applicant details could not be verified");
     }
