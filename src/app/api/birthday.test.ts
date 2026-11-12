@@ -72,3 +72,18 @@ test("legacy owner read returns known birthday without inventing a legacy birthd
     expect((await response.json()).registration.dateOfBirth).toBe(dateOfBirth);
   }
 });
+
+for (const backgroundMatchmakingOptIn of [true,false,undefined]) test('checkout forwards consent '+backgroundMatchmakingOptIn,async()=>{
+  expect((await checkout(request({...signup,dateOfBirth:'1990-01-01',backgroundMatchmakingOptIn}))).status).toBe(200);
+  expect(mocks.mutation.mock.calls[0][1].backgroundMatchmakingOptIn).toBe(backgroundMatchmakingOptIn);
+  expect(JSON.stringify(mocks.create.mock.calls)).not.toContain('backgroundMatchmaking');
+});
+for (const backgroundMatchmakingOptIn of ['true',1,null,[],{}]) test('checkout rejects malformed consent '+JSON.stringify(backgroundMatchmakingOptIn),async()=>{
+  expect((await checkout(request({...signup,dateOfBirth:'1990-01-01',backgroundMatchmakingOptIn}))).status).toBe(400);
+  expect(mocks.query).not.toHaveBeenCalled();expect(mocks.create).not.toHaveBeenCalled();expect(mocks.mutation).not.toHaveBeenCalled();
+});
+test('provider failure never persists signup consent',async()=>{
+  mocks.create.mockRejectedValue(new Error('synthetic provider failure'));
+  expect((await checkout(request({...signup,dateOfBirth:'1990-01-01',backgroundMatchmakingOptIn:true}))).status).toBe(500);
+  expect(mocks.mutation).not.toHaveBeenCalled();
+});

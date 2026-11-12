@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { matchmakingConsentLabel } from "@/lib/matchmaking-consent";
 import { isVisibleMatchmakerMatch, matchmakerArticleId, MATCHMAKER_UPDATED_EVENT } from "./matchmaker-notifications";
 import { ProfileRequirements } from "./profile-requirements";
 import { FactList } from "@/components/admin/primitives/fact-list";
@@ -81,7 +82,7 @@ export function MatchmakerMatching({ archived = false, onSessionExpired }: { arc
       {!loading && !data && <button className="btn" onClick={() => { setError(""); void load(); }}>Try again</button>}
       {data && <>
         <div>{archived && <p>Your profile is archived. You can still opt out of future background matchmaking; opting in requires restoring availability.</p>}<p>Alhamdulillah, 1 Plus 1 has several matchmakers who are dedicated to finding matches within the pool, beyond events. Please check the box below if you would like to be considered for background matches.</p>
-          <label style={{ display: "flex", alignItems: "start", gap: 10, marginTop: 16, paddingBlock: 8 }}><input type="checkbox" checked={data.optedIn} disabled={busy || loading || (archived && !data.optedIn)} onChange={event => void act({ action: "consent", optedIn: event.target.checked }, event.target.checked ? "You are now opted in to future background matches." : "You are opted out of future background matches.")} style={{ marginTop: 4, width: 18, height: 18, flexShrink: 0 }} /><span>I would like to be considered for background matchmaking.</span></label>
+          <label style={{ display: "flex", alignItems: "start", gap: 10, marginTop: 16, paddingBlock: 8 }}><input type="checkbox" checked={data.optedIn} disabled={busy || loading || (archived && !data.optedIn)} onChange={event => void act({ action: "consent", optedIn: event.target.checked }, event.target.checked ? "You are now opted in to future background matches." : "You are opted out of future background matches.")} style={{ marginTop: 4, width: 18, height: 18, flexShrink: 0 }} /><span>{matchmakingConsentLabel}</span></label>
           <p style={{ color: "var(--mute)", fontSize: 13 }}>You can opt out at any time. This changes future introductions only; use Withdraw on an individual match before contacts are shared. Existing shared-contact records remain available.</p>
           {data.consentUpdatedAt && <small>Preference saved {date(data.consentUpdatedAt)}</small>}
         </div>

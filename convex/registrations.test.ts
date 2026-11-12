@@ -228,3 +228,42 @@ test("saved photo choices reject legacy ask without rewriting history", async ()
  expect((await getRegistration(t, id))?.photoSharingPermission).toBe(choice);
  }
 });
+
+
+describe('signup matchmaking consent', () => {
+  for (const consent of [true, false, undefined]) test('new-only consent ' + consent, async () => {
+    const t = convexTest(schema, modules);
+    const args = {...baseRegistrationArgs, adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!, email:'consent@example.invalid', backgroundMatchmakingOptIn:consent};
+    const id = await t.mutation(api.registrations.create,args);
+    const row = await getRegistration(t,id);
+    expect(row?.backgroundMatchmakingOptIn).toBe(consent === true);
+    expect(row?.backgroundMatchmakingConsentUpdatedAt).toBe(consent === undefined ? undefined : row?.createdAt);
+    await t.run(ctx => ctx.db.insert('applicantSessions',{registrationId:id,sessionHash:'consent-session',createdAt:Date.now(),expiresAt:Date.now()+100000}));
+    expect(await t.query(api.matchmakerMatching.getMine,{sessionHash:'consent-session'})).toMatchObject({optedIn:consent === true,matches:[]});
+    await t.mutation(api.matchmakerMatching.setConsent,{sessionHash:'consent-session',optedIn:consent !== true});
+    const saved = await getRegistration(t,id);
+    await expect(t.mutation(api.registrations.create,args)).rejects.toThrow('already registered');
+    expect(await getRegistration(t,id)).toEqual(saved);
+    await t.run(insertScheduledEvent);
+    await t.mutation(api.registrations.create,{...args,eventCode:'may-workshop'});
+    const reused = await getRegistration(t,id);
+    expect(reused?.backgroundMatchmakingOptIn).toBe(saved?.backgroundMatchmakingOptIn);
+    expect(reused?.backgroundMatchmakingConsentUpdatedAt).toBe(saved?.backgroundMatchmakingConsentUpdatedAt);
+    expect(await t.run(ctx=>ctx.db.query('matchmakerNotifications').collect())).toEqual([]);
+  });
+  test('failed create does not persist consent; retry creates once', async()=>{
+    const t=convexTest(schema,modules);
+    const args={...baseRegistrationArgs,adminSecret:process.env.ATTENDANCE_ADMIN_SECRET!,email:'retry@example.invalid',backgroundMatchmakingOptIn:true};
+    await expect(t.mutation(api.registrations.create,{...args,eventCode:'missing-event'})).rejects.toThrow();
+    expect(await t.run(ctx=>ctx.db.query('registrations').collect())).toEqual([]);
+    await t.mutation(api.registrations.create,args);
+    await expect(t.mutation(api.registrations.create,{...args,backgroundMatchmakingOptIn:false})).rejects.toThrow();
+    const rows=await t.run(ctx=>ctx.db.query('registrations').collect());
+    expect(rows).toHaveLength(1); expect(rows[0].backgroundMatchmakingOptIn).toBe(true);
+  });
+  for(const malformed of ['true',1,null,[],{}]) test('malformed consent '+JSON.stringify(malformed),async()=>{
+    const t=convexTest(schema,modules);
+    await expect(t.mutation(api.registrations.create,{...baseRegistrationArgs,adminSecret:process.env.ATTENDANCE_ADMIN_SECRET!,email:'bad@example.invalid',backgroundMatchmakingOptIn:malformed as boolean})).rejects.toThrow();
+    expect(await t.run(ctx=>ctx.db.query('registrations').collect())).toEqual([]);
+  });
+});

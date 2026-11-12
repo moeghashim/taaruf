@@ -32,6 +32,15 @@ export async function POST(request: NextRequest) {
     }
     const body = await request.json();
     const convex = getConvexClient();
+    if (body.action === "withdraw") {
+      if (typeof body.eventRegistrationId !== "string" || !body.eventRegistrationId) {
+        return NextResponse.json({ error: "eventRegistrationId is required" }, { status: 400 });
+      }
+      const eventRegistrationId = await convex.mutation(api.events.withdrawParticipation, {
+        sessionHash, eventRegistrationId: body.eventRegistrationId,
+      });
+      return NextResponse.json({ success: true, result: { eventRegistrationId } });
+    }
     if (body.action === "confirm") {
       if (!body.eventRegistrationId) {
         return NextResponse.json({ error: "eventRegistrationId is required" }, { status: 400 });
