@@ -75,7 +75,8 @@ for (const source of ["platform_submission", "admin_entered", "email", "whatsapp
       const profile = row.profile ?? row.counterparty;
       expect(profile.email).toBe(released ? `${sessionHash === "brother" ? "sister" : "brother"}@example.invalid` : null);
       if (female && sessionHash === "sister") expect(row.femaleWorkflow).toBe(true);
-      if (sessionHash === "brother") expect(JSON.stringify(row)).not.toContain("Synthetic Sister");
+      if (sessionHash === "brother" && female) expect(JSON.stringify(row)).not.toContain("Synthetic Sister");
+      if (sessionHash === "brother" && !female) expect(profile.label).toBe("Synthetic Sister");
       expect(JSON.stringify(row)).not.toContain("reviewTokenHash");
     }
   }
@@ -250,7 +251,8 @@ for (const source of ["platform_submission", "admin_entered", "email", "whatsapp
   const payload = await landed.json();
   const profile = female ? payload.profile : payload.outbound.find((row: { interestId: string }) => row.interestId === id)?.counterparty;
   expect(profile.email).toBe(released ? "sister@example.invalid" : null);
-  expect(JSON.stringify(payload)).not.toContain("Synthetic Sister");
+  if (female) expect(JSON.stringify(payload)).not.toContain("Synthetic Sister");
+  else expect(profile.label).toBe("Synthetic Sister");
   const replay = await verifyGET(new NextRequest(link));
   const retry = new URL(replay.headers.get("location")!);
   expect(retry.pathname).toBe("/login"); expect(retry.searchParams.get("next")).toBe(destination);

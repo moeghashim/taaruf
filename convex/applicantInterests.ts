@@ -148,7 +148,9 @@ async function safeCounterparty(
   if ([viewer, counterparty].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) return null;
   const bioVisible = await interestBioVisible(ctx, interest);
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
-  const showName = showProfile && !(viewer.gender === "male" && counterparty.gender === "female");
+  // Outbound applicants already identify their chosen recipient; inbound sister reviews remain anonymous.
+  const showName = showProfile && (direction === "outbound" || !(viewer.gender === "male" && counterparty.gender === "female"));
+  const displayName = showName ? counterparty.name.trim() : "";
   const contactShared = await contactsVisible(ctx, interest, flow);
   const fullProfileVisible =
     showProfile &&
@@ -173,7 +175,7 @@ async function safeCounterparty(
   return {
     registrationId: showProfile ? counterparty._id : null,
     applicantNumber: counterpartyNumber ?? null,
-    ...(showName ? { name: counterparty.name } : {}),
+    ...(displayName ? { name: displayName } : {}),
     age: await currentAge(ctx, counterparty),
     gender: counterparty.gender,
     maritalStatus: fullProfileVisible ? counterparty.maritalStatus : null,
@@ -190,7 +192,7 @@ async function safeCounterparty(
     shareableBio: bioVisible ? counterparty.shareableBio ?? null : null,
     email: contactShared ? counterparty.email : null,
     phone: contactShared ? counterparty.phone : null,
-    label: showName ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
+    label: displayName || `Applicant #${counterpartyNumber ?? "-"}`,
     fullProfileVisible,
     viewerGender: viewer.gender,
   };

@@ -594,7 +594,7 @@ function Section({
       </div>
       {children}
       {!!extraReviewIds.length && <div className="interest-list">{extraReviewIds.map((id, index) => <button type="button" className={`interest-row ${requestedConnectionId === id ? "selected" : ""}`} key={id} data-interest-id={id} aria-pressed={requestedConnectionId === id} onClick={() => selectReview(id)}>Review connection {index + 1}</button>)}</div>}
-      <div className={`interest-workspace ${interests.length ? "" : "empty"}`}>
+      <div className={`interest-workspace ${interests.length ? "" : "empty"} ${reviewActive ? "review-active" : ""}`}>
         {interests.length ? (
           <>
             <div className="interest-list">

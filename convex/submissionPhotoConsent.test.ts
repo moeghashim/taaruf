@@ -175,3 +175,14 @@ test("profile preference changes apply to new recipients, not existing snapshots
   await f.t.run(ctx => ctx.db.patch(f.people[0], { photoSharingPermission: "yes" }));
   expect((await f.dashboard(2)).inbound[0].counterparty?.imageUrls).toEqual([]);
 });
+
+test("3955 outbound name fallback and unrelated identity remain gated", async () => {
+ const f=await fixture("male");await f.submit();
+ expect((await f.dashboard(0)).outbound[0].counterparty).toMatchObject({name:"Person 1",label:"Person 1"});
+ expect((await f.dashboard(2)).outbound).toEqual([]);
+ await f.t.run(ctx=>ctx.db.patch(f.people[1],{name:"   "}));
+ expect((await f.dashboard(0)).outbound[0].counterparty?.label).toBe("Applicant #2");
+ expect((await f.dashboard(0)).outbound[0].counterparty).not.toHaveProperty("name");
+ await f.t.run(ctx=>ctx.db.patch(f.people[1],{archivedAt:Date.now()}));
+ expect((await f.dashboard(0)).outbound[0]?.counterparty ?? null).toBeNull();
+});
