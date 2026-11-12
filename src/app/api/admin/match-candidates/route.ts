@@ -11,6 +11,6 @@ export async function GET(request: NextRequest) {
   if (!token || !/^[a-f0-9]{64}$/.test(token) || !expected || token.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) return NextResponse.json({ error: "Your admin session has expired. Sign in again." }, { status: 401 });
   try {
     const rows = await getConvexClient().query(api.matches.getCandidates, { adminSecret: getAdminSecret() });
-    return NextResponse.json(rows.map(({ _id, name, gender, publicApplicantNumber }) => ({ _id, name, gender, publicApplicantNumber })), { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(rows.map(({ _id, name, gender, publicApplicantNumber, backgroundMatchmakingOptIn }) => ({ _id, name, gender, publicApplicantNumber, backgroundMatchmakingOptIn })), { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "Unable to load eligible applicants." }, { status: 503 }); }
 }

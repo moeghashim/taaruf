@@ -814,3 +814,7 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — request3970
 - Added same-event authorized incoming-review interception before submission side effects, exact-ID portal routing, linked-match history dimming, and focused privacy/lifecycle/quota tests.
+## 2026-11-12
+- Integrated approved signup consent and strict opt-in dropdown labels onto verified serving c45880f; preserved portal and existing consent. Typed archive browser harness without lint rule suppression. Preview preparation only; no production deployment.
+- Requests Layla3987/3995: remove participant archive UI and disable own archive/restore at HTTP and Convex; preserve admin controls and remove only My Profile DOB helper; add regressions and requirement provenance. <!-- project: github.com/moeghashim/clawscrewskill -->
+- PR156 validation: append-only integration of certified PR155 ancestry; preserve both histories and current privacy/photo/signup/archive behavior. No live release. <!-- project: github.com/moeghashim/clawscrewskill -->

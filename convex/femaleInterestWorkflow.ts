@@ -132,7 +132,10 @@ export const getReviewAccess = query({ args: reviewArgs, handler: async (ctx, ar
   if (data.workflow.state === "private_documented" || !data.workflow.reviewTokenHash) throw new Error("Review unavailable");
   if (person._id === data.brother._id && (data.workflow.state === "awaiting_brother_review" || args.reviewTokenHash !== undefined)) checkReview(data.workflow, args.reviewTokenHash);
   const profile = person._id === data.brother._id ? data.sister : data.brother;
-  const photos = person._id === data.brother._id && data.interest.senderPhotoConsent === "yes" && data.interest.senderPhotoConsentRevokedAt === undefined;
+  const photos = person._id === data.brother._id
+    ? data.interest.senderPhotoConsent === "yes" && data.interest.senderPhotoConsentRevokedAt === undefined
+    : profile.photoSharingPermission === "yes" ||
+      (data.flow.photoDecision === "approved" && data.flow.photoRequestedByRegistrationId === person._id);
   const imageUrls = photos ? (await Promise.all((profile.imageStorageIds ?? []).map(id => ctx.storage.getUrl(id)))).filter((url): url is string => !!url) : [];
   const released = await contactsVisible(ctx, data.interest, data.flow);
   return { ...applicantReview(data.interest, person._id === data.brother._id ? "brother" : "sister", data.flow, data.match?.status === "paused", false, released),

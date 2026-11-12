@@ -25,7 +25,7 @@ for(const width of [390,1280])for(const decision of ["pending","approved","decli
  if(decision==="approved")await expect(outbound.getByText("Your decision: approved.",{exact:true})).toBeVisible();
  await outbound.locator('[data-interest-id="first"]').click();await expect(review.getByRole("heading",{name:"Review first",exact:true})).toBeVisible();await expect(page).toHaveURL(/femaleReview=first#outbound-interests/);
  await page.goBack();await expect(review.getByRole("heading",{name:"Review second",exact:true})).toBeVisible();
- }else {await expect(outbound.getByText("Your decision: declined.",{exact:true})).toBeVisible();await expect(review.locator("button")).toHaveCount(0);}
+ }else {await expect(outbound.getByText("Your decision: declined.",{exact:true})).toBeVisible();await expect(outbound.getByText("Your decision: declined.",{exact:true})).toHaveCount(1);await expect(review.locator("button")).toHaveCount(0);await expect(review.locator("img")).toHaveCount(0);await expect(review.getByRole("heading",{name:/Review (first|second)/})).toHaveCount(0);await expect(review.getByText(/Authorized bio/)).toHaveCount(0);}
  await expect(review.locator("#contact-details")).toHaveCount(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await outbound.screenshot({path:info.outputPath("outbound.png")});expect(writes).toEqual([]);
 });

@@ -75,7 +75,8 @@ for (const source of ["platform_submission", "admin_entered", "email", "whatsapp
       const profile = row.profile ?? row.counterparty;
       expect(profile.email).toBe(released ? `${sessionHash === "brother" ? "sister" : "brother"}@example.invalid` : null);
       if (female && sessionHash === "sister") expect(row.femaleWorkflow).toBe(true);
-      if (sessionHash === "brother") expect(JSON.stringify(row)).not.toContain("Synthetic Sister");
+      if (sessionHash === "brother" && female) expect(JSON.stringify(row)).not.toContain("Synthetic Sister");
+      if (sessionHash === "brother" && !female) expect(profile.label).toBe(source === "platform_submission" ? "Synthetic Sister" : "Applicant #73");
       expect(JSON.stringify(row)).not.toContain("reviewTokenHash");
     }
   }
@@ -250,7 +251,8 @@ for (const source of ["platform_submission", "admin_entered", "email", "whatsapp
   const payload = await landed.json();
   const profile = female ? payload.profile : payload.outbound.find((row: { interestId: string }) => row.interestId === id)?.counterparty;
   expect(profile.email).toBe(released ? "sister@example.invalid" : null);
-  expect(JSON.stringify(payload)).not.toContain("Synthetic Sister");
+  if (female) expect(JSON.stringify(payload)).not.toContain("Synthetic Sister");
+  else expect(profile.label).toBe(source === "platform_submission" ? "Synthetic Sister" : "Applicant #73");
   const replay = await verifyGET(new NextRequest(link));
   const retry = new URL(replay.headers.get("location")!);
   expect(retry.pathname).toBe("/login"); expect(retry.searchParams.get("next")).toBe(destination);
@@ -353,4 +355,27 @@ test("real sister projection moves at actual share before target acceptance", as
  expect((await categories()).outbound).toHaveLength(0);
  await t.run(ctx=>ctx.db.patch(id,{status:"closed",testReset:{actor:"admin",reason:"Synthetic reset",at:Date.now()}}));
  expect((await categories()).outbound).toHaveLength(0);
+});
+
+for (const damage of ["closed-flow", "declined-flow", "missing-flow", "wrong-flow", "missing-match", "closed-match", "declined-match", "reset-match", "wrong-match"] as const) test("3955 every serialized row withholds name: " + damage, async () => {
+ const f=await fixture("platform_submission",false,false,true);
+ await f.t.run(async ctx=>{
+  const flow=(await ctx.db.query("interestFlows").withIndex("by_interestId",q=>q.eq("interestId",f.id)).unique())!;
+  if(damage==="closed-flow"||damage==="declined-flow") await ctx.db.patch(flow._id,{flowStatus:damage==="closed-flow"?"closed":"declined"});
+  if(damage==="missing-flow") await ctx.db.delete(flow._id);
+  if(damage==="wrong-flow") await ctx.db.patch(flow._id,{toRegistrationId:f.maleId});
+  if(damage==="missing-match") await ctx.db.delete(f.matchId);
+  if(damage==="closed-match"||damage==="declined-match") await ctx.db.patch(f.matchId,{status:damage==="closed-match"?"closed":"declined"});
+  if(damage==="reset-match") await ctx.db.patch(f.matchId,{testResetAt:Date.now()});
+  if(damage==="wrong-match") await ctx.db.patch(f.matchId,{femaleRegistrationId:f.maleId});
+ });
+ const dashboard=await f.t.query(api.applicantInterests.getDashboard,{sessionHash:"brother"});
+ expect(dashboard.outbound[0].counterparty).not.toHaveProperty("name");
+ expect(dashboard.outbound[0].counterparty?.label).toBe("Applicant #73");
+ const response=await GET(new NextRequest("https://synthetic.invalid/api/applicant/me"));
+ expect(response.status).toBe(200);
+ expect((await response.json()).outbound[0].counterparty).not.toHaveProperty("name");
+ const targeted=await GET(new NextRequest("https://synthetic.invalid/api/applicant/me?connection="+f.id));
+ if(targeted.status===200) expect((await targeted.json()).outbound[0].counterparty).not.toHaveProperty("name");
+ else expect(targeted.status).toBe(404);
 });
