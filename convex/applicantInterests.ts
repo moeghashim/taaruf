@@ -1,3 +1,4 @@
+import { enqueueFinalRequests, finalRequestEnabled } from "./finalRequest";
 import { existingInboundReview } from "./existingInboundReview";
 import { interestBioVisible } from "./bioVisibility";
 import { currentAge } from "./birthdays";
@@ -544,6 +545,8 @@ export const respondToInbound = mutation({
       bioVisibleAt: now,
       updatedAt: now,
     });
+    // Existing accepted rows (including pre-deployment history) never backfill.
+    if (flow.recipientDecision !== "accepted" && flow.bioVisibleAt === undefined) await enqueueFinalRequests(ctx, interest._id);
     await appendEvent(ctx, flow, "inbound_accepted", registration._id);
     return flow._id;
   },
@@ -692,7 +695,7 @@ export const giveFinalApproval = mutation({
 
     const matchId = await recordPairApproval(ctx, interest, registration._id, args.approved);
     const updatedFlow = (await ctx.db.get(flow._id))!;
-    const shouldNotify = args.approved && !matchId && !updatedFlow.finalApprovalNotificationSentAt;
+    const shouldNotify = !finalRequestEnabled() && args.approved && !matchId && !updatedFlow.finalApprovalNotificationSentAt;
     if (shouldNotify) await ctx.db.patch(flow._id, { finalApprovalNotificationSentAt: now, finalApprovalNotificationError: undefined });
     return { flowId: serverDelivery ? flow._id : null, matchId: serverDelivery ? matchId : null, finalApprovalNotification: serverDelivery && shouldNotify ? { interestId: interest._id } : null, contactSharedNotification: null, alreadyRecorded: false };
   },
@@ -742,6 +745,7 @@ export const getNotificationRecipient = query({
     if (!interest || interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest unavailable");
     if (![interest.fromRegistrationId, interest.toRegistrationId].includes(person._id)) throw new Error("Unauthorized");
     if (args.kind === "inbound" && (person._id !== interest.fromRegistrationId || interest.visibility === "internal_only")) throw new Error("Unauthorized");
+    if (args.kind === "final_approval" && finalRequestEnabled()) throw new Error("Legacy final notification disabled");
     const id = args.kind === "inbound" || person._id === interest.fromRegistrationId ? interest.toRegistrationId : interest.fromRegistrationId;
     const recipient = await ctx.db.get(id);
     if (!recipient) throw new Error("Applicant unavailable");

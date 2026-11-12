@@ -1,3 +1,4 @@
+import { FINAL_REQUEST_ACTIVATION_KEY } from "./finalRequest";
 import { SISTER_CONFIRMATION_ACTIVATION_KEY } from "./sisterConfirmationActivation";
 import { BROTHER_REVIEW_ACTIVATION_KEY } from "./brotherReviewActivation";
 import { CAPABILITY_CUTOFF_KEY } from "./capabilitySecurity";
@@ -32,7 +33,7 @@ export const set = mutation({
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .first();
 
-    if (args.key === "matchmakerEmailActivationAt" || args.key === "profileRejectionNoticeActivatedAt" || args.key === BROTHER_REVIEW_ACTIVATION_KEY || args.key === SISTER_CONFIRMATION_ACTIVATION_KEY) throw new Error("Use one-time brother review activation; boundary is immutable");
+    if (args.key === FINAL_REQUEST_ACTIVATION_KEY || args.key === "matchmakerEmailActivationAt" || args.key === "profileRejectionNoticeActivatedAt" || args.key === BROTHER_REVIEW_ACTIVATION_KEY || args.key === SISTER_CONFIRMATION_ACTIVATION_KEY) throw new Error("Use one-time brother review activation; boundary is immutable");
     if (args.key === CAPABILITY_CUTOFF_KEY) {
       const cutoff = Number(args.value);
       const previous = existing ? Number(existing.value) : 0;
