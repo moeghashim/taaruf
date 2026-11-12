@@ -1464,7 +1464,7 @@ export default function ApplicantDashboardPage() {
                 description="People who expressed interest in you."
                 requestedConnectionId={selectedReviewId ?? selectedConnectionId}
                 interests={data.inbound}
-                reviewIds={data.applicant.gender === "male" ? (reviews ?? []).filter(row => row.role === "brother" && row.canView && row.state !== "closed").map(row => row.interestId) : []}
+                reviewIds={data.applicant.gender === "male" ? (reviews ?? []).filter(row => row.role === "brother" && row.canView && !row.reviewExpired && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(row.state)).map(row => row.interestId) : []}
                 reviewActive={!archived && data.applicant.status === "approved" && data.applicant.gender === "male" && !!selectedReviewId}
                 onAction={async body => { await runAction(body); }}
                 busy={busy || archived}
@@ -1478,7 +1478,7 @@ export default function ApplicantDashboardPage() {
                 requestedConnectionId={selectedReviewId ?? selectedConnectionId}
                 interests={categories.outbound}
                 viewerGender={data.applicant.gender}
-                reviewIds={data.applicant.gender === "female" ? (reviews ?? []).filter(row => row.role === "sister" && row.canView && row.state !== "closed").map(row => row.interestId) : []}
+                reviewIds={data.applicant.gender === "female" ? (reviews ?? []).filter(row => row.role === "sister" && row.canView && !row.reviewExpired && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(row.state)).map(row => row.interestId) : []}
                 reviewActive={!archived && data.applicant.status === "approved" && data.applicant.gender === "female" && !!selectedReviewId}
                 onAction={async body => { await runAction(body); }}
                 busy={busy || archived}
