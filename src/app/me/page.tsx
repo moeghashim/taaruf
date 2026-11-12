@@ -54,6 +54,7 @@ type DashboardInterest = {
     ethnicity: string | null;
     prayerCommitment: string | null;
     hijabResponse: string | null;
+    requirementsVisible?: boolean;
     spouseRequirement1: string | null;
     spouseRequirement2: string | null;
     spouseRequirement3: string | null;
@@ -383,7 +384,7 @@ function ProfileSideCard({
         </div>
       )}
 
-      {counterparty?.fullProfileVisible && (
+      {counterparty?.fullProfileVisible && counterparty.requirementsVisible && (
         <div className="profile-review-box">
           <ProfileRequirements profile={counterparty} />
         </div>
@@ -429,6 +430,7 @@ function ProfileSideCard({
       {interest.contactSharedAt && counterparty?.email && counterparty.phone && (
         <div className="contact-box">
           <p>Contact info shared</p>
+          {viewerGender === "male" && <p>You can now reach out to the sister using the contact details below. A warm introduction is a lovely place to start.</p>}
           <p>
             <span>Email</span>
             {counterparty.email}
@@ -867,11 +869,27 @@ export default function ApplicantDashboardPage() {
     }
   }
 
+  const lookupRequests = useRef([0, 0, 0]);
+  useEffect(() => { lookupRequests.current = lookupRequests.current.map(n => n + 1); setInterestRows(rows => rows.map(row => ({ ...row, name: "" }))); }, [data?.interestSubmissionEventId, data?.canSubmitInterest]);
+  async function lookupName(index: number) {
+    const number = interestRows[index].number;
+    const eventId = data?.interestSubmissionEventId;
+    const requestId = ++lookupRequests.current[index];
+    if (!number || !eventId || !data?.canSubmitInterest) return;
+    try {
+      const response = await fetch("/api/applicant/interests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "lookup_name", applicantNumber: Number(number), expectedEventId: eventId }) });
+      const result = await response.json();
+      if (lookupRequests.current[index] !== requestId) return;
+      setInterestRows(rows => rows.map((row, i) => i === index && row.number === number ? { ...row, name: response.ok ? result.firstName ?? "" : "" } : row));
+      if (!response.ok || !result.firstName) setMessage(response.status === 429 ? "Too many name checks. Please try again in an hour." : "Applicant details could not be verified. Check the applicant number.");
+    } catch { if (lookupRequests.current[index] === requestId) setMessage("Unable to check the name. Please try again."); }
+  }
+
   async function submitNumber(event: React.FormEvent<HTMLFormElement>, index: number) {
     event.preventDefault();
     if (busy || eligibilityError || !data?.canSubmitInterest || !data.interestSubmissionEventId) return;
     const row = interestRows[index];
-    if (await runAction({ action: "submit_number", expectedEventId: data.interestSubmissionEventId, applicantNumber: Number(row.number), applicantName: row.name })) {
+    if (await runAction({ action: "submit_number", expectedEventId: data.interestSubmissionEventId, applicantNumber: Number(row.number) })) {
       setInterestRows(Array.from({ length: 3 }, () => ({ number: "", name: "" })));
     }
   }
@@ -1298,7 +1316,7 @@ export default function ApplicantDashboardPage() {
                 <div>
                   <h3>Submit Interest</h3>
                   <p aria-live="polite">{!archived && data.canSubmitInterest
-                    ? "Enter the applicant's number and first name. Maximum 3 interests per event."
+                    ? "Enter the applicant's number. Their first name appears automatically. Maximum 3 interests per event."
                     : "Interest submissions will open after being approved and checked in for the next event"}</p>
                 </div>
               </div>
@@ -1308,13 +1326,13 @@ export default function ApplicantDashboardPage() {
                 return <form key={index} onSubmit={event => submitNumber(event, index)} className="applicant-number-form" aria-label={`Interest ${index + 1}`}>
                   <div className="field">
                     <label htmlFor={`interest-number-${index}`}>Interest {index + 1} · Applicant #</label>
-                    <input id={`interest-number-${index}`} type="number" min="1" step="1" inputMode="numeric" required disabled={busy || Boolean(eligibilityError) || Boolean(submitted)}
+                    <input id={`interest-number-${index}`} type="number" min="1" step="1" inputMode="numeric" onBlur={() => lookupName(index)} required disabled={busy || Boolean(eligibilityError) || Boolean(submitted)}
                       placeholder={submitted ? "Submitted" : "Applicant #"} value={submitted ? "" : interestRows[index].number}
-                      onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, number: event.target.value } : row))} />
+                      onChange={event => { lookupRequests.current[index]++; setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, number: event.target.value, name: "" } : row)); }} />
                   </div>
                   <div className="field">
                     <label htmlFor={`interest-name-${index}`}>First name</label>
-                    <input id={`interest-name-${index}`} required maxLength={200} disabled={busy || Boolean(eligibilityError) || Boolean(submitted)} placeholder="First name"
+                    <input id={`interest-name-${index}`} readOnly maxLength={200} disabled={busy || Boolean(eligibilityError) || Boolean(submitted)} placeholder="First name"
                       value={submitted ? "" : interestRows[index].name}
                       onChange={event => setInterestRows(rows => rows.map((row, i) => i === index ? { ...row, name: event.target.value } : row))} />
                   </div>

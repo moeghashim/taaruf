@@ -207,9 +207,9 @@ for (const damage of ["legacy", "admin_entered", "email", "whatsapp", "wrong-act
  expect((await f.dashboard(0)).outbound[0].counterparty).not.toHaveProperty("name");
  expect((await f.dashboard(0)).outbound[0].counterparty?.label).toBe("Applicant #2");
 });
-test("3955 public submission rejects forged provenance and wrong target name",async()=>{
+test("4257 ID-only submission ignores legacy name but rejects forged session",async()=>{
  const f=await fixture("male");
- await expect(f.t.mutation(api.applicantInterests.submitInterestNumber,{...f.args,applicantName:"Incorrect"})).rejects.toThrow("verified");
+ await expect(f.t.mutation(api.applicantInterests.submitInterestNumber,{...f.args,applicantName:"Incorrect"})).resolves.toHaveProperty("interestId");
  await expect(f.t.mutation(api.applicantInterests.submitInterestNumber,{...f.args,sessionHash:"forged"})).rejects.toThrow("Unauthorized");
- expect((await f.snapshot()).interests).toEqual([]);
+ expect((await f.snapshot()).interests).toHaveLength(1);
 });

@@ -171,6 +171,6 @@ test("dedicated mode still sends activated future brother inbound only", async (
   const provider = vi.fn().mockResolvedValue(new Response("{}", { status: 200 })); vi.stubGlobal("fetch", provider);
   await f.t.action(internal.femaleWorkflowDelivery.drain, {});
   expect(provider).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(provider.mock.calls[0][1].body).subject).toBe("A profile is ready for your review");
+  expect(JSON.parse(provider.mock.calls[0][1].body).subject).toBe("New interest received in 1 Plus 1");
   expect(await rows(f)).toEqual([]);
 });
