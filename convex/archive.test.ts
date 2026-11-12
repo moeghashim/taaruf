@@ -18,27 +18,24 @@ async function event(ctx: MutationCtx, startsAt: number, status: Doc<"events">["
 async function seat(ctx: MutationCtx, eventId: Id<"events">, registrationId: Id<"registrations">, registrationStatus: Doc<"eventRegistrations">["registrationStatus"] = "approved", gender: "male" | "female" = "male", waitlistedAt = 1) {
   return ctx.db.insert("eventRegistrations", { eventId, registrationId, registrationStatus, gender, waitlistedAt, confirmationStatus: "confirmed", attendanceStatus: "attended", checkedInAt: 2, eligibilityStatus: "approved_member", receiptAttempt: 3, registrationReceivedEmailSentAt: 4, createdAt: 1, updatedAt: 1 });
 }
-test("owner authentication, required confirmation, stale state, idempotency and preserved profile", async () => {
+test("participant archive and restore reject even valid sessions and bridge credentials without writes", async () => {
   vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "secret");
   const t = convexTest(schema, modules);
   const id = await t.run(async ctx => {
     const id = await member(ctx, "owner");
     await ctx.db.insert("applicantSessions", { registrationId: id, sessionHash: "owner", expiresAt: Date.now() + 100000, createdAt: 1 });
-    await ctx.db.insert("applicantSessions", { registrationId: id, sessionHash: "expired", expiresAt: 1, createdAt: 1 });
-    await ctx.db.insert("applicantSessions", { registrationId: id, sessionHash: "revoked", expiresAt: Date.now() + 100000, revokedAt: 0, createdAt: 1 });
     return id;
   });
-  for (const sessionHash of ["missing", "expired", "revoked"]) await expect(t.mutation(own, { adminSecret: "secret", sessionHash, expectedArchivedAt: null, confirm: true })).rejects.toThrow("Unauthorized");
-  await expect(t.mutation(admin, { adminSecret: "bad", registrationId: id, expectedArchivedAt: null, confirm: true })).rejects.toThrow("Unauthorized");
-  await expect(t.mutation(own, { adminSecret: "secret", sessionHash: "owner", expectedArchivedAt: 7, confirm: true })).rejects.toThrow("state changed");
-  // Exercise runtime validation without weakening the function's literal contract.
-  await expect(t.mutation(own, { adminSecret: "secret", sessionHash: "owner", expectedArchivedAt: null, confirm: false as unknown as true })).rejects.toThrow();
-  const before = await t.run(ctx => ctx.db.get(id));
-  const result = await t.mutation(own, { adminSecret: "secret", sessionHash: "owner", expectedArchivedAt: null, confirm: true });
-  expect(await t.mutation(admin, { adminSecret: "secret", registrationId: id, expectedArchivedAt: null, confirm: true })).toEqual(result);
-  expect(await t.mutation(own, { adminSecret: "secret", sessionHash: "owner", expectedArchivedAt: result.archivedAt, confirm: true })).toEqual(result);
-  await expect(t.mutation(own, { adminSecret: "secret", sessionHash: "owner", expectedArchivedAt: result.archivedAt + 1, confirm: true })).rejects.toThrow("state changed");
-  expect(await t.run(ctx => ctx.db.get(id))).toMatchObject({ ...before, archivedAt: result.archivedAt, archivedBy: "participant", archivedByRegistrationId: id });
+  for (const archivedAt of [undefined, 123]) {
+    await t.run(ctx => ctx.db.patch(id, {archivedAt}));
+    const before = await t.run(ctx => ctx.db.get(id));
+    for (const sessionHash of ["owner", "missing"]) for (const adminSecret of ["secret", "bad"]) {
+      await expect(t.mutation(own, {adminSecret, sessionHash, expectedArchivedAt: null, confirm: true})).rejects.toThrow("managed by the admin team");
+      await expect(t.mutation(api.archive.restoreOwn, {adminSecret, sessionHash, expectedArchivedAt: 123, confirm: true})).rejects.toThrow("managed by the admin team");
+    }
+    expect(await t.run(ctx => ctx.db.get(id))).toEqual(before);
+  }
+  await expect(t.mutation(admin, {adminSecret: "bad", registrationId: id, expectedArchivedAt: null, confirm: true})).rejects.toThrow("Unauthorized");
 });
 test("upcoming only: release same-event/gender FIFO to Pending, retain historical attendance and receipts", async () => {
   vi.useFakeTimers(); vi.setSystemTime(100000); vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "secret");
@@ -78,7 +75,7 @@ test("concurrent archives close active relationships once and retain decisions/h
     await ctx.db.insert("applicantSessions", { registrationId: id, sessionHash: "owner", expiresAt: Date.now() + 100000, createdAt: 1 });
     return { id, other, interestId, matchId, flowId, eventId };
   });
-  const results = await Promise.all([t.mutation(own, { adminSecret: "secret", sessionHash: "owner", expectedArchivedAt: null, confirm: true }), t.mutation(admin, { adminSecret: "secret", registrationId: data.id, expectedArchivedAt: null, confirm: true })]);
+  const results = await Promise.all([t.mutation(admin, { adminSecret: "secret", registrationId: data.id, expectedArchivedAt: null, confirm: true }), t.mutation(admin, { adminSecret: "secret", registrationId: data.id, expectedArchivedAt: null, confirm: true })]);
   expect(results[0]).toEqual(results[1]);
   await t.run(async ctx => {
     expect(await ctx.db.get(data.matchId)).toMatchObject({ status: "closed" });
@@ -97,23 +94,6 @@ test("archived profile cannot be deleted or reactivated by legacy profile contro
  await expect(t.mutation(api.registrations.updateStatus,{id,adminSecret:"secret",status:"approved"})).rejects.toThrow("archived");
  await expect(t.mutation(api.registrations.updateSearchStatus,{id,adminSecret:"secret",searchStatus:"active"})).rejects.toThrow("archived");
  expect(await t.run(ctx=>ctx.db.get(id))).not.toBeNull();
-});
-
-test("archive honors the security cutoff and requires the server bridge even with an owner session", async () => {
-  vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "secret");
-  const t = convexTest(schema, modules);
-  const id = await t.run(async ctx => {
-    const id = await member(ctx, "cutoff-owner");
-    await ctx.db.insert("settings", {key: "capabilitySecurityCutoffMs", value: "100"});
-    for (const [sessionHash, createdAt] of [["old", 99], ["equal", 100], ["fresh", 101]] as const) {
-      await ctx.db.insert("applicantSessions", {registrationId: id, sessionHash, createdAt, expiresAt: Date.now() + 100000});
-    }
-    return id;
-  });
-  for (const sessionHash of ["old", "equal"]) await expect(t.mutation(own, {adminSecret: "secret", sessionHash, confirm: true, expectedArchivedAt: null})).rejects.toThrow("Unauthorized");
-  await expect(t.mutation(own, {adminSecret: "forged", sessionHash: "fresh", confirm: true, expectedArchivedAt: null})).rejects.toThrow("Unauthorized");
-  expect((await t.run(ctx => ctx.db.get(id)))?.archivedAt).toBeUndefined();
-  expect(await t.mutation(own, {adminSecret: "secret", sessionHash: "fresh", confirm: true, expectedArchivedAt: null})).toMatchObject({registrationId: id});
 });
 
 for (const count of [62, 61, 60]) test(`60-cap boundary: ${count} seats cancel to ${count - 1}`, async () => {
@@ -156,10 +136,10 @@ test("restore clears only availability and is authenticated, stale-safe and idem
     return {id, seat: await seat(ctx, eventId, id)};
   });
   const result = await t.mutation(admin, {adminSecret: "secret", registrationId: data.id, expectedArchivedAt: null, confirm: true});
-  const restore = makeFunctionReference<"mutation">("archive:restoreOwn");
-  for (const args of [{adminSecret: "bad", sessionHash: "restore"}, {adminSecret: "secret", sessionHash: "wrong"}]) await expect(t.mutation(restore, {...args, expectedArchivedAt: result.archivedAt, confirm: true})).rejects.toThrow("Unauthorized");
-  await expect(t.mutation(restore, {adminSecret: "secret", sessionHash: "restore", expectedArchivedAt: result.archivedAt + 1, confirm: true})).rejects.toThrow("state changed");
-  for (let i = 0; i < 2; i++) await t.mutation(restore, {adminSecret: "secret", sessionHash: "restore", expectedArchivedAt: result.archivedAt, confirm: true});
+  const restore = makeFunctionReference<"mutation">("archive:restoreAdmin");
+  for (const args of [{adminSecret: "bad", registrationId: data.id}]) await expect(t.mutation(restore, {...args, expectedArchivedAt: result.archivedAt, confirm: true})).rejects.toThrow("Unauthorized");
+  await expect(t.mutation(restore, {adminSecret: "secret", registrationId: data.id, expectedArchivedAt: result.archivedAt + 1, confirm: true})).rejects.toThrow("state changed");
+  for (let i = 0; i < 2; i++) await t.mutation(restore, {adminSecret: "secret", registrationId: data.id, expectedArchivedAt: result.archivedAt, confirm: true});
   await t.run(async ctx => {
     expect(await ctx.db.get(data.id)).toMatchObject({status: "rejected", searchStatus: "paused", photoSharingPermission: "no", paymentStatus: "paid", amountPaid: 50});
     expect((await ctx.db.get(data.id))?.archivedAt).toBeUndefined();

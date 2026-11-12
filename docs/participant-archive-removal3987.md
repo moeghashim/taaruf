@@ -1,0 +1,7 @@
+# Participant portal cleanup — requests 3987 / 3995
+
+- Layla, Telegram message 3987 (2026-11-12): remove participant-side archive capability. Remove the shared self-archive/restore section and reject both retired HTTP endpoints and direct Convex own mutations, including stale authenticated clients. Authenticated ADMIN archive/restore remains unchanged. Preserve existing archived records, matchmaking opt-out, individual withdrawals, privacy/consent controls; no data migration or email. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Layla3990: “no preview, just deploy it asap” waives user preview review and authorizes this scoped production release, not fabricated human DCO or bypassing required checks. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Layla3995: remove the exact DOB helper sentence from My Profile. Keep DOB field, validation/storage, age calculation and age-only sharing. Shared completion form help remains unchanged; portal explicitly hides help. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+Base: serving c45880fed33b2718984216d4f8de2e0f2782f5d7, independently confirmed both live aliases before publication. Isolated worktree; root dirty checkout and concurrent mutual3970/photo3945 branches untouched. No production or participant writes during implementation. Backend-first release required: archive.ts tombstones must ship, not frontend-only hiding. Exact-SHA human DCO remains separate.
