@@ -808,3 +808,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — request 3884
 - Styled viewer decisions with portal pills; moved decision/admin notice below bios in shared inline/standalone and regular details. Added responsive and unit coverage; no backend/action changes.
+
+## 2026-11-11 — styling recovery
+- Recovered request3884 in an isolated checkout; aligned standalone typography, placed decision immediately after Bio, expanded responsive/state/contact coverage, and preserved original PR153 ancestry.
