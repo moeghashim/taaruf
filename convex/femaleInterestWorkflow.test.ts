@@ -193,13 +193,15 @@ test("serialized brother review surfaces omit sister identity throughout approva
     expect(review.profile.label).toBe("Applicant #73");
     expect(JSON.stringify(review)).not.toContain("Synthetic Sister");
     const dashboard = await t.query(api.applicantInterests.getDashboard, { sessionHash: "brother" });
-    for (const row of [...dashboard.inbound, ...dashboard.outbound]) {
+    for (const row of dashboard.inbound) {
       expect(row.counterparty).not.toHaveProperty("name");
       expect(row.counterparty?.label).toBe("Applicant #73");
     }
     expect(dashboard.inbound).toHaveLength(1);
     expect(dashboard.outbound).toHaveLength(1);
-    expect(JSON.stringify(dashboard)).not.toContain("Synthetic Sister");
+    expect(dashboard.outbound[0].counterparty).not.toHaveProperty("name");
+    expect(dashboard.outbound[0].counterparty?.label).toBe("Applicant #73");
+    expect(JSON.stringify(dashboard.inbound)).not.toContain("Synthetic Sister");
     expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "sister" })).applicant.name).toBe("Synthetic Sister");
     expect((await t.query(api.applicantProfile.getProfile, { sessionHash: "sister" })).registration.name).toBe("Synthetic Sister");
     expect((await t.query(api.interests.getAll, { adminSecret })).find(row => row._id === interestId)?.fromRegistration?.name).toBe("Synthetic Sister");
@@ -235,4 +237,44 @@ test("serialized brother review surfaces omit sister identity throughout approva
     expect(message.text).toBeTruthy();
     expect(message.text).not.toContain("5550100");
   }
+});
+
+for (const preference of ["yes", "no", "ask_me_first"] as const) test("3945 stable authorized brother photos: " + preference, async () => {
+  const f = await accepted();
+  await f.t.run(async ctx => {
+    const image = await ctx.storage.store(new Blob(["synthetic"], { type: "image/png" }));
+    await ctx.db.patch(f.brother, { photoSharingPermission: preference, imageStorageIds: [image] });
+  });
+  const read = () => f.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "sister", interestId: f.interestId });
+  expect((await read()).profile.imageUrls).toHaveLength(preference === "yes" ? 1 : 0);
+  await f.t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: f.interestId, approved: true });
+  expect((await read()).profile.imageUrls).toHaveLength(preference === "yes" ? 1 : 0);
+  expect((await read()).profile.email).toBeNull();
+  await f.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId: f.interestId, confirmed: true });
+  expect((await read()).profile.imageUrls).toHaveLength(preference === "yes" ? 1 : 0);
+  await f.t.run(ctx => ctx.db.patch(f.brother, { photoSharingPermission: "no" }));
+  expect((await read()).profile.imageUrls).toEqual([]);
+  await expect(f.t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: "other", interestId: f.interestId })).rejects.toThrow("Unauthorized");
+  await f.t.run(ctx => ctx.db.patch(f.brother, { archivedAt: Date.now() }));
+  await expect(read()).rejects.toThrow();
+});
+
+test("3945 scoped grant, revoke and expired session fail closed", async () => {
+ const f = await accepted();
+ const flowId = await f.t.run(async ctx => {
+  const image = await ctx.storage.store(new Blob(["synthetic"], {type:"image/png"}));
+  await ctx.db.patch(f.brother,{imageStorageIds:[image],photoSharingPermission:"ask_me_first"});
+  const flow=(await ctx.db.query("interestFlows").withIndex("by_interestId",q=>q.eq("interestId",f.interestId)).unique())!;
+  await ctx.db.patch(flow._id,{photoDecision:"approved",photoRequestedByRegistrationId:f.brother});return flow._id;
+ });
+ const read=()=>f.t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"sister",interestId:f.interestId});
+ expect((await read()).profile.imageUrls).toEqual([]);
+ await f.t.run(ctx=>ctx.db.patch(flowId,{photoRequestedByRegistrationId:f.sister}));
+ expect((await read()).profile.imageUrls).toHaveLength(1);
+ await f.t.run(ctx=>ctx.db.patch(flowId,{photoDecision:"declined"}));
+ expect((await read()).profile.imageUrls).toEqual([]);
+ await f.t.run(async ctx=>{const session=(await ctx.db.query("applicantSessions").withIndex("by_sessionHash",q=>q.eq("sessionHash","sister")).unique())!;await ctx.db.patch(session._id,{expiresAt:Date.now()-1});});
+ await expect(read()).rejects.toThrow("Unauthorized");
+ await f.t.mutation(api.femaleInterestWorkflow.revokeReview,{adminSecret,interestId:f.interestId});
+ await expect(f.t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"brother",interestId:f.interestId})).rejects.toThrow();
 });

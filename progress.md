@@ -811,3 +811,7 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-11 — styling recovery
 - Recovered request3884 in an isolated checkout; aligned standalone typography, placed decision immediately after Bio, expanded responsive/state/contact coverage, and preserved original PR153 ancestry.
+
+## 2026-11-12
+- Integrated approved signup consent and strict opt-in dropdown labels onto verified serving c45880f; preserved portal and existing consent. Typed archive browser harness without lint rule suppression. Preview preparation only; no production deployment.
+- Requests Layla3987/3995: remove participant archive UI and disable own archive/restore at HTTP and Convex; preserve admin controls and remove only My Profile DOB helper; add regressions and requirement provenance. <!-- project: github.com/moeghashim/clawscrewskill -->

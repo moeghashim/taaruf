@@ -8,7 +8,6 @@ import { educationOptionsFor, formatEducation } from "@/lib/education";
 import { portalView, portalViews, type PortalView } from "@/lib/applicant-portal-view";
 import { applicantLoginHref } from "@/lib/applicant-destination";
 import { hijabQuestion, hijabOptions, formatHijabResponse, type HijabResponse } from "@/lib/hijab";
-import { ArchiveParticipant } from "@/components/archive-participant";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -98,6 +97,7 @@ type ApplicantEventData = {
     startsAt: number;
     endsAt: number;
     status: string;
+    canWithdraw?: boolean;
     registration: null | {
       _id: string;
       registrationStatus: string;
@@ -110,6 +110,7 @@ type ApplicantEventData = {
   }>;
   history: Array<{
     _id: string;
+    canWithdraw?: boolean;
     registrationStatus: string;
     confirmationStatus: string;
     attendanceStatus: string;
@@ -594,7 +595,7 @@ function Section({
       </div>
       {children}
       {!!extraReviewIds.length && <div className="interest-list">{extraReviewIds.map((id, index) => <button type="button" className={`interest-row ${requestedConnectionId === id ? "selected" : ""}`} key={id} data-interest-id={id} aria-pressed={requestedConnectionId === id} onClick={() => selectReview(id)}>Review connection {index + 1}</button>)}</div>}
-      <div className={`interest-workspace ${interests.length ? "" : "empty"}`}>
+      <div className={`interest-workspace ${interests.length ? "" : "empty"} ${reviewActive ? "review-active" : ""}`}>
         {interests.length ? (
           <>
             <div className="interest-list">
@@ -638,8 +639,7 @@ export default function ApplicantDashboardPage() {
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
-  const [locallyArchivedAt, setLocallyArchivedAt] = useState<number | null | undefined>(undefined);
-  const archivedAt = locallyArchivedAt === undefined ? profile?.archivedAt : locallyArchivedAt;
+  const archivedAt = profile?.archivedAt;
   const archived = archivedAt != null;
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [interestRows, setInterestRows] = useState(() => Array.from({ length: 3 }, () => ({ number: "", name: "" })));
@@ -882,6 +882,29 @@ export default function ApplicantDashboardPage() {
       await loadEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function withdrawEventParticipation(eventRegistrationId: string) {
+    if (busy || !eventsFresh || !window.confirm("Withdraw from this event? Your place or waitlist position will be released. This does not request a refund.")) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await applicantFetch("/api/applicant/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "withdraw", eventRegistrationId }),
+      });
+      await response.json();
+      if (!response.ok) throw new Error("Unable to withdraw. Refresh your event status and try again, or contact support.");
+      setMessage("You have withdrawn from this event. Your place or waitlist position has been released.");
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await loadEvents();
     } finally {
       setBusy(false);
     }
@@ -1199,6 +1222,9 @@ export default function ApplicantDashboardPage() {
                         {event.registration ? (
                           <>
                             <StatusBadge value={event.registration.registrationStatus} />
+                            {event.canWithdraw && event.startsAt > Date.now() && (
+                              <button type="button" className="btn" disabled={busy || !eventsFresh} onClick={() => withdrawEventParticipation(event.registration!._id)}>Withdraw</button>
+                            )}
                             {canConfirmEventRegistration(event.registration) ? (
                               <button
                                 type="button"
@@ -1237,6 +1263,9 @@ export default function ApplicantDashboardPage() {
                         <div className="interest-row-meta">
                           <StatusBadge value={row.registrationStatus} />
                           <StatusBadge value={row.attendanceStatus} />
+                          {row.canWithdraw && (!row.event || row.event.startsAt > Date.now()) && (
+                            <button type="button" className="btn" disabled={busy || !eventsFresh} onClick={() => withdrawEventParticipation(row._id)}>Withdraw</button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1302,7 +1331,7 @@ export default function ApplicantDashboardPage() {
                     {archived && <p>Archived profile details are read-only.</p>}
                     <fieldset disabled={archived} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
                     <div className="profile-grid two profile-basics">
-                    <DateOfBirthField externalHelp originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
+                    <DateOfBirthField hideHelp originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
                       <div className="field">
                         <label htmlFor="education">Education level *</label>
                         <select id="education" value={profile.education || ""}
@@ -1368,7 +1397,6 @@ export default function ApplicantDashboardPage() {
                         </select>
                       </div>
                     </div>
-                    <p id="birthday-help" className="muted">Please add your date of birth for our records and background checks. Only your age is shared with matches.</p>
 
                     <div className="photo-upload-box">
                       <div>
@@ -1496,7 +1524,6 @@ export default function ApplicantDashboardPage() {
               )}
               </>}
             </div>
-            {profile && <ArchiveParticipant archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} onRestored={() => { setLocallyArchivedAt(null); void load(); void loadEvents(); void loadProfile(); }} onArchived={timestamp => { setLocallyArchivedAt(timestamp); void load(); void loadEvents(); void loadProfile(); }} />}
           </div>
         </div>
       </div>

@@ -148,7 +148,30 @@ async function safeCounterparty(
   if ([viewer, counterparty].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) return null;
   const bioVisible = await interestBioVisible(ctx, interest);
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
-  const showName = showProfile && !(viewer.gender === "male" && counterparty.gender === "female");
+  // Validate every outbound row, not just an explicitly requested connection.
+  let outboundIdentityAllowed = direction === "outbound" && interest.source === "platform_submission" && !!flow &&
+    flow.fromRegistrationId === interest.fromRegistrationId && flow.toRegistrationId === interest.toRegistrationId &&
+    !["closed", "declined"].includes(flow.flowStatus) && isVisibleInApplicantDashboard(interest);
+  if (outboundIdentityAllowed && flow) {
+    // A source label alone is not evidence for legacy rows. Only this exact
+    // authenticated Submit Interest receipt authorizes the new name grant.
+    const receipts = await ctx.db.query("interestFlowEvents")
+      .withIndex("by_interestId", q => q.eq("interestId", interest._id)).take(1001);
+    outboundIdentityAllowed = receipts.length <= 1000 && receipts.some(receipt =>
+      receipt.interestFlowId === flow._id && receipt.actor === "applicant" &&
+      receipt.actorRegistrationId === viewer._id && receipt.eventType === "interest_number_submitted" &&
+      receipt.createdAt >= interest.createdAt && receipt.createdAt <= Date.now());
+  }
+  if (outboundIdentityAllowed && interest.matchId) {
+    const match = await ctx.db.get(interest.matchId);
+    if (!match || match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) outboundIdentityAllowed = false;
+    else {
+      try { assertMatchInterest(match, interest); await linkedFlows(ctx, interest); }
+      catch { outboundIdentityAllowed = false; }
+    }
+  }
+  const showName = showProfile && (outboundIdentityAllowed || !(viewer.gender === "male" && counterparty.gender === "female"));
+  const displayName = showName ? counterparty.name.trim() : "";
   const contactShared = await contactsVisible(ctx, interest, flow);
   const fullProfileVisible =
     showProfile &&
@@ -173,7 +196,7 @@ async function safeCounterparty(
   return {
     registrationId: showProfile ? counterparty._id : null,
     applicantNumber: counterpartyNumber ?? null,
-    ...(showName ? { name: counterparty.name } : {}),
+    ...(displayName ? { name: displayName } : {}),
     age: await currentAge(ctx, counterparty),
     gender: counterparty.gender,
     maritalStatus: fullProfileVisible ? counterparty.maritalStatus : null,
@@ -190,7 +213,7 @@ async function safeCounterparty(
     shareableBio: bioVisible ? counterparty.shareableBio ?? null : null,
     email: contactShared ? counterparty.email : null,
     phone: contactShared ? counterparty.phone : null,
-    label: showName ? counterparty.name : `Applicant #${counterpartyNumber ?? "-"}`,
+    label: displayName || `Applicant #${counterpartyNumber ?? "-"}`,
     fullProfileVisible,
     viewerGender: viewer.gender,
   };

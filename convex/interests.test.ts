@@ -557,7 +557,7 @@ describe("interest rules", () => {
       ethnicity: "Arab",
       spouseRequirement1: "Visible Female requirement one",
       shareableBio: null, // Initial interest has not been accepted.
-      label: "Applicant #2",
+      label: "Visible Female",
       email: null,
       phone: null,
     });

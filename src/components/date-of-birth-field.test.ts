@@ -36,3 +36,11 @@ test("owner field allows cleared legacy blank and unchanged age 100 but rejects 
     expect(html).toContain('aria-invalid="' + invalid + '"');
   }
 });
+
+test("portal can hide only the helper while keeping DOB and accessible validation", () => {
+ const html = renderToStaticMarkup(createElement(DateOfBirthField, {hideHelp: true, value: "1990-01-02", onChange: vi.fn()}));
+ expect(html).not.toContain("Please add your date of birth");
+ expect(html).toContain('type="date"');
+ expect(html).toContain('value="1990-01-02"');
+ expect(html).toContain('aria-describedby="birthday-error"');
+});

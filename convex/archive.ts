@@ -1,5 +1,3 @@
-import { sessionAllowed } from "./capabilitySecurity";
-import { requireAdmin } from "./adminAuthorization";
 import { v } from "convex/values";
 import { mutation, type MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -93,13 +91,9 @@ async function archiveParticipant(ctx: MutationCtx, registration: Doc<"registrat
 
 export const archiveOwn = mutation({
   args: { adminSecret: v.string(), sessionHash: v.string(), expectedArchivedAt: v.union(v.number(), v.null()), expectedRestoredArchivedAt: v.optional(v.number()), confirm: v.literal(true) },
-  handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
-    const session = await ctx.db.query("applicantSessions").withIndex("by_sessionHash", q => q.eq("sessionHash", args.sessionHash)).unique();
-    if (!(await sessionAllowed(ctx, session)) || !session) throw new Error("Unauthorized");
-    const registration = await ctx.db.get(session.registrationId);
-    if (!registration) throw new Error("Unauthorized");
-    return archiveParticipant(ctx, registration, args.expectedArchivedAt, "participant", args.expectedRestoredArchivedAt);
+  // Fail-closed tombstone for stale clients and direct mutation requests.
+  handler: async () => {
+    throw new Error("Participant archive and restore are managed by the admin team.");
   },
 });
 export const archiveAdmin = mutation({
@@ -121,13 +115,9 @@ async function restoreParticipant(ctx: MutationCtx, registration: Doc<"registrat
 }
 export const restoreOwn = mutation({
   args: { adminSecret: v.string(), sessionHash: v.string(), expectedArchivedAt: v.number(), confirm: v.literal(true) },
-  handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
-    const session = await ctx.db.query("applicantSessions").withIndex("by_sessionHash", q => q.eq("sessionHash", args.sessionHash)).unique();
-    if (!session || !await sessionAllowed(ctx, session)) throw new Error("Unauthorized");
-    const registration = await ctx.db.get(session.registrationId);
-    if (!registration) throw new Error("Unauthorized");
-    return restoreParticipant(ctx, registration, args.expectedArchivedAt);
+  // Fail-closed tombstone for stale clients and direct mutation requests.
+  handler: async () => {
+    throw new Error("Participant archive and restore are managed by the admin team.");
   },
 });
 export const restoreAdmin = mutation({

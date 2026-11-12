@@ -27,6 +27,8 @@ interface RegistrationEvent {
   endsAt: number;
 }
 
+import { matchmakingConsentLabel } from "@/lib/matchmaking-consent";
+
 interface RegistrationFormData {
   name: string;
   dateOfBirth: string;
@@ -45,6 +47,7 @@ interface RegistrationFormData {
   basicBio: string;
   photoSharingPermission: PhotoSharingPermission;
   backgroundCheckConsent: boolean;
+  backgroundMatchmakingOptIn: boolean;
 }
 
 const prayerOptions = [
@@ -108,6 +111,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
       basicBio: "",
       photoSharingPermission: "",
       backgroundCheckConsent: false,
+      backgroundMatchmakingOptIn: false,
     } as RegistrationFormData,
     onSubmit: async ({ value }) => {
       if (uploadedImages.length < 1) {
@@ -140,6 +144,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
             spouseRequirement3: value.spouseRequirement3,
             shareableBio: value.basicBio,
             photoSharingPermission: value.photoSharingPermission,
+            backgroundMatchmakingOptIn: value.backgroundMatchmakingOptIn,
             imageStorageIds: uploadedImages.map((image) => image.storageId),
             eventCode: event?.eventCode,
           }),
@@ -686,6 +691,30 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
               {field.state.meta.errors?.length > 0 && (
                 <p className="field-error">{field.state.meta.errors.join(", ")}</p>
               )}
+            </div>
+          )}
+        </form.Field>
+
+        <form.Field name="backgroundMatchmakingOptIn">
+          {(field) => (
+            <div className="field">
+              <label htmlFor={field.name} className="consent">
+                <input
+                  id={field.name}
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  aria-describedby="matchmaking-signup-help"
+                />
+                <span>{matchmakingConsentLabel} (Optional)</span>
+              </label>
+              <p id="matchmaking-signup-help">
+                The team may consider you for introductions beyond events. You can change this
+                preference any time in your portal under Matchmaker Matching. This does not
+                give permission to share photos or contact details. If you already have a profile,
+                your saved preference stays unchanged.
+              </p>
             </div>
           )}
         </form.Field>
