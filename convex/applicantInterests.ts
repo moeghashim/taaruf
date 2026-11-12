@@ -148,8 +148,19 @@ async function safeCounterparty(
   if ([viewer, counterparty].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) return null;
   const bioVisible = await interestBioVisible(ctx, interest);
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
-  // Outbound applicants already identify their chosen recipient; inbound sister reviews remain anonymous.
-  const showName = showProfile && (direction === "outbound" || !(viewer.gender === "male" && counterparty.gender === "female"));
+  // Validate every outbound row, not just an explicitly requested connection.
+  let outboundIdentityAllowed = direction === "outbound" && !!flow &&
+    flow.fromRegistrationId === interest.fromRegistrationId && flow.toRegistrationId === interest.toRegistrationId &&
+    !["closed", "declined"].includes(flow.flowStatus) && isVisibleInApplicantDashboard(interest);
+  if (outboundIdentityAllowed && interest.matchId) {
+    const match = await ctx.db.get(interest.matchId);
+    if (!match || match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) outboundIdentityAllowed = false;
+    else {
+      try { assertMatchInterest(match, interest); await linkedFlows(ctx, interest); }
+      catch { outboundIdentityAllowed = false; }
+    }
+  }
+  const showName = showProfile && (outboundIdentityAllowed || !(viewer.gender === "male" && counterparty.gender === "female"));
   const displayName = showName ? counterparty.name.trim() : "";
   const contactShared = await contactsVisible(ctx, interest, flow);
   const fullProfileVisible =

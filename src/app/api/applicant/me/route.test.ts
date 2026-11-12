@@ -356,3 +356,26 @@ test("real sister projection moves at actual share before target acceptance", as
  await t.run(ctx=>ctx.db.patch(id,{status:"closed",testReset:{actor:"admin",reason:"Synthetic reset",at:Date.now()}}));
  expect((await categories()).outbound).toHaveLength(0);
 });
+
+for (const damage of ["closed-flow", "declined-flow", "missing-flow", "wrong-flow", "missing-match", "closed-match", "declined-match", "reset-match", "wrong-match"] as const) test("3955 every serialized row withholds name: " + damage, async () => {
+ const f=await fixture("platform_submission",false,false,true);
+ await f.t.run(async ctx=>{
+  const flow=(await ctx.db.query("interestFlows").withIndex("by_interestId",q=>q.eq("interestId",f.id)).unique())!;
+  if(damage==="closed-flow"||damage==="declined-flow") await ctx.db.patch(flow._id,{flowStatus:damage==="closed-flow"?"closed":"declined"});
+  if(damage==="missing-flow") await ctx.db.delete(flow._id);
+  if(damage==="wrong-flow") await ctx.db.patch(flow._id,{toRegistrationId:f.maleId});
+  if(damage==="missing-match") await ctx.db.delete(f.matchId);
+  if(damage==="closed-match"||damage==="declined-match") await ctx.db.patch(f.matchId,{status:damage==="closed-match"?"closed":"declined"});
+  if(damage==="reset-match") await ctx.db.patch(f.matchId,{testResetAt:Date.now()});
+  if(damage==="wrong-match") await ctx.db.patch(f.matchId,{femaleRegistrationId:f.maleId});
+ });
+ const dashboard=await f.t.query(api.applicantInterests.getDashboard,{sessionHash:"brother"});
+ expect(dashboard.outbound[0].counterparty).not.toHaveProperty("name");
+ expect(dashboard.outbound[0].counterparty?.label).toBe("Applicant #73");
+ const response=await GET(new NextRequest("https://synthetic.invalid/api/applicant/me"));
+ expect(response.status).toBe(200);
+ expect((await response.json()).outbound[0].counterparty).not.toHaveProperty("name");
+ const targeted=await GET(new NextRequest("https://synthetic.invalid/api/applicant/me?connection="+f.id));
+ if(targeted.status===200) expect((await targeted.json()).outbound[0].counterparty).not.toHaveProperty("name");
+ else expect(targeted.status).toBe(404);
+});

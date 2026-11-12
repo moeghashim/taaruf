@@ -223,6 +223,8 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       {!rows.length && (!done || loading || selected) && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
       {rows.filter(item => item.interestId === selected).map(item => <div key={item.interestId}>
         {item.paused && <p>Paused</p>}
+        {/* Closed reviews have no profile payload, but retain the viewer-owned receipt. */}
+        {item.state === "closed" && !profile && <ReviewDecision decision={item.ownDecision} />}
         {/* The embedded profile already sits under its interest direction; standalone routes retain their review header. */}
         {item.state !== "contacts_released" && (!inline || reviewExpired(item) || item.state !== "in_review") && <><h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : item.ownAction === "review" ? "This connection is awaiting your review." : stateCopy[item.state]}</p></>}
 
