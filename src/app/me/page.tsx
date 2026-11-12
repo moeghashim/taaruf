@@ -881,7 +881,7 @@ export default function ApplicantDashboardPage() {
       const result = await response.json();
       if (lookupRequests.current[index] !== requestId) return;
       setInterestRows(rows => rows.map((row, i) => i === index && row.number === number ? { ...row, name: response.ok ? result.firstName ?? "" : "" } : row));
-      if (!response.ok || !result.firstName) setMessage(response.status === 429 ? "Too many name checks. Please try again in an hour." : "Applicant details could not be verified. Check the applicant number.");
+      if (!response.ok || !result.firstName) setMessage("Applicant details could not be verified. Check the applicant number.");
     } catch { if (lookupRequests.current[index] === requestId) setMessage("Unable to check the name. Please try again."); }
   }
 
