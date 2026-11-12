@@ -60,10 +60,17 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     finally { if (requestId === listRequest.current) setLoading(false); }
   }, []);
   useEffect(() => {
-    setLoginHref(applicantLoginHref(window.location.pathname + window.location.search));
     const sync = () => {
+      setLoginHref(applicantLoginHref(window.location.pathname + window.location.search));
       const params = new URLSearchParams(window.location.search);
-      setSelected(params.get("femaleReview"));
+      const nextSelected = params.get("femaleReview");
+      if (selectedRef.current !== nextSelected) {
+        // Invalidate in-flight reads synchronously before navigation can render.
+        ++accessRequest.current;
+        selectedRef.current = nextSelected;
+        setAccess(null); setReviewLoading(false);
+      }
+      setSelected(nextSelected);
       setToken(inline ? undefined : params.get("reviewToken") || undefined);
       setError(""); setMessage("");
     };
@@ -127,6 +134,19 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     const panel = document.getElementById("inline-selected-review");
     if (panel) { panel.focus({ preventScroll: true }); panel.scrollIntoView({ block: "start" }); focusedSelection.current = selected; }
   }, [inline, active, selected, access, reviewLoading]);
+  function returnToPortal() {
+    // Leave the obsolete link, not the account. Never infer revocation from an
+    // empty/partial list or a generic 409 (which can also wrap backend failures).
+    const url = new URL(window.location.href);
+    url.pathname = "/me";
+    url.searchParams.delete("femaleReview");
+    url.searchParams.delete("reviewToken");
+    if (!inline) url.hash = "inbound-interests";
+    if (!inline) { window.location.replace(url.pathname + url.search + url.hash); return; }
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    void load();
+  }
   const reviewHref = (id: string, contacts = false) => inline
     ? "/me?femaleReview=" + encodeURIComponent(id) + (rows.find(item => item.interestId === id)?.role === "sister" ? "#outbound-interests" : "#inbound-interests")
     : "/dashboard?femaleReview=" + encodeURIComponent(id) + (contacts ? "#contact-details" : "");
@@ -216,7 +236,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     </section>)}
     {!inline && selected && <a className="btn" href="/me#applicant-interests">Back to applicant interests</a>}
     <div style={{ padding: inline ? 0 : 16, display: "grid", gap: 16 }}>
-      {error && <p className="notice error" role="alert">{error} <a href={loginHref}>Sign in</a> or <button type="button" className="btn" disabled={busy || reviewLoading} onClick={() => setAccessVersion(value => value + 1)}>Retry loading review</button>.</p>}
+      {error && <p className="notice error" role="alert">{error} {selected && <button type="button" className="btn" disabled={busy} onClick={returnToPortal}>Return to portal</button>} <a href={loginHref}>Sign in</a> or <button type="button" className="btn" disabled={busy || reviewLoading} onClick={() => setAccessVersion(value => value + 1)}>Retry loading review</button>.</p>}
       {busy && <p role="status">Recording your decision…</p>}
       {message && <p className="notice success" role="status">{message}</p>}
       {listError && <p className="notice error" role="alert">{listError} <a href={loginHref}>Sign in</a> or <button type="button" className="btn" disabled={busy || loading} onClick={() => { void load(); setAccessVersion(value => value + 1); }}>Retry loading reviews</button>.</p>}

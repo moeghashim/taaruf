@@ -278,3 +278,23 @@ test("3945 scoped grant, revoke and expired session fail closed", async () => {
  await f.t.mutation(api.femaleInterestWorkflow.revokeReview,{adminSecret,interestId:f.interestId});
  await expect(f.t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"brother",interestId:f.interestId})).rejects.toThrow();
 });
+
+test('reset review stays absent and denied after reauthentication without reviving tokens', async () => {
+  const { t, interestId, brother } = await fixture();
+  await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret, interestId, reviewTokenHash: hash });
+  expect((await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: 'brother', paginationOpts: { numItems: 50, cursor: null } })).page).toHaveLength(1);
+  await t.run(async ctx => {
+    await ctx.db.patch(interestId, { testReset: { at: Date.now(), reason: 'synthetic reset regression', actor: 'admin' } });
+    await ctx.db.insert('applicantSessions', { registrationId: brother, sessionHash: 'reauthenticated', expiresAt: Date.now() + 86400000, createdAt: Date.now() });
+  });
+  const before = await t.run(ctx => ctx.db.get(interestId));
+  for (const sessionHash of ['brother', 'reauthenticated']) {
+    expect((await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash, paginationOpts: { numItems: 50, cursor: null } })).page).toEqual([]);
+    for (const reviewTokenHash of [undefined, hash]) {
+      await expect(t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash, interestId, ...(reviewTokenHash ? { reviewTokenHash } : {}) })).rejects.toThrow('Female review unavailable');
+    }
+    await expect(t.mutation(api.femaleInterestWorkflow.respond, { sessionHash, interestId, reviewTokenHash: hash, decision: 'accept' })).rejects.toThrow('Female review unavailable');
+  }
+  expect(await t.run(ctx => ctx.db.get(interestId))).toEqual(before);
+  await expect(t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash: 'missing', interestId })).rejects.toThrow('Unauthorized');
+});
