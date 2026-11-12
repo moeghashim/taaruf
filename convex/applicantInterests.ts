@@ -1,3 +1,4 @@
+import { ownClosedDecision } from "./ownClosedConnection";
 import { enqueueFinalRequests, finalRequestEnabled } from "./finalRequest";
 import { existingInboundReview } from "./existingInboundReview";
 import { interestBioVisible } from "./bioVisibility";
@@ -362,14 +363,16 @@ export const getDashboard = query({
         visibleOutbound.map((interest) => serializeInterest(ctx, registration, interest, byId, "outbound"))
       ),
       // Closed rows carry only the viewer's own receipt, never restored profile access.
-      history: await Promise.all([...inboundRows, ...outboundRows].filter(row => !row.testReset && !row.femaleWorkflow && !isVisibleInApplicantDashboard(row) && (row.fromRegistrationId === registration._id || row.visibility !== "internal_only")).map(async row => {
+      history: (await Promise.all([...inboundRows, ...outboundRows].filter(row => !row.testReset && !isVisibleInApplicantDashboard(row) && (row.fromRegistrationId === registration._id || row.visibility !== "internal_only" || !!row.femaleWorkflow?.reviewTokenHash)).map(async row => {
         const flow = await ensureFlowForQuery(ctx, row);
+        const ownDecision = await ownClosedDecision(ctx, row, flow, registration._id);
+        if (!ownDecision) return null;
         return { interestId: row._id, status: "closed",
           ownInitialDecision: row.toRegistrationId === registration._id ? flow?.recipientDecision ?? "pending" : null,
           ownFinalApproval: (row.fromRegistrationId === registration._id ? flow?.requesterFinalApproval : flow?.recipientFinalApproval) ?? "pending",
-          ownDecision: row.fromRegistrationId === registration._id && row.status === "withdrawn" ? "withdrawn" : null,
+          ownDecision,
         };
-      })),
+      }))).filter(row => row !== null),
       privateDocumented: await Promise.all(
         privateDocumented.map((interest) => serializeInterest(ctx, registration, interest, byId, "private"))
       ),

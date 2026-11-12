@@ -1,4 +1,5 @@
 "use client";
+import { ownClosedHistory } from "@/lib/own-closed-history";
 import { applicantLoginHref } from "@/lib/applicant-destination";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
@@ -54,7 +55,8 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to load reviews.");
       if (requestId !== listRequest.current) return;
-      setRows(previous => next ? [...previous, ...payload.page.filter((item: Review) => !previous.some(row => row.interestId === item.interestId))] : payload.page);
+      const visible: Review[] = payload.page.filter((item: Review) => item.state !== "closed" || ownClosedHistory([item]).length > 0);
+      setRows(previous => next ? [...previous, ...visible.filter(item => !previous.some(row => row.interestId === item.interestId))] : visible);
       setCursor(payload.continueCursor); setDone(payload.isDone);
     } catch (error) { if (requestId === listRequest.current) { setRows([]); setListError(error instanceof Error ? error.message : "Unable to load reviews."); } }
     finally { if (requestId === listRequest.current) setLoading(false); }
