@@ -21,6 +21,7 @@ function applicantInterestErrorResponse(error: unknown) {
     return NextResponse.json({ error: "Interest availability has changed. Submissions require an enabled event and approved, confirmed, checked-in attendance. Please check the updated availability and try again." }, { status: 409 });
   }
   if (/archived|not active/i.test(message)) return NextResponse.json({ success: false, skipped: "ineligible", error: "Matching activity stopped because the connection is no longer eligible." }, { status: 409 });
+  if (message.includes("Too many name checks")) return NextResponse.json({ error: "Too many name checks. Please try again in an hour." }, { status: 429 });
   if (message.includes("Pause unavailable until contact release")) return NextResponse.json({ error: "Pause unavailable until contact release" }, { status: 409 });
   for (const safeMessage of ["Applicant details could not be verified", "You can submit a maximum of 3 interests per event", "Interest already submitted for this event"]) {
     if (message.includes(safeMessage)) return NextResponse.json({ error: safeMessage }, { status: 400 });
@@ -112,13 +113,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: "Photo sharing revoked for this interest. Previously obtained photos or links cannot be recalled." });
     }
 
+    if (body.action === "lookup_name") {
+      if (!Number.isSafeInteger(body.applicantNumber) || body.applicantNumber <= 0 || typeof body.expectedEventId !== "string") return NextResponse.json({ firstName: null }, { status: 400 });
+      const result = await convex.mutation(api.applicantInterests.lookupInterestName, { sessionHash, applicantNumber: body.applicantNumber, expectedEventId: body.expectedEventId });
+      return NextResponse.json(result, { status: result.limited ? 429 : 200, headers: { "Cache-Control": "no-store" } });
+    }
     if (body.action === "submit_number") {
       if (body.photoConsent !== undefined && !["yes", "no"].includes(body.photoConsent)) return NextResponse.json({ error: "Invalid legacy photo choice" }, { status: 400 });
       if (!Number.isInteger(body.applicantNumber) || body.applicantNumber <= 0) {
         return NextResponse.json({ error: "A valid applicant number is required" }, { status: 400 });
-      }
-      if (typeof body.applicantName !== "string" || !body.applicantName.trim() || body.applicantName.length > 200) {
-        return NextResponse.json({ error: "Applicant first name is required" }, { status: 400 });
       }
       if (typeof body.expectedEventId !== "string" || !body.expectedEventId.trim()) {
         return NextResponse.json({ error: "Refresh interest availability before submitting." }, { status: 400 });
@@ -128,7 +131,7 @@ export async function POST(request: NextRequest) {
         ...(body.photoConsent !== undefined ? { photoConsent: body.photoConsent } : {}),
         sessionHash,
         applicantNumber: body.applicantNumber,
-        applicantName: body.applicantName,
+
       });
 
       if ("existingInbound" in result && result.existingInbound) {

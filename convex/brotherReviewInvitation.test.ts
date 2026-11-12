@@ -51,7 +51,7 @@ test("authorized share queues once; reads, double click and reissue never duplic
   await t.action(internal.femaleWorkflowDelivery.drain, {});
   expect(provider).toHaveBeenCalledTimes(1);
   const payload = JSON.parse(provider.mock.calls[0][1].body);
-  expect(payload).toEqual({ from: "test@example.com", to: ["brother@example.com"], subject: "A profile is ready for your review", text: "A profile is ready for your review. Sign in to view and take action: https://synthetic.example.com/dashboard?femaleReview=" + interestId });
+  expect(payload).toEqual({ from: "test@example.com", to: ["brother@example.com"], subject: "New interest received in 1 Plus 1", text: "You have received a new interest in your 1 Plus 1 applicant portal.\n\nPlease log in to review it and choose whether to accept or decline. You can also leave it open while you decide.\n\nReview interest: https://synthetic.example.com/dashboard?femaleReview=" + interestId });
   for (const secret of ["Synthetic Sister", "sister@example.com", "5550100", hash, "photo", "Applicant #"]) expect(JSON.stringify(payload)).not.toContain(secret);
   for (const sessionHash of ["missing", "other"]) await expect(t.query(api.femaleInterestWorkflow.getReviewAccess, { sessionHash, interestId })).rejects.toThrow("Unauthorized");
   expect(await t.run(ctx => ctx.db.query("matches").take(10))).toEqual([]);
