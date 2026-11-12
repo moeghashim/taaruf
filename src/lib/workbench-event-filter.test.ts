@@ -28,3 +28,27 @@ test("detail actions cannot bypass event provenance; valid reciprocal interests 
  expect(scopedWorkbenchRecords([a], [invalid], "unscoped").matches[0].interest).toBe(null);
  expect(scopedWorkbenchRecords([a], [invalid], "all").interests[0].match).toBe(null);
 });
+
+test("reset audit records are excluded before event normalization without changing source data", () => {
+ const resetInterest = { ...interest, match: match, testReset: { resetAt: 1 } };
+ const resetMatch = { ...match, interest: resetInterest };
+ const source = JSON.stringify([resetInterest, resetMatch]);
+ for (const scope of ["all", "a", "unscoped"]) {
+  expect(scopedWorkbenchRecords([resetInterest], [resetMatch], scope)).toEqual({ interests: [], matches: [] });
+  expect(scopedWorkbenchRecords([], [{ ...match, interest: null, testResetAt: 0 }], scope).matches).toEqual([]);
+ }
+ expect(JSON.stringify([resetInterest, resetMatch])).toBe(source);
+});
+
+test("ordinary history and new test profiles remain selectable, reset matches cannot leak through interest actions", () => {
+ for (const status of ["new", "pending", "closed", "declined", "withdrawn"]) {
+  const i = { ...interest, match, status };
+  const result = scopedWorkbenchRecords([i], [{ ...match, status }], "all");
+  expect(result.interests.map(i => i._id)).toEqual(["i"]);
+  expect(result.matches.map(m => m._id)).toEqual(["m"]);
+ }
+ const result = scopedWorkbenchRecords([{ ...interest, match }], [{ ...match, testResetAt: 1 }], "all");
+ expect(result.interests[0].match).toBe(null);
+ expect(result.matches.find(m => m._id === "m")).toBeUndefined();
+ expect(scopedWorkbenchRecords([{ ...interest, match, testReset: {} }], [], "all").interests).toEqual([]);
+});
