@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProfileRequirements } from "@/components/applicant/profile-requirements";
+import { ReviewDecision } from "@/components/applicant/review-decision";
 import { ReviewNextSteps } from "@/components/applicant/review-next-steps";
 import { MatchmakerNotifications } from "@/components/applicant/matchmaker-notifications";
 import { MatchmakerMatching } from "@/components/applicant/matchmaker-matching";
@@ -97,6 +98,7 @@ type ApplicantEventData = {
     startsAt: number;
     endsAt: number;
     status: string;
+    canWithdraw?: boolean;
     registration: null | {
       _id: string;
       registrationStatus: string;
@@ -109,6 +111,7 @@ type ApplicantEventData = {
   }>;
   history: Array<{
     _id: string;
+    canWithdraw?: boolean;
     registrationStatus: string;
     confirmationStatus: string;
     attendanceStatus: string;
@@ -366,11 +369,6 @@ function ProfileSideCard({
         <p className="notice warning">Keep Open expires {formatDate(interest.keepOpenExpiresAt)}.</p>
       )}
 
-      {interest.ownInitialDecision && interest.ownInitialDecision !== "pending" && <p className="notice">Your initial response: {titleize(interest.ownInitialDecision)}.</p>}
-      {viewerFinalApproval === "approved" && !interest.contactSharedAt && !["contact_shared", "closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status) && (
-        <p className="notice success">Contact details will be shared after the admin reviews and approves the match.</p>
-      )}
-
       {(canRespond || canFinalApprove) && (
         <p className="notice warning">This connection is awaiting your review.</p>
       )}
@@ -425,6 +423,9 @@ function ProfileSideCard({
           <p>{counterparty.shareableBio}</p>
         </div>
       )}
+
+      {interest.ownInitialDecision && interest.ownInitialDecision !== "pending" && <p className="notice">Your initial response: {titleize(interest.ownInitialDecision)}.</p>}
+      <ReviewDecision decision={viewerFinalApproval} awaitingAdmin={!interest.contactSharedAt && !["contact_shared", "closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status)} />
 
       {interest.contactSharedAt && counterparty?.email && counterparty.phone && (
         <div className="contact-box">
@@ -888,6 +889,29 @@ export default function ApplicantDashboardPage() {
     }
   }
 
+  async function withdrawEventParticipation(eventRegistrationId: string) {
+    if (busy || !eventsFresh || !window.confirm("Withdraw from this event? Your place or waitlist position will be released. This does not request a refund.")) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await applicantFetch("/api/applicant/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "withdraw", eventRegistrationId }),
+      });
+      await response.json();
+      if (!response.ok) throw new Error("Unable to withdraw. Refresh your event status and try again, or contact support.");
+      setMessage("You have withdrawn from this event. Your place or waitlist position has been released.");
+      await loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      await loadEvents();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function confirmEventParticipation(eventRegistrationId: string) {
     if (archived) return;
     setBusy(true);
@@ -1200,6 +1224,9 @@ export default function ApplicantDashboardPage() {
                         {event.registration ? (
                           <>
                             <StatusBadge value={event.registration.registrationStatus} />
+                            {event.canWithdraw && event.startsAt > Date.now() && (
+                              <button type="button" className="btn" disabled={busy || !eventsFresh} onClick={() => withdrawEventParticipation(event.registration!._id)}>Withdraw</button>
+                            )}
                             {canConfirmEventRegistration(event.registration) ? (
                               <button
                                 type="button"
@@ -1238,6 +1265,9 @@ export default function ApplicantDashboardPage() {
                         <div className="interest-row-meta">
                           <StatusBadge value={row.registrationStatus} />
                           <StatusBadge value={row.attendanceStatus} />
+                          {row.canWithdraw && (!row.event || row.event.startsAt > Date.now()) && (
+                            <button type="button" className="btn" disabled={busy || !eventsFresh} onClick={() => withdrawEventParticipation(row._id)}>Withdraw</button>
+                          )}
                         </div>
                       </div>
                     ))}
