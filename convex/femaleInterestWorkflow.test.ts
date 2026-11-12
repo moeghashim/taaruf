@@ -327,6 +327,10 @@ test("4257 admin share versus private withdrawal has one winner", async () => {
 
 for (const invalid of ["expired", "revoked", "reset", "closed", "archived", "restored", "missingAcceptance", "futureAcceptance", "wrongFlow", "pendingFlow"] as const) test("accepted first name fails closed: " + invalid, async () => {
   const {t, interestId, sister} = await accepted();
+  await t.run(ctx => ctx.db.patch(interestId, {visibility: "admin_actionable"}));
+  const before = await t.query(api.applicantInterests.getDashboard, {sessionHash:"brother"});
+  expect(before.inbound).toHaveLength(1);
+  expect(before.inbound[0].counterparty?.name).toBe("Synthetic");
   await t.run(async ctx => {
     const i = (await ctx.db.get(interestId))!;
     const flow = (await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", interestId)).unique())!;
