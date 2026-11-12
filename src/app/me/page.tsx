@@ -1201,7 +1201,6 @@ export default function ApplicantDashboardPage() {
             {error && <p role="alert" className="notice error">{error}</p>}
             {!archived && <section aria-label="Your notifications" className="applicant-section">
               {(eventsData?.upcoming || []).filter(event => eventsFresh && !busy && !data.eventLogisticsRestricted && !eventsData?.logisticsRestricted && !eligibilityError && event.registration && canConfirmEventRegistration(event.registration)).map(event => <section className="interest-invitation" key={event._id}><div className="interest-invitation-copy"><h2>Event response requested</h2><p>Please review your event registration. Responding does not grant event approval.</p></div><a className="btn btn-primary" href="#events">Review event registration</a></section>)}
-              {!!data.history?.length && <section className="interest-invitation"><div className="interest-invitation-copy"><h2>Connection updates</h2><p>{data.history.length} closed connection{data.history.length === 1 ? "" : "s"}. No further response is needed.</p></div><a className="btn" href="#applicant-interests">View connection history</a></section>}
               <ReceivedInterestRibbon interests={[...data.inbound, ...data.outbound, ...data.privateDocumented]} approved={data.applicant.status === "approved"} onReviews={setReviews} />
               {data.applicant.status === "approved" && <MatchmakerNotifications />}
             </section>}

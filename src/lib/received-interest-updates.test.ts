@@ -1,82 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { receivedInterestUpdates, approvedCopy, type InterestNoticeInput, type ReviewNoticeInput } from "./received-interest-updates";
-const interest = (id = "same"): InterestNoticeInput => ({ interestId: id, direction: "inbound", status: "active", flowStatus: "in_review", canRespond: false, canFinalApprove: false, ownFinalApproval: "pending", contactSharedAt: null, counterparty: {} });
+import { receivedInterestUpdates, type InterestNoticeInput, type ReviewNoticeInput } from "./received-interest-updates";
+const interest = (id = "same"): InterestNoticeInput => ({ interestId: id, direction: "inbound", status: "in_progress", flowStatus: "in_progress", canRespond: false, canFinalApprove: false, ownFinalApproval: "pending", contactSharedAt: null, counterparty: {} });
 const review = (role = "brother"): ReviewNoticeInput => ({ interestId: "same", role, state: "in_review", ownAction: "review", canView: true });
-describe("authoritative received interest ribbon", () => {
-  for (const role of ["brother", "sister"]) it("deduplicates actual interest identity for " + role, () => {
-    const notices = receivedInterestUpdates([interest(), interest()], [review(role)]);
-    expect(notices).toHaveLength(1); expect(notices[0].copy).toBe("This connection is awaiting your review.");
-    expect(notices[0].href).toBe("/me?femaleReview=same#" + (role === "sister" ? "outbound" : "inbound") + "-interests");
-    expect(notices[0].heading).toBe(role === "brother" ? "You Have Received An Interest" : "Your review is needed");
-  });
-  it("retains distinct event interests even with identical counterpart data", () => {
-    expect(receivedInterestUpdates([interest(), interest("other-event")], [review()])).toHaveLength(2);
-  });
-  it("prioritizes initial then final response", () => {
-    expect(receivedInterestUpdates([{ ...interest(), canRespond: true }], [])[0].heading).toBe("You Have Received An Interest");
-    expect(receivedInterestUpdates([{ ...interest(), canFinalApprove: true }], [])[0].heading).toBe("Your review is needed");
-    expect(receivedInterestUpdates([{ ...interest(), ownFinalApproval: "approved" }], [])[0].copy).toBe(approvedCopy);
-  });
-  it("transitions review to approval to verified contacts to neutral closure", () => {
-    const approved = { ...review(), ownAction: null, ownDecision: "approved" };
-    expect(receivedInterestUpdates([interest()], [approved])[0].copy).toBe(approvedCopy);
-    const released = { ...approved, state: "contacts_released" };
-    expect(receivedInterestUpdates([], [released])[0].heading).not.toBe("Contacts are ready");
-    expect(receivedInterestUpdates([], [released], ["same"])[0].heading).toBe("Contacts are ready");
-    const closed = receivedInterestUpdates([interest()], [{ ...released, state: "closed", ownAction: "review" }], ["same"])[0];
-    expect(closed.heading).toBe("Connection closed"); expect(closed.href).toBeUndefined();
-  });
-  it("does not resurrect paused or expired reviews", () => {
-    expect(receivedInterestUpdates([], [{ ...review(), paused: true }])[0].heading).toBe("Connection paused");
-    expect(receivedInterestUpdates([], [{ ...review(), reviewExpired: true }])[0].href).toBeUndefined();
-  });
-});
-
-describe("sent interest heading", () => {
-  const sent = { ...interest("sent"), direction: "outbound" };
-  it("changes only the generic outgoing heading, not body or button", () => {
-    const inbound = receivedInterestUpdates([interest("sent")], [])[0];
-    const outbound = receivedInterestUpdates([sent], [])[0];
-    expect(outbound).toEqual({ ...inbound, heading: "You Have Sent An Interest", href: "/me?connection=sent#outbound-interests" });
-    expect(receivedInterestUpdates([{ ...sent, direction: "private" }], [])[0].heading).toBe("Interest update");
-  });
-  it("returns the exact neutral heading after the sender approves", () => {
-    const approved = receivedInterestUpdates([{ ...sent, status: "in_progress", flowStatus: "in_progress", ownFinalApproval: "approved" }], [])[0];
-    expect(approved.heading).toBe("Interest Update");
-    expect(approved.copy).toBe(approvedCopy);
-    expect(approved.href).toBe("/me?connection=sent#outbound-interests");
-  });
-  it("keeps mixed and multiple connections directionally accurate", () => {
-    const notices = receivedInterestUpdates([sent, { ...sent, interestId: "sent2" }, { ...interest("received"), canRespond: true }], []);
-    expect(notices.map(item => item.heading)).toEqual(["You Have Received An Interest", "You Have Sent An Interest", "You Have Sent An Interest"]);
-  });
-  for (const [patch, heading] of [
-    [{ canFinalApprove: true }, "Your review is needed"],
-    [{ canRespond: true }, "You Have Received An Interest"],
-    [{ paused: true }, "Connection paused"],
-    [{ contactSharedAt: 1, counterparty: { email: "synthetic@example.test" } }, "Contacts are ready"],
-    ...["closed", "declined", "withdrawn", "revoked", "expired"].map(status => [{ status }, "Connection closed"]),
-  ] as [Partial<InterestNoticeInput>, string][]) it("preserves lifecycle heading " + JSON.stringify(patch), () => {
-    expect(receivedInterestUpdates([{ ...sent, ...patch }], [])[0].heading).toBe(heading);
-  });
-  it("preserves workflow authority rather than infer direction from portal gender", () => {
-    for (const role of ["brother", "sister"]) {
-      const workflow = { ...review(role), interestId: "sent" };
-      expect(receivedInterestUpdates([sent], [workflow])).toEqual(receivedInterestUpdates([], [workflow]));
-      expect(receivedInterestUpdates([sent], [{ ...workflow, ownAction: null }])[0].heading).toBe(role === "sister" ? "You Have Sent An Interest" : "Interest update");
-    }
-  });
-});
-
-
-it('keeps brother post-bio final approval actionable without revealing the other decision', () => {
-  const initial = receivedInterestUpdates([], [{ ...review(), ownActionStage: 'initial', ownDecision: 'pending' }])[0];
-  const final = receivedInterestUpdates([], [{ ...review(), ownActionStage: 'final', ownDecision: 'pending' }])[0];
-  expect(initial.heading).toBe('You Have Received An Interest');
-  expect(final.heading).toBe('Your review is needed');
-  expect(final.action).toBe('Review profile and respond');
-  expect(final.priority).toBe(0);
-  expect(final.copy).toBe(initial.copy);
-  expect(final.href).toBe(initial.href);
-  expect(JSON.stringify(final)).not.toMatch(/sister|approved|match created/i);
+for (const role of ["brother", "sister"]) describe("notifications: " + role, () => {
+ for (const state of ["closed","declined","rejected","withdrawn","revoked","expired","kept_open","keep_open"]) it("suppresses " + state + " despite stale actions/contacts", () => {
+  const shared={...interest(),canRespond:true,contactSharedAt:1,counterparty:{email:"synthetic@example.test"}};
+  expect(receivedInterestUpdates([{...shared,status:state}],[])).toEqual([]);
+  expect(receivedInterestUpdates([{...shared,flowStatus:state}],[])).toEqual([]);
+  expect(receivedInterestUpdates([shared],[{...review(role),state}],["same"])).toEqual([]);
+ });
+ it("keeps idle and own keep-open quiet without revealing counterpart decisions",()=>{
+  expect(receivedInterestUpdates([interest(),{...interest("sent"),direction:"outbound"}],[])).toEqual([]);
+  expect(receivedInterestUpdates([{...interest(),canRespond:true,ownInitialDecision:"keep_open"}],[])).toEqual([]);
+  expect(receivedInterestUpdates([],[{...review(role),ownAction:null}])).toEqual([]);
+ });
+ it("does not celebrate finals or unverified/unavailable releases",()=>{
+  expect(receivedInterestUpdates([{...interest(),ownFinalApproval:"approved",counterparty:{email:"synthetic@example.test"}}],[])).toEqual([]);
+  for(const patch of [{state:"in_review"},{canView:false},{reviewExpired:true},{paused:true}]) expect(receivedInterestUpdates([],[{...review(role),state:"contacts_released",ownAction:null,...patch}],["same"])).toEqual([]);
+  expect(receivedInterestUpdates([],[{...review(role),state:"contacts_released",ownAction:null}])).toEqual([]);
+ });
+ it("preserves incoming and final actions with workflow authority and exact IDs",()=>{
+  const initial=receivedInterestUpdates([{...interest(),canRespond:true}],[])[0];expect(initial.heading).toBe("You Have Received An Interest");
+  expect(receivedInterestUpdates([{...interest(),canFinalApprove:true}],[])[0].heading).toBe("Your review is needed");
+  const final=receivedInterestUpdates([interest(),interest()],[{...review(role),ownActionStage:"final"}]);
+  expect(final).toHaveLength(1);expect(final[0]).toMatchObject({heading:"Your review is needed",action:"Review profile and respond",priority:0});
+  expect(final[0].href).toBe("/me?femaleReview=same#"+(role==="sister"?"outbound":"inbound")+"-interests");
+  expect(JSON.stringify(final)).not.toMatch(/approved|match created/i);
+ });
+ it("targets single and multiple authorized matches in both workflows",()=>{
+  const shared={...interest("ordinary /1"),direction:role==="sister"?"inbound":"outbound",contactSharedAt:1,counterparty:{phone:"5550100"}};
+  const workflow={...review(role),interestId:"workflow /2",state:"contacts_released",ownAction:null};
+  for(const notices of [receivedInterestUpdates([shared],[]),receivedInterestUpdates([],[workflow],["workflow /2"]),receivedInterestUpdates([shared],[workflow],["workflow /2"])]) {
+   for(const notice of notices)expect(notice).toMatchObject({heading:"A match has been created!",copy:"Review the profile to see the shared contact details.",action:"Review profile",priority:1});
+  }
+  const notices=receivedInterestUpdates([shared],[workflow],["workflow /2"]);expect(notices).toHaveLength(2);expect(notices[0].href).toContain("connection=ordinary%20%2F1");expect(notices[1].href).toContain("femaleReview=workflow%20%2F2");
+ });
 });

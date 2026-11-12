@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { matchCreatedCopy, matchCreatedHeading } from "@/lib/received-interest-updates";
 
 export const MATCHMAKER_UPDATED_EVENT = "matchmaker-updated";
 type NoticeMatch = {
@@ -19,7 +20,7 @@ export function isVisibleMatchmakerMatch(match: NoticeMatch) {
 }
 export function matchmakerContactsReady(match: NoticeMatch) {
   return isVisibleMatchmakerMatch(match) && match.contactShared === true &&
-    !["closed", "declined", "paused"].includes(match.status) &&
+    match.withdrawnAt === undefined && !["closed", "declined", "rejected", "paused", "withdrawn", "revoked", "expired"].includes(match.status) &&
     !!(match.partner?.email?.trim() || match.partner?.phone?.trim());
 }
 export function matchmakerArticleId(id: string) {
@@ -40,7 +41,7 @@ export function MatchmakerNotifications() {
         if (!response.ok) throw new Error("Unavailable");
         const payload = await response.json();
         if (!Array.isArray(payload.matches)) throw new Error("Unavailable");
-        const next: Notice[] = payload.matches.filter(isVisibleMatchmakerMatch).map((match: NoticeMatch) => ({
+        const next: Notice[] = payload.matches.filter(isVisibleMatchmakerMatch).filter((match: NoticeMatch) => !["closed", "declined", "rejected", "withdrawn", "revoked", "expired", "kept_open"].includes(match.status)).map((match: NoticeMatch) => ({
           id: match._id,
           kind: matchmakerContactsReady(match) ? "contacts" :
             match.canApprove === true && match.myApproval === false && !match.contactShared &&
@@ -64,12 +65,12 @@ export function MatchmakerNotifications() {
     {(["review", "contacts", "update"] as const).map(kind => {
       const group = notices.filter(notice => notice.kind === kind);
       if (!group.length) return null;
-      const heading = kind === "review" ? "Matchmaker review needed" : kind === "contacts" ? "Matchmaker contacts are ready" : "Matchmaker updates";
-      const action = kind === "review" ? "Review introduction" : kind === "contacts" ? "View contact details" : "View introduction";
+      const heading = kind === "review" ? "Matchmaker review needed" : kind === "contacts" ? matchCreatedHeading : "Matchmaker updates";
+      const action = kind === "review" ? "Review introduction" : kind === "contacts" ? "Review profile" : "View introduction";
       return <section key={kind} className="interest-invitation" aria-label={heading}>
         <div className="interest-invitation-copy">
           <h2>{heading}</h2>
-          <p>{kind === "review" ? "Review your matchmaker introduction and respond. Contact details stay private until both of you agree and the team shares them." : kind === "contacts" ? "Open your introduction to see the contact details available to you." : "Check the current status of your matchmaker introductions."}</p>
+          <p>{kind === "review" ? "Review your matchmaker introduction and respond. Contact details stay private until both of you agree and the team shares them." : kind === "contacts" ? matchCreatedCopy : "Check the current status of your matchmaker introductions."}</p>
         </div>
         <ul className="interest-invitation-actions">
           {group.map((notice, index) => <li key={notice.id}>
