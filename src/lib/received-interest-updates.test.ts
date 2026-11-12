@@ -6,7 +6,7 @@ describe("authoritative received interest ribbon", () => {
   for (const role of ["brother", "sister"]) it("deduplicates actual interest identity for " + role, () => {
     const notices = receivedInterestUpdates([interest(), interest()], [review(role)]);
     expect(notices).toHaveLength(1); expect(notices[0].copy).toBe("This connection is awaiting your review.");
-    expect(notices[0].href).toBe("/me?femaleReview=same#inbound-interests");
+    expect(notices[0].href).toBe("/me?femaleReview=same#" + (role === "sister" ? "outbound" : "inbound") + "-interests");
     expect(notices[0].heading).toBe(role === "brother" ? "You Have Received An Interest" : "Your review is needed");
   });
   it("retains distinct event interests even with identical counterpart data", () => {
