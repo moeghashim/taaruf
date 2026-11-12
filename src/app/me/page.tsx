@@ -1,4 +1,5 @@
 "use client";
+import { ContactGuidance } from "@/components/applicant/contact-guidance";
 import { interestCategories } from "@/lib/interest-categories";
 import type { ReviewNoticeInput } from "@/lib/received-interest-updates";
 import { DateOfBirthField } from "@/components/date-of-birth-field";
@@ -430,8 +431,8 @@ function ProfileSideCard({
 
       {interest.contactSharedAt && counterparty?.email && counterparty.phone && (
         <div className="contact-box">
-          <p>Contact info shared</p>
-          {viewerGender === "male" && <p>You can now reach out to the sister using the contact details below. A warm introduction is a lovely place to start.</p>}
+          <h4>Contact details</h4>
+          <ContactGuidance viewerGender={viewerGender} />
           <p>
             <span>Email</span>
             {counterparty.email}
@@ -1206,7 +1207,7 @@ export default function ApplicantDashboardPage() {
               <ReceivedInterestRibbon interests={[...data.inbound, ...data.outbound, ...data.privateDocumented]} approved={data.applicant.status === "approved"} onReviews={setReviews} />
               {data.applicant.status === "approved" && <MatchmakerNotifications />}
             </section>}
-            {view === "matchmaker" && <MatchmakerMatching archived={archived} onSessionExpired={onMatchmakerSessionExpired} />}
+            {view === "matchmaker" && <MatchmakerMatching viewerGender={data.applicant.gender} archived={archived} onSessionExpired={onMatchmakerSessionExpired} />}
             <div hidden={view !== "overview"} id="overview">
             <div className="stats">
               <div className="stat">
