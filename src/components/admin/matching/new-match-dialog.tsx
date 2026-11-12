@@ -17,7 +17,7 @@ export function NewMatchDialog() {
 }
 
 function NewMatchForm({ onCreated }: { onCreated: () => void }) {
-  const [registrations, setRegistrations] = useState<Array<{ _id: string; name: string; gender: string; publicApplicantNumber?: number }>>();
+  const [registrations, setRegistrations] = useState<Array<{ _id: string; name: string; gender: string; publicApplicantNumber?: number; backgroundMatchmakingOptIn?: boolean }>>();
   const [loadError, setLoadError] = useState("");
   useEffect(() => { let active = true; fetch("/api/admin/match-candidates", { cache: "no-store" }).then(async r => { if (!r.ok) throw new Error("Unable to load eligible applicants. Refresh and try again."); return r.json(); }).then(rows => { if (active) setRegistrations(rows); }).catch(e => { if (active) setLoadError(String(e.message)); }); return () => { active = false; }; }, []);
   const router = useRouter();
@@ -49,7 +49,7 @@ function NewMatchForm({ onCreated }: { onCreated: () => void }) {
       {gender === "male" ? "Male applicant" : "Female applicant"}
       <select aria-label={gender === "male" ? "Male applicant" : "Female applicant"} required disabled={busy} value={gender === "male" ? male : female} onChange={e => (gender === "male" ? setMale : setFemale)(e.target.value)} style={{ width: "100%", minWidth: 0, padding: 10, border: "1px solid var(--line)", borderRadius: 6, fontSize: 16 }}>
         <option value="">Select an applicant</option>
-        {eligible.filter(r => r.gender === gender).map(r => <option key={r._id} value={r._id}>#{r.publicApplicantNumber ?? "—"} {r.name}</option>)}
+        {eligible.filter(r => r.gender === gender).map(r => <option key={r._id} value={r._id}>#{r.publicApplicantNumber ?? "—"} {r.name}{r.backgroundMatchmakingOptIn === true ? " (opted in)" : ""}</option>)}
       </select>
       {!eligible.some(r => r.gender === gender) && <small>No eligible {gender} applicants. Profiles must be approved, complete, actively searching, and not in an active match.</small>}
     </label>)}

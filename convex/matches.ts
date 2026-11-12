@@ -634,7 +634,7 @@ export const getCandidates = query({
     requireAdmin(args.adminSecret);
     const rows = await ctx.db.query("registrations").withIndex("by_status", q => q.eq("status", "approved")).take(1000);
     return rows.filter(person => person.archivedAt === undefined && person.profileCompletionStatus === "completed" && (person.searchStatus ?? "active") === "active" && !person.activeMatchId)
-      .map(({ _id, name, gender, publicApplicantNumber }) => ({ _id, name, gender, publicApplicantNumber }));
+      .map(({ _id, name, gender, publicApplicantNumber, backgroundMatchmakingOptIn }) => ({ _id, name, gender, publicApplicantNumber, backgroundMatchmakingOptIn }));
   },
 });
 
