@@ -542,12 +542,12 @@ export async function sendContactSharedEmail({
       from: defaultFrom,
       to: email,
       subject: "Contact information is available for your 1 Plus 1 match",
-      text: `Assalamu Alaikum ${name},\n\nContact information is now available in your 1 Plus 1 applicant portal.\n\nOpen your portal: ${applicantPortalUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
+      text: `Assalamu Alaikum ${name},\n\nContact information is now available in your 1 Plus 1 applicant portal. Brothers, you can now reach out to the sister using those details. A warm introduction is a lovely place to start.\n\nOpen your portal: ${applicantPortalUrl}\n\nWarmly,\nBader & Danielle\n1 Plus 1 Leads`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #374151;">
           <h2 style="color: #1f2937;">Assalamu Alaikum ${name},</h2>
           <p style="line-height: 1.6;">
-            Contact information is now available in your 1 Plus 1 applicant portal.
+            Contact information is now available in your 1 Plus 1 applicant portal. Brothers, you can now reach out to the sister using those details. A warm introduction is a lovely place to start.
           </p>
           <p style="margin: 24px 0;">
             <a href="${applicantPortalUrl}" style="display: inline-block; background: #0f766e; color: white; text-decoration: none; padding: 12px 18px; border-radius: 8px; font-weight: 600;">

@@ -94,6 +94,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   if (until > now) { await ctx.db.patch(row._id, { status: "pending", leaseUntil: undefined, nextAttemptAt: until }); return false; }
   let email: string;
   let review = false;
+  let recipientIsBrother = false;
   try {
     const { workflow, sister, brother } = await (row.kind === "final_request" ? currentFinalRequest(ctx, row) : participants(ctx, row.interestId));
       if (row.kind === "brother_review" && row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== brother.email)) throw new Error("stale brother recipient");
@@ -102,6 +103,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
         if (!interest || !currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email) || (row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== sister.email))) throw new Error("stale sister confirmation");
       }
     if ((row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) || ![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
+    recipientIsBrother = row.recipientId === brother._id;
     email = row.recipientId === sister._id ? sister.email : brother.email;
     review = Boolean((await ctx.db.get(row.interestId))?.femaleWorkflow);
   } catch { await ctx.db.patch(row._id, { status: "cancelled", error: "Workflow no longer available" }); return false; }
@@ -113,11 +115,11 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
   if (row.firstAttemptAt !== undefined && !row.providerPayload) {
     await ctx.db.patch(row._id, { status: "failed", leaseUntil: undefined, error: "Prior attempt has no immutable payload; manual reconciliation required" }); return false;
   }
-  const subject = row.kind === "final_request" ? "Your final approval is needed" : row.kind === "brother_review" ? "A profile is ready for your review" : row.kind === "sister_confirmation" ? "This connection is awaiting your review" : row.kind === "pending_review" ? "Your connection is being reviewed" : "Your contacts are ready in the portal";
+  const subject = row.kind === "final_request" ? "Your final approval is needed" : row.kind === "brother_review" ? "New interest received in 1 Plus 1" : row.kind === "sister_confirmation" ? "This connection is awaiting your review" : row.kind === "pending_review" ? "Your connection is being reviewed" : "Your contacts are ready in the portal";
   const portal = new URL(config.portal);
   portal.pathname = review ? "/dashboard" : "/me";
   portal.searchParams.set(review ? "femaleReview" : "connection", row.interestId);
-  const payload = row.providerPayload ?? { from: config.from, to: [email], subject, text: row.kind === "sister_confirmation" ? "This connection is awaiting your review. Sign in to review his profile and explicitly confirm or decline. Opening this link does not approve or create a match. Review profile and respond: " + portal.toString() : subject + ". Sign in to view and take action: " + portal.toString() };
+  const payload = row.providerPayload ?? { from: config.from, to: [email], subject, text: row.kind === "brother_review" ? "You have received a new interest in your 1 Plus 1 applicant portal.\n\nPlease log in to review it and choose whether to accept or decline. You can also leave it open while you decide.\n\nReview interest: " + portal.toString() : row.kind === "contacts_ready" && recipientIsBrother ? "You can now reach out to the sister using the contact details in your portal. A warm introduction is a lovely place to start. Open your portal: " + portal.toString() : row.kind === "sister_confirmation" ? "This connection is awaiting your review. Sign in to review his profile and explicitly confirm or decline. Opening this link does not approve or create a match. Review profile and respond: " + portal.toString() : subject + ". Sign in to view and take action: " + portal.toString() };
   await ctx.db.patch(row._id, { providerPayload: payload, firstAttemptAt: row.firstAttemptAt ?? now, error: payload.to[0] !== email ? "Recipient changed since first attempt; replaying frozen payload for reconciliation" : undefined });
   return payload;
 }});
@@ -177,10 +179,17 @@ export const authorizeSend = internalMutation({ args: { id: v.id("femaleWorkflow
 export function deliveryConfig(email: string) {
   const allowed = (process.env.FEMALE_WORKFLOW_EMAIL_ALLOWED_RECIPIENTS ?? "").split(",").map(s => s.trim().toLowerCase());
   const portal = process.env.FEMALE_WORKFLOW_PORTAL_URL;
-  const key = process.env.FEMALE_WORKFLOW_RESEND_API_KEY;
+
   const from = process.env.FEMALE_WORKFLOW_EMAIL_FROM;
   const mode = process.env.FEMALE_WORKFLOW_EMAIL_MODE;
   const production = (mode === FINAL_REQUEST_MODE || mode === "production" || mode === BROTHER_REVIEW_MODE || mode === SISTER_CONFIRMATION_MODE || mode === COMBINED_REVIEW_MODE) && process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED === "true";
+  // Explicit selection, never fallback. Shared credentials are restricted to the
+  // approved brother-inbound + bilateral-final production scope, never isolation.
+  const credentialSource = process.env.FEMALE_WORKFLOW_EMAIL_CREDENTIAL_SOURCE ?? "dedicated";
+  if (!["dedicated", "shared-resend"].includes(credentialSource)) return null;
+  const shared = credentialSource === "shared-resend";
+  if (shared && (!production || mode !== FINAL_REQUEST_MODE || from !== "1Plus1 Match <contact@1plus1match.com>")) return null;
+  const key = shared ? process.env.RESEND_API_KEY : process.env.FEMALE_WORKFLOW_RESEND_API_KEY;
   if ((!production && mode !== "isolated") || (!production && !allowed.includes(email.trim().toLowerCase())) || !portal || !key || !from) return null;
   try {
     const url = new URL(portal);

@@ -555,7 +555,7 @@ describe("interest rules", () => {
       education: "College",
       job: "Engineer",
       ethnicity: "Arab",
-      spouseRequirement1: "Visible Female requirement one",
+      spouseRequirement1: null,
       shareableBio: null, // Initial interest has not been accepted.
       label: "Visible Female",
       email: null,
@@ -741,7 +741,7 @@ describe("interest rules", () => {
       education: "College",
       job: "Engineer",
       ethnicity: "Arab",
-      spouseRequirement1: "Documented Male requirement one",
+      spouseRequirement1: null,
       shareableBio: null, // Private documentation is not initial acceptance.
       label: "Documented Male",
       email: null,

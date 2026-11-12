@@ -275,7 +275,9 @@ export default defineSchema({
     providerPayload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string() })),
     firstAttemptAt: v.optional(v.number()), sentAt: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(),
   }).index("by_kind_and_status_and_nextAttemptAt", ["kind", "status", "nextAttemptAt"]).index("by_key", ["key"]).index("by_interestId", ["interestId"]).index("by_interestId_and_status", ["interestId", "status"]).index("by_status_and_nextAttemptAt", ["status", "nextAttemptAt"]).index("by_providerCooldownUntil", ["providerCooldownUntil"]),
+  interestLookups: defineTable({ registrationId: v.id("registrations"), windowStart: v.number(), count: v.number() }).index("by_registrationId", ["registrationId"]),
   interests: defineTable({
+    slotReturnedAt: v.optional(v.number()),
     femaleWorkflow: v.optional(v.object({
       state: v.union(v.literal("private_documented"), v.literal("awaiting_brother_review"), v.literal("awaiting_sister_confirmation"), v.literal("pending_admin_approval"), v.literal("contacts_released"), v.literal("declined"), v.literal("revoked")),
       reviewTokenHash: v.optional(v.string()), reviewExpiresAt: v.optional(v.number()),
@@ -306,7 +308,7 @@ export default defineSchema({
     .index("by_fromRegistrationId_and_eventId_and_source", ["fromRegistrationId", "eventId", "source"])
     .index("by_fromRegistrationId_and_testReset", ["fromRegistrationId", "testReset"])
     .index("by_toRegistrationId_and_testReset", ["toRegistrationId", "testReset"])
-    .index("by_submission_quota", ["fromRegistrationId", "eventId", "source", "testReset"])
+    .index("by_submission_quota", ["fromRegistrationId", "eventId", "source", "testReset", "slotReturnedAt"])
     .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
     .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])
     .index("by_fromRegistrationId_and_toRegistrationId_and_eventId", ["fromRegistrationId", "toRegistrationId", "eventId"])
