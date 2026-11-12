@@ -1,3 +1,4 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
@@ -16,6 +17,8 @@ function isAdmin(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     if (!isAdmin(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,6 +38,7 @@ export async function POST(request: NextRequest) {
     const backfill = await convexClient.action(
       api.migrations.profileCompletion.backfillProfileCompletionStatuses,
       {
+        adminSecret: getAdminSecret(),
         dryRun: Boolean(dryRun),
         limit: typeof limit === "number" ? limit : undefined,
       }
@@ -43,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     if (!dryRun) {
       for (const item of backfill.needsProfileEmail) {
-        const registration = await convexClient.query(api.registrations.getById, {
+        const registration = await convexClient.query(api.registrations.getById, { adminSecret: getAdminSecret(),
           id: item.id,
         });
         if (!registration) {
@@ -55,13 +59,12 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const token = registration.profileAccessToken || crypto.randomBytes(24).toString("hex");
-        if (!registration.profileAccessToken) {
-          await convexClient.mutation(api.registrations.setProfileAccessToken, {
-            id: registration._id,
-            token,
-          });
-        }
+        const token = await convexClient.mutation(api.registrations.ensureProfileAccessToken, {
+          adminSecret: getAdminSecret(),
+          id: registration._id,
+          expectedEmail: registration.email,
+          token: crypto.randomBytes(24).toString("hex"),
+        });
 
         const emailResult = await sendProfileCompletionEmail({
           name: registration.name,
@@ -69,7 +72,7 @@ export async function POST(request: NextRequest) {
           profileUrl: `${appUrl}/profile/${token}`,
         });
 
-        await convexClient.mutation(api.registrations.markProfileUpdateEmailSent, {
+        await convexClient.mutation(api.registrations.markProfileUpdateEmailSent, { adminSecret: getAdminSecret(),
           id: registration._id,
           sent: emailResult.success,
           error: emailResult.error,
@@ -96,9 +99,9 @@ export async function POST(request: NextRequest) {
         dryRun: Boolean(dryRun),
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete admin request" },
       { status: 500 }
     );
   }

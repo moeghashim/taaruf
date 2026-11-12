@@ -1,3 +1,7 @@
+import { dateOfBirthError, ageForDateOfBirth } from "@/lib/date-of-birth";
+import { getSignupUploadHash } from "@/lib/photo-upload-server";
+import { getAdminSecret } from "@/lib/admin-server";
+import { isEducation } from "@/lib/education";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { api } from "../../../../convex/_generated/api";
@@ -8,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     const {
       name,
-      age,
+      dateOfBirth,
       gender,
       maritalStatus,
       education,
@@ -26,6 +30,15 @@ export async function POST(request: NextRequest) {
       imageStorageIds,
       eventCode,
     } = body;
+
+    if (dateOfBirthError(dateOfBirth)) {
+      return NextResponse.json({ error: "Enter a valid date of birth (age 18–99)." }, { status: 400 });
+    }
+    const age = ageForDateOfBirth(dateOfBirth);
+
+    if (!isEducation(education) && education !== "College") {
+      return NextResponse.json({ error: "Invalid education level" }, { status: 400 });
+    }
 
     // Validate required fields
     if (
@@ -53,10 +66,11 @@ export async function POST(request: NextRequest) {
     const { ConvexHttpClient } = await import("convex/browser");
     const convexClient = new ConvexHttpClient(convexUrl);
 
-    const existing = eventCode ? null : await convexClient.query(api.registrations.getByEmail, {
+    const existing = await convexClient.query(api.registrations.getByEmail, { adminSecret: getAdminSecret(),
       email: String(email).trim(),
     });
-    if (existing) {
+    if (existing?.archivedAt != null) return NextResponse.json({ error: "This profile is archived. Sign in to restore availability before registering again.", code: "profile_archived" }, { status: 409 });
+    if (existing && !eventCode) {
       return NextResponse.json(
         {
           error: "An applicant is already registered with this email.",
@@ -73,6 +87,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ["card"],
       allow_promotion_codes: true,
       customer_email: email,
+      metadata: eventCode ? { eventCode: String(eventCode).trim() } : {},
       line_items: [
         {
           price_data: {
@@ -91,9 +106,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Save registration to Convex
-    await convexClient.mutation(api.registrations.create, {
+    await convexClient.mutation(api.registrations.create, { adminSecret: getAdminSecret(),
+      signupCapabilityHash: await getSignupUploadHash(),
       name,
-      age: Number(age),
+      age,
+      dateOfBirth,
       gender: gender as "male" | "female",
       maritalStatus,
       education,
@@ -130,9 +147,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.error("Checkout session error:", errorMessage);
+    console.error("Checkout session failed");
     return NextResponse.json(
-      { error: "Failed to create checkout session", details: errorMessage },
+      { error: "Failed to create checkout session" },
       { status: 500 }
     );
   }

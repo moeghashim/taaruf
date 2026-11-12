@@ -1,11 +1,13 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
+import { sendCheckoutReceipt } from "@/lib/event-registration-receipt";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { sendConfirmationEmail } from "@/lib/email";
 import { api } from "../../../../../convex/_generated/api";
-import { createToken, hashToken } from "@/lib/applicant-session";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     // Verify admin auth
     const adminToken = request.cookies.get("admin_token")?.value;
@@ -49,14 +51,14 @@ export async function POST(request: NextRequest) {
       try {
         const registration = await convexClient.query(
           api.registrations.getByStripeSession,
-          { stripeSessionId: session.id }
+          { adminSecret: getAdminSecret(),  stripeSessionId: session.id }
         );
 
         if (!registration) continue;
 
         // Fix payment status if mismatched
         if (registration.paymentStatus !== "paid") {
-          await convexClient.mutation(api.registrations.updatePaymentStatus, {
+          await convexClient.mutation(api.registrations.updatePaymentStatus, { adminSecret: getAdminSecret(),
             stripeSessionId: session.id,
             paymentStatus: "paid",
             amountPaid: typeof session.amount_total === "number" ? session.amount_total : undefined,
@@ -65,35 +67,12 @@ export async function POST(request: NextRequest) {
           details.push(`Fixed: ${registration.name} (${registration.email})`);
         }
 
-        // Send welcome email if not already sent
-        if (!registration.confirmationEmailSent) {
-          const loginToken = createToken();
-          const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-          await convexClient.mutation(api.applicantAuth.createLoginToken, {
-            email: registration.email,
-            tokenHash: hashToken(loginToken),
-            expiresInMs: SEVEN_DAYS_MS,
-          });
-
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL
-            || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-            || request.nextUrl.origin;
-          const profileUrl = `${appUrl}/api/applicant/login/verify?token=${encodeURIComponent(loginToken)}`;
-
-          const result = await sendConfirmationEmail({
-            name: registration.name,
-            email: registration.email,
-            profileUrl,
-          });
-          if (result.success) {
-            await convexClient.mutation(api.registrations.markEmailSent, {
-              stripeSessionId: session.id,
-            });
-            emailsSent++;
-          }
-        }
-      } catch (err) {
-        console.error(`Error processing session ${session.id}:`, err);
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : request.nextUrl.origin);
+        const receipt = await sendCheckoutReceipt(convexClient, session.id, appUrl);
+        if (receipt.sent) emailsSent++;
+        if (receipt.error) details.push("Receipt not delivered: " + receipt.error);
+      } catch {
+        console.error("Payment repair failed");
       }
     }
 
@@ -104,8 +83,8 @@ export async function POST(request: NextRequest) {
       sessionsChecked: sessions.data.length,
       details,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  } catch {
+    const message = "Unable to complete admin request";
     console.error("Fix payments error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

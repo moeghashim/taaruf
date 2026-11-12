@@ -13,8 +13,6 @@ type PublicEvent = {
   eventCode: string;
   location: string;
   startsAt: number;
-  maleAvailable: number;
-  femaleAvailable: number;
   maleWaitlisted: boolean;
   femaleWaitlisted: boolean;
 };
@@ -113,18 +111,15 @@ export default async function Home() {
               {activeEvents.map((event) => (
                 <article key={event._id} className="applicant-home-event">
                   <div>
-                    <div className="pill-row">
-                      <span className="pill green">{event.eventCode}</span>
-                    </div>
                     <h4>{event.title}</h4>
                     <p>{formatEventDate(event.startsAt)} · {event.location}</p>
                   </div>
                   <div className="applicant-home-event-slots">
                     <span className={`pill ${event.femaleWaitlisted ? "gold" : "green"}`}>
-                      Sisters {event.femaleWaitlisted ? "waitlist" : `${event.femaleAvailable} open`}
+                      Sisters {event.femaleWaitlisted ? "waitlist" : "open"}
                     </span>
                     <span className={`pill ${event.maleWaitlisted ? "gold" : "green"}`}>
-                      Brothers {event.maleWaitlisted ? "waitlist" : `${event.maleAvailable} open`}
+                      Brothers {event.maleWaitlisted ? "waitlist" : "open"}
                     </span>
                   </div>
                   <div className="applicant-home-event-actions">

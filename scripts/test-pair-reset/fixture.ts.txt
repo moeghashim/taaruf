@@ -1,0 +1,22 @@
+import { internalMutation, internalQuery } from "./_generated/server";
+import { v } from "convex/values";
+import { api } from "./_generated/api";
+import type { Id, TableNames } from "./_generated/dataModel";
+import schema from "./schema";
+const a="j57fqgmbmh3am42geabkq852zx8g5wxy" as Id<"registrations">, b="j572w0f7mwazj4ke8snn0k99hn8g508t" as Id<"registrations">;
+export const seed=internalMutation({args:{},handler:async ctx=>{
+const eventId=await ctx.db.insert("events",{title:"Synthetic",eventCode:"synthetic",eventMonth:"2026-11",series:"1plus1_match",location:"Test",startsAt:1,endsAt:2,status:"completed",maleCapacity:10,femaleCapacity:10,interestSubmissionsEnabled:true,createdAt:1,updatedAt:1});
+const other=await ctx.db.insert("registrations",{name:"Other Synthetic",gender:"male",age:30,maritalStatus:"single",education:"College",job:"Test",email:"other@example.invalid",phone:"555",paymentStatus:"paid",status:"approved",profileCompletionStatus:"completed",publicApplicantNumber:221,createdAt:1});
+for(const [index,registrationId] of [a,b,other].entries()){
+await ctx.db.insert("eventRegistrations",{eventId,registrationId,gender:index===0?"female":"male",registrationStatus:"approved",confirmationStatus:"confirmed",attendanceStatus:"attended",eligibilityStatus:"approved_member",checkedInAt:1,createdAt:1,updatedAt:1});
+await ctx.db.insert("eventAttendees",{eventId,registrationId,addedAt:1});
+await ctx.db.insert("applicantSessions",{registrationId,sessionHash:"synthetic-"+(219+index),expiresAt:Date.now()+86400000,createdAt:Date.now()});}
+await ctx.db.insert("pairTestResetAudits",{operationKey:"historical-synthetic",request:"opaque".repeat(50000),snapshot:"original history",createdAt:1});
+return {eventId,other};}});
+export const state=internalQuery({args:{},handler:async ctx=>{const result:Record<string,unknown>={};for(const table of Object.keys(schema.tables) as TableNames[])result[table]=await ctx.db.query(table).collect();return result;}});
+export const extras=internalMutation({args:{interestId:v.id("interests")},handler:async(ctx,{interestId})=>{
+const shareId=await ctx.db.insert("profileShares",{ownerRegistrationId:a,recipientRegistrationId:b,interestId,shareToken:"synthetic-retired",status:"shared",includeImages:true,createdAt:1,updatedAt:1});
+const deliveryId=await ctx.db.insert("femaleWorkflowDeliveries",{interestId,recipientId:b,kind:"pending_review",key:"synthetic-outbox",status:"pending",attempts:0,nextAttemptAt:Date.now()+86400000,createdAt:1});
+return {shareId,deliveryId};}});
+export const deliveryState=internalMutation({args:{id:v.id("femaleWorkflowDeliveries"),sending:v.boolean()},handler:async(ctx,args)=>{await ctx.db.patch(args.id,{status:args.sending?"sending":"pending",leaseUntil:args.sending?Date.now()+60000:undefined});}});
+export const rollback=internalMutation({args:{args:v.any()},handler:async(ctx,{args})=>{await ctx.runMutation(api.adminPairTestReset.reset,args);throw new Error("Synthetic post-write rollback");}});

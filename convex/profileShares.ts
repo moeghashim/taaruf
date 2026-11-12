@@ -1,29 +1,100 @@
+import { interestBioVisible } from "./bioVisibility";
+import { isManualMatchDraft } from "../src/lib/manual-match-draft";
+import { currentAge, withCurrentAge } from "./birthdays";
+import { capabilityAllowed } from "./capabilitySecurity";
+import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { assertProfileCompleted, getRegistrationOrThrow } from "./interestRules";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+
+type ShareScope = Pick<Doc<"profileShares">, "ownerRegistrationId" | "recipientRegistrationId" | "interestId" | "matchId">;
+async function resolvedInterest(ctx: QueryCtx, share: ShareScope & { createdAt?: number }): Promise<Doc<"interests"> | null | false> {
+  if (share.ownerRegistrationId === share.recipientRegistrationId) return false;
+  // Only context-free shares need the pair guard; preserve legitimate linked history.
+  if (!share.interestId && !share.matchId) {
+  // Lifecycle shares must bind to matchId so withdrawal remains enforceable.
+  // Preserve genuinely older shares; never infer their origin from a later match.
+  for await (const match of ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", share.ownerRegistrationId))) {
+    if (match.femaleRegistrationId === share.recipientRegistrationId && (isManualMatchDraft(match) || match.matchmakerPresentedAt !== undefined) && (share.createdAt === undefined || share.createdAt >= match.createdAt)) return false;
+  }
+  for await (const match of ctx.db.query("matches").withIndex("by_femaleRegistrationId", q => q.eq("femaleRegistrationId", share.ownerRegistrationId))) {
+    if (match.maleRegistrationId === share.recipientRegistrationId && (isManualMatchDraft(match) || match.matchmakerPresentedAt !== undefined) && (share.createdAt === undefined || share.createdAt >= match.createdAt)) return false;
+  }
+  }
+  let interestId = share.interestId;
+  if (share.matchId) {
+    const match = await ctx.db.get(share.matchId);
+    if (isManualMatchDraft(match)) return false;
+    if (!match || match.testResetAt !== undefined || ["closed", "declined"].includes(match.status)) return false;
+    if (![match.maleRegistrationId, match.femaleRegistrationId].includes(share.ownerRegistrationId) ||
+        ![match.maleRegistrationId, match.femaleRegistrationId].includes(share.recipientRegistrationId)) return false;
+    if (interestId && match.interestId && interestId !== match.interestId) return false;
+    interestId ??= match.interestId;
+  }
+  if (interestId) {
+    const interest = await ctx.db.get(interestId);
+    if (!interest || interest.testReset || interest.visibility === "internal_only" ||
+        ["closed", "declined", "withdrawn"].includes(interest.status)) return false;
+    if (![interest.fromRegistrationId, interest.toRegistrationId].includes(share.ownerRegistrationId) ||
+        ![interest.fromRegistrationId, interest.toRegistrationId].includes(share.recipientRegistrationId)) return false;
+    return interest;
+  }
+  // A context-free bearer share must never bypass a recipient-specific choice or private lifecycle.
+  for (const [from, to] of [[share.ownerRegistrationId, share.recipientRegistrationId], [share.recipientRegistrationId, share.ownerRegistrationId]]) {
+    const interests = await ctx.db.query("interests").withIndex("by_fromRegistrationId_and_toRegistrationId", q => q.eq("fromRegistrationId", from).eq("toRegistrationId", to)).take(1001);
+    if (interests.length > 1000 || interests.some(row => row.senderPhotoConsent !== undefined || row.senderPhotoConsentRevokedAt !== undefined || row.testReset || row.visibility === "internal_only" || ["closed", "declined", "withdrawn"].includes(row.status))) return false;
+  }
+  return null;
+}
+async function available(ctx: QueryCtx, share: Doc<"profileShares">) {
+  // Historical decisions remain intact, but neither archived participant may
+  // retain a live bearer capability (including context-free declined shares).
+  const [owner, recipient] = await Promise.all([
+    ctx.db.get(share.ownerRegistrationId), ctx.db.get(share.recipientRegistrationId),
+  ]);
+  if (!owner || !recipient || owner.archivedAt !== undefined || recipient.archivedAt !== undefined) return false;
+  // Restoration must not reactivate historical bearer links, even declined ones.
+  if ([owner, recipient].some(person => person.lastRestoredArchivedAt !== undefined && share.createdAt <= person.lastRestoredArchivedAt!)) return false;
+  return await capabilityAllowed(ctx, share.createdAt) && share.revokedAt === undefined && share.status !== "closed" && await resolvedInterest(ctx, share) !== false;
+}
+async function imagesAllowed(ctx: QueryCtx, share: ShareScope & { includeImages: boolean }, owner: Doc<"registrations"> | null) {
+  if (!share.includeImages || !owner) return false;
+  const interest = await resolvedInterest(ctx, share);
+  if (interest === false) return false;
+  if (interest?.fromRegistrationId === owner._id && interest.senderPhotoConsent !== undefined) {
+    return interest.senderPhotoConsent === "yes" && interest.senderPhotoConsentRevokedAt === undefined;
+  }
+  return owner.photoSharingPermission === "yes";
+}
+
+import { assertProfileCompleted, getRegistrationOrThrow, assertMatchingParticipants } from "./interestRules";
 
 export const getAll = query({
-  args: {},
-  handler: async (ctx) => {
-    const shares = await ctx.db.query("profileShares").take(1000);
+  args: { adminSecret: v.optional(v.string()),},
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const candidates = await ctx.db.query("profileShares").take(1000);
+    const shares = [];
+    for (const share of candidates) if (await available(ctx, share)) shares.push(share);
 
-    return await Promise.all(
+    return withoutCapabilities(await Promise.all(
       shares.map(async (share) => {
         const owner = await ctx.db.get(share.ownerRegistrationId);
         const recipient = await ctx.db.get(share.recipientRegistrationId);
 
         return {
           ...share,
-          owner,
-          recipient,
+          owner: await withCurrentAge(ctx, owner),
+          recipient: await withCurrentAge(ctx, recipient),
         };
       })
-    );
+    ));
   },
 });
 
 export const create = mutation({
-  args: {
+  args: { adminSecret: v.optional(v.string()),
     ownerRegistrationId: v.id("registrations"),
     recipientRegistrationId: v.id("registrations"),
     includeImages: v.boolean(),
@@ -32,12 +103,14 @@ export const create = mutation({
     matchId: v.optional(v.id("matches")),
   },
   handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    if (await resolvedInterest(ctx, args) === false) throw new Error("Share context is unavailable; select the active interest");
+    await assertMatchingParticipants(ctx, args.ownerRegistrationId, args.recipientRegistrationId);
     const ownerRegistration = await getRegistrationOrThrow(ctx, args.ownerRegistrationId);
     assertProfileCompleted(ownerRegistration, "Profile owner");
-    if (args.includeImages && ownerRegistration.photoSharingPermission !== "yes") {
-      throw new Error("Photo sharing requires explicit owner consent");
-    }
+    if (args.includeImages && !(await imagesAllowed(ctx, args, ownerRegistration))) throw new Error("Photo sharing requires explicit owner consent");
 
+    if (await ctx.db.query("profileShares").withIndex("by_shareToken", q => q.eq("shareToken", args.shareToken)).first()) throw new Error("Use a fresh share token");
     const now = Date.now();
     return await ctx.db.insert("profileShares", {
       ownerRegistrationId: args.ownerRegistrationId,
@@ -64,16 +137,32 @@ export const getByShareToken = query({
       .withIndex("by_shareToken", (q) => q.eq("shareToken", args.shareToken))
       .first();
 
-    if (!share) return null;
+    if (!share || !(await available(ctx, share))) return null;
 
     const owner = await ctx.db.get(share.ownerRegistrationId);
     const recipient = await ctx.db.get(share.recipientRegistrationId);
 
+    const linkedInterest = await resolvedInterest(ctx, share);
+    // Exact linked interest only: a reverse/event sibling never grants bio access.
+    // Standalone legacy grants have no attributable interest; preserve them pending explicit migration.
+    // Manual matchmaker presentations are a separate lifecycle, unchanged here.
+    const bioVisible = linkedInterest ? await interestBioVisible(ctx, linkedInterest) : linkedInterest === null;
+    const includeImages = await imagesAllowed(ctx, share, owner);
+    const images = includeImages ? (await Promise.all((owner?.imageStorageIds ?? []).map(async storageId => ({ storageId, url: await ctx.storage.getUrl(storageId) })))).filter((image): image is { storageId: typeof image.storageId; url: string } => image.url !== null) : [];
     return {
-      ...share,
-      includeImages: share.includeImages && owner?.photoSharingPermission === "yes",
-      owner: owner ? { ...owner, imageStorageIds: share.includeImages && owner.photoSharingPermission === "yes" ? owner.imageStorageIds : [] } : null,
-      recipient,
+      images,
+      includeImages,
+      status: share.status,
+      owner: owner ? {
+        age: await currentAge(ctx, owner), gender: owner.gender, maritalStatus: owner.maritalStatus,
+        education: owner.education, job: owner.job, ethnicity: owner.ethnicity,
+        prayerCommitment: owner.prayerCommitment, hijabResponse: owner.hijabResponse,
+        spouseRequirement1: owner.spouseRequirement1, spouseRequirement2: owner.spouseRequirement2,
+        spouseRequirement3: owner.spouseRequirement3, shareableBio: bioVisible ? owner.shareableBio : undefined,
+        photoSharingPermission: owner.photoSharingPermission,
+        imageStorageIds: includeImages ? owner.imageStorageIds : [],
+      } : null,
+      recipient: recipient ? { name: recipient.name } : null,
     };
   },
 });
@@ -88,7 +177,7 @@ export const markViewed = mutation({
       .withIndex("by_shareToken", (q) => q.eq("shareToken", args.shareToken))
       .first();
 
-    if (!share) {
+    if (!share || !(await available(ctx, share))) {
       throw new Error("Shared profile not found");
     }
 

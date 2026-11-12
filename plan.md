@@ -32,7 +32,7 @@ The matchmaking system is being built incrementally. A parallel work stream has 
 
 **`convex/profileShares.ts`** — admin-controlled profile sharing:
 - Tokenized URL (`shareToken`) so attendees view shared profiles without an account
-- `includeImages` toggle controls whether photos are shared
+- Photo sharing rules: [recipient consent and lifecycle checks](docs/issue58-photo-consent.md#behavior)
 - Statuses: `drafted`, `shared`, `viewed`, `interested`, `declined`, `follow_up_needed`, `closed`
 - Mutations: `create`, `getByShareToken`, `markViewed`
 
@@ -40,7 +40,7 @@ The matchmaking system is being built incrementally. A parallel work stream has 
 
 **Public pages**
 - `/profile/[token]` — Token-based profile completion form. New registrants get an emailed link to fill out their extended profile (ethnicity, prayer commitment, hijab, 3 requirements, bio, photos, photo sharing preference).
-- `/share/[token]` — Token-based shared profile viewer. Lets a recipient view someone else's profile (name hidden, optionally with photos based on owner's `includeImages` consent).
+- `/share/[token]` — Token-based shared profile viewer. Lets a recipient view someone else's profile (name hidden; photos follow the [current consent rules](docs/issue58-photo-consent.md#behavior)).
 
 **Admin pages** (`/admin/(shell)/...` — new admin shell + sidebar):
 - `dashboard` — overview metrics
@@ -65,7 +65,7 @@ The matchmaking system is being built incrementally. A parallel work stream has 
 ### Registration Form
 - Now collects extended profile fields at registration (no longer a 2-step flow — they fill everything during signup)
 - Photo upload (1–3 images, stored in Convex storage)
-- Photo sharing permission: `yes` | `no` | `ask_me_first`
+- Saved photo preference: see [current consent rules](docs/issue58-photo-consent.md#behavior)
 - Interest submission as free text + optional list of numbers
 
 ---
@@ -79,7 +79,7 @@ The matchmaking system is being built incrementally. A parallel work stream has 
 | Events table to scope matches | **No events yet** — flat pool (deferred) |
 | `interests.status: pending → sent → accepted/declined` | More granular: `new → queued → active → converted_to_match` (plus `deferred`, `withdrawn`, `declined`, `closed`) |
 | `matches.status: active/ended` | More granular: `new`, `reviewing`, `contact_shared`, `declined`, `paused`, `closed` |
-| Photo sharing in-app within a match | **Photo consent set at registration** + `profileShares.includeImages` flag controls whether photos go in shared profile |
+| Photo sharing in-app within a match | See [current consent rules](docs/issue58-photo-consent.md#behavior) |
 | Same-event matching only | Not yet enforced — flat pool |
 | Mutual interest auto-match | ✅ Implemented (admin creates the matching second interest, auto-pairs) |
 | One match at a time | Partial — `activeMatchId` field exists but enforcement TBD |

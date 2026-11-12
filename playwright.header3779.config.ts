@@ -1,0 +1,2 @@
+import { defineConfig } from "@playwright/test";
+export default defineConfig({testDir:"./e2e",testMatch:["header3779.spec.ts","inline3765.spec.ts","inbound3761.spec.ts"],workers:1,reporter:"list",outputDir:process.env.TEST_OUTPUT||"test-results/header3779",use:{baseURL:process.env.PORTAL_BASE||"http://127.0.0.1:3779",channel:"chrome",headless:true,serviceWorkers:"block",extraHTTPHeaders:process.env.TEST_VERCEL_BYPASS?{"x-vercel-protection-bypass":process.env.TEST_VERCEL_BYPASS}:{}},timeout:60000});

@@ -1,0 +1,26 @@
+// @vitest-environment node
+import { NextRequest } from "next/server";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+const { mutation, query, session, config } = vi.hoisted(() => ({ mutation: vi.fn(), query: vi.fn(), session: vi.fn(), config: vi.fn() }));
+vi.mock("@/lib/matchmaker-delivery", () => ({ matchmakerDeliveryConfig: config }));
+vi.mock("@/lib/convex", () => ({ getConvexClient: () => ({ mutation, query }) }));
+vi.mock("@/lib/applicant-session", () => ({ getApplicantSessionHash: session }));
+import { GET, POST } from "./route";
+const post = (body: unknown, origin = "https://test.invalid") => new NextRequest("https://test.invalid/api/applicant/matchmaker", { method: "POST", headers: { origin }, body: JSON.stringify(body) });
+afterEach(() => vi.unstubAllEnvs());
+beforeEach(() => { vi.clearAllMocks(); query.mockReset(); vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "synthetic-readiness"); config.mockReturnValue(null); session.mockResolvedValue("cookie-hash"); mutation.mockResolvedValue(null); query.mockResolvedValue({ optedIn: false, matches: [] }); });
+test("requires cookie identity for reads and writes", async () => { session.mockResolvedValue(null); expect((await GET()).status).toBe(401); expect((await POST(post({ action: "consent", optedIn: true }))).status).toBe(401); expect(query).not.toHaveBeenCalled(); expect(mutation).not.toHaveBeenCalled(); });
+test("read is inert and private", async () => { const response = await GET(); expect(response.headers.get("cache-control")).toContain("no-store"); expect(query.mock.calls[0][1]).toEqual({ sessionHash: "cookie-hash" }); expect(mutation).not.toHaveBeenCalled(); });
+test("cross origin fails closed", async () => { expect((await POST(post({ action: "consent", optedIn: true }, "https://evil.invalid"))).status).toBe(403); expect(mutation).not.toHaveBeenCalled(); });
+for (const body of [null, [], {}, { action: "consent", optedIn: "true" }, { action: "consent", optedIn: true, sessionHash: "forged" }, { action: "approve", matchId: "a", registrationId: "other" }, { action: "followup", matchId: "a", status: "invalid" }, { action: "withdraw", matchId: "" }]) test("rejects invalid payload " + JSON.stringify(body), async () => { expect((await POST(post(body))).status).toBe(400); expect(mutation).not.toHaveBeenCalled(); });
+for (const body of [{ action: "consent", optedIn: false }, { action: "approve", matchId: "a" }, { action: "withdraw", matchId: "a" }, ...["contact_made", "getting_to_know", "not_proceeding", "engaged"].map(status => ({ action: "followup", matchId: "a", status }))]) test("passes explicit action with cookie identity " + JSON.stringify(body), async () => { expect((await POST(post(body))).status).toBe(200); const { action: _action, ...args } = body; void _action; expect(mutation.mock.calls[0][1]).toEqual({ ...args, sessionHash: "cookie-hash" }); });
+test("backend detail is not exposed", async () => { mutation.mockRejectedValue(new Error("private email secret")); const response = await POST(post({ action: "withdraw", matchId: "a" })); expect(response.status).toBe(409); expect(JSON.stringify(await response.json())).not.toContain("secret"); });
+for (const [mode, activationAt, expected] of [[null,123,false],['isolated',123,false],['production',null,false],['production',123,true]] as const) test('email readiness '+mode+' '+activationAt, async()=>{
+ config.mockReturnValue(mode ? {mode} : null);
+ query.mockResolvedValueOnce({optedIn:false,matches:[]}).mockResolvedValueOnce({activationAt});
+ const response = await GET();
+ expect(response.status).toBe(200);
+ expect((await response.json()).emailEnabled).toBe(expected);
+ expect(query).toHaveBeenCalledTimes(mode === 'production' ? 2 : 1);
+ expect(mutation).not.toHaveBeenCalled();
+});

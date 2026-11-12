@@ -1,3 +1,4 @@
+import { adminRequestError, getAdminSecret } from "@/lib/admin-server";
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
@@ -16,6 +17,8 @@ function isAdmin(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = adminRequestError(request);
+  if (denied) return denied;
   try {
     if (!isAdmin(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const convexClient = new ConvexHttpClient(convexUrl);
-    const claim = await convexClient.mutation(api.interests.claimDeclineNotification, {
+    const claim = await convexClient.mutation(api.interests.claimDeclineNotification, { adminSecret: getAdminSecret(),
       id: interestId,
     });
 
@@ -47,6 +50,16 @@ export async function POST(request: NextRequest) {
       throw new Error("Decline notification claim did not include requester contact details");
     }
 
+    try {
+      await convexClient.mutation(api.interests.assertNotificationEligible, { id: interestId, adminSecret: getAdminSecret() });
+    } catch (error) {
+      // The claim is optimistic: suppression must release its sent marker.
+      await convexClient.mutation(api.interests.recordDeclineNotificationFailure, { adminSecret: getAdminSecret(),
+        id: interestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
     const emailResult = await sendInterestClosedEmail({
       requesterEmail: claim.requesterEmail,
       requesterName: claim.requesterName,
@@ -54,7 +67,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!emailResult.success) {
-      await convexClient.mutation(api.interests.recordDeclineNotificationFailure, {
+      await convexClient.mutation(api.interests.recordDeclineNotificationFailure, { adminSecret: getAdminSecret(),
         id: interestId,
         error: emailResult.error || "Failed to send interest closed email",
       });
@@ -70,8 +83,9 @@ export async function POST(request: NextRequest) {
       providerId: emailResult.id,
     });
   } catch (error) {
+    if (/archived/i.test(String(error))) return NextResponse.json({ success: false, skipped: "ineligible", error: "Matching notification stopped because a participant is archived." }, { status: 409 });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: "Unable to complete admin request" },
       { status: 500 }
     );
   }

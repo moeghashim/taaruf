@@ -1,21 +1,25 @@
 "use client";
+import { ChangeEmailForm } from "./change-email-form";
+import { interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
+import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
+import { formatEducation } from "@/lib/education";
 
+import { ArchiveParticipant } from "@/components/archive-participant";
 import { useEffect, useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { useAdminQuery as useQuery } from "@/components/admin/hooks/use-admin-transport";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
 import { FactList, type Fact } from "@/components/admin/primitives/fact-list";
 import type { RegistrationDoc } from "@/components/admin/hooks/use-registrations";
 
 type Props = {
-  profile: RegistrationDoc;
+  profile: RegistrationDoc & { archivedAt?: number };
   registrationNumber?: number;
-  isWaitlisted: boolean;
   onUpdateNotes: (id: string, notes: string) => Promise<unknown>;
   onUpdateStatus: (id: string, status: "approved" | "rejected") => Promise<unknown>;
   onDelete: (id: string) => Promise<unknown>;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 function formatDate(timestamp?: number) {
@@ -43,49 +47,30 @@ function currentLookingFor(profile: RegistrationDoc) {
   return requirements.length ? requirements.join(", ") : profile.lookingFor?.trim() || "";
 }
 
-function interestTone(status?: string) {
-  switch (status || "pending") {
-    case "matched":
-      return "green" as const;
-    case "requested":
-      return "blue" as const;
-    case "declined":
-      return "rose" as const;
-    default:
-      return "gold" as const;
-  }
+
+export function ProfileDetail(props: Props) {
+  return <ProfileDetailBody key={props.profile._id} {...props} />;
 }
 
-function summarizeInterestStatuses(interests: Array<{ adminStatus?: string; status?: string; matchId?: string | null }>) {
-  return {
-    pending: interests.filter((interest) => (interest.adminStatus || "pending") === "pending").length,
-    requested: interests.filter((interest) => (interest.adminStatus || "pending") === "requested").length,
-    declined: interests.filter((interest) => (interest.adminStatus || "pending") === "declined").length,
-    matched: interests.filter((interest) => (interest.adminStatus || "pending") === "matched" || interest.matchId).length,
-    activeWorkflow: interests.filter((interest) => interest.status === "active" || interest.status === "converted_to_match").length,
-  };
-}
-
-/**
- * Body of the detail pane drawer for a single registration. Renders
- * profile facts + applicant long-form text + an editable admin notes
- * field + the action bar (approve/reject/delete).
- */
-export function ProfileDetail({
+function ProfileDetailBody({
   profile,
   registrationNumber,
-  isWaitlisted,
   onUpdateNotes,
   onUpdateStatus,
   onDelete,
   onClose,
+  onDirtyChange,
 }: Props) {
+  const [localArchive, setLocalArchive] = useState<{ id: string; at: number | null } | null>(null);
+  const archivedAt = localArchive?.id === profile._id ? localArchive.at : profile.archivedAt;
+  const archived = archivedAt != null;
   const [actionError, setActionError] = useState<string | null>(null);
   const [failedPhotos, setFailedPhotos] = useState<string[]>([]);
-  const eventHistory = useQuery(api.events.getByRegistration, {
+  const rejectionNotice = useQuery("profileRejectionNotice.status", { registrationId: profile._id as Id<"registrations"> });
+  const eventHistory = useQuery("events.getByRegistration", {
     registrationId: profile._id as Id<"registrations">,
   });
-  const interestHistory = useQuery(api.interests.getByRegistration, {
+  const interestHistory = useQuery("interests.getByRegistration", {
     registrationId: profile._id as Id<"registrations">,
   });
   const [notes, setNotes] = useState(profile.adminNotes ?? "");
@@ -95,18 +80,39 @@ export function ProfileDetail({
   const lookingFor = currentLookingFor(profile);
   const outboundInterests = interestHistory?.outbound ?? [];
   const inboundInterests = interestHistory?.inbound ?? [];
-  const outboundSummary = summarizeInterestStatuses(outboundInterests);
-  const inboundSummary = summarizeInterestStatuses(inboundInterests);
 
-  // Reset notes whenever the visible profile changes.
+
+
+  const [savedNotes, setSavedNotes] = useState(profile.adminNotes ?? "");
+  const [emailDirty, setEmailDirty] = useState(false);
+  const dirty = notes !== savedNotes;
+  // Follow subscriptions while clean; never replace an unsaved local draft.
   useEffect(() => {
-    setNotes(profile.adminNotes ?? "");
-  }, [profile._id, profile.adminNotes]);
+    if (dirty || savingNotes) return;
+    const incoming = profile.adminNotes ?? "";
+    setNotes(incoming);
+    setSavedNotes(incoming);
+  }, [profile.adminNotes, dirty, savingNotes]);
+  useEffect(() => { onDirtyChange?.(dirty || emailDirty || savingNotes || busyAction !== null); }, [dirty, emailDirty, savingNotes, busyAction, onDirtyChange]);
+  useEffect(() => {
+    if (!dirty && !emailDirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, emailDirty]);
+
 
   const facts: Fact[] = [
     { label: "Applicant #", value: registrationNumber ?? "—" },
+    { label: "Age", value: profile.age },
+    { label: "Gender", value: profile.gender },
+    { label: "Ethnicity", value: profile.ethnicity?.trim() ? profile.ethnicity : "Not provided" },
+    { label: "Prayer commitment", value: profile.prayerCommitment?.replace(/_/g, " ") || "—" },
+    { label: "Hijab", value: profile.hijabResponse?.replace(/_/g, " ") || "—" },
+    { label: "Photo sharing permission", value: profile.photoSharingPermission?.replace(/_/g, " ") || "—" },
+    { label: "Profile completion", value: profile.profileCompletionStatus?.replace(/_/g, " ") || "not started" },
     { label: "Marital status", value: profile.maritalStatus || "—" },
-    { label: "Education", value: profile.education || "—" },
+    { label: "Education", value: formatEducation(profile.education) },
     { label: "Occupation", value: profile.job || "—" },
     { label: "Email", value: profile.email },
     { label: "Phone", value: profile.phone || "—" },
@@ -115,8 +121,12 @@ export function ProfileDetail({
 
   const saveNotes = async () => {
     setSavingNotes(true);
+    setActionError(null);
     try {
       await onUpdateNotes(profile._id, notes);
+      setSavedNotes(notes);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Unable to save notes. Your draft is preserved; try again.");
     } finally {
       setSavingNotes(false);
     }
@@ -126,6 +136,7 @@ export function ProfileDetail({
     setBusyAction(status === "approved" ? "approve" : "reject");
     try {
       await onUpdateStatus(profile._id, status);
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to update profile approval");
     } finally {
       setBusyAction(null);
     }
@@ -137,6 +148,7 @@ export function ProfileDetail({
     try {
       const response = await fetch("/api/admin/revoke-approval", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ registrationId: profile._id }) });
       const result = await response.json();
+      if (response.ok) refreshAdminData();
       if (!response.ok) throw new Error(result.error);
     } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to revoke approval"); }
     finally { setBusyAction(null); }
@@ -148,6 +160,7 @@ export function ProfileDetail({
     try {
       await onDelete(profile._id);
       onClose();
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to delete profile");
     } finally {
       setBusyAction(null);
     }
@@ -172,7 +185,6 @@ export function ProfileDetail({
     <div style={{ padding: 20 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <StatusPill status={profile.status} />
-        {isWaitlisted && <Pill tone="gold">Waitlisted</Pill>}
         {profile.paymentStatus && <StatusPill status={profile.paymentStatus} />}
       </div>
 
@@ -212,6 +224,8 @@ export function ProfileDetail({
         <FactList facts={facts} />
       </div>
 
+      <ChangeEmailForm registrationId={profile._id} email={profile.email} onDirtyChange={setEmailDirty} />
+
       {sectionHeading("Interest snapshot")}
       <div
         style={{
@@ -227,11 +241,8 @@ export function ProfileDetail({
             <Pill tone="plain">{outboundInterests.length}</Pill>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Pill tone={interestTone("pending")}>Pending {outboundSummary.pending}</Pill>
-            <Pill tone={interestTone("requested")}>Requested {outboundSummary.requested}</Pill>
-            <Pill tone={interestTone("declined")}>Declined {outboundSummary.declined}</Pill>
-            <Pill tone={interestTone("matched")}>Matched {outboundSummary.matched}</Pill>
-            <Pill tone="plain">Active {outboundSummary.activeWorkflow}</Pill>
+            <Pill tone="plain">Pending review {outboundInterests.filter(interest => !isArchivedInterest(interest)).length}</Pill>
+            <Pill tone="plain">Released / closed {outboundInterests.filter(isArchivedInterest).length}</Pill>
           </div>
         </div>
         <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12, background: "var(--bg-tint)" }}>
@@ -240,11 +251,8 @@ export function ProfileDetail({
             <Pill tone="plain">{inboundInterests.length}</Pill>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Pill tone={interestTone("pending")}>Pending {inboundSummary.pending}</Pill>
-            <Pill tone={interestTone("requested")}>Requested {inboundSummary.requested}</Pill>
-            <Pill tone={interestTone("declined")}>Declined {inboundSummary.declined}</Pill>
-            <Pill tone={interestTone("matched")}>Matched {inboundSummary.matched}</Pill>
-            <Pill tone="plain">Active {inboundSummary.activeWorkflow}</Pill>
+            <Pill tone="plain">Pending review {inboundInterests.filter(interest => !isArchivedInterest(interest)).length}</Pill>
+            <Pill tone="plain">Released / closed {inboundInterests.filter(isArchivedInterest).length}</Pill>
           </div>
         </div>
       </div>
@@ -342,8 +350,7 @@ export function ProfileDetail({
               <strong style={{ fontSize: 13 }}>{interest.toRegistration?.name ?? "Unknown"}</strong>
               <div style={{ color: "var(--mute)", fontSize: 12 }}>{interest.toRegistration?.email ?? "—"}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Pill tone={interestTone(interest.adminStatus)}>Status: {(interest.adminStatus || "pending").replace(/_/g, " ")}</Pill>
-                <Pill tone="plain">Workflow: {interest.status.replace(/_/g, " ")}</Pill>
+                <Pill tone="plain">{interestLifecycle(interest)}</Pill>
                 {interest.rank ? <Pill tone="plain">Rank {interest.rank}</Pill> : null}
                 <Pill tone="plain">{interest.source.replace(/_/g, " ")}</Pill>
                 {interest.matchId ? <Pill tone="green">Linked to match</Pill> : null}
@@ -368,8 +375,7 @@ export function ProfileDetail({
               <strong style={{ fontSize: 13 }}>{interest.fromRegistration?.name ?? "Unknown"}</strong>
               <div style={{ color: "var(--mute)", fontSize: 12 }}>{interest.fromRegistration?.email ?? "—"}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Pill tone={interestTone(interest.adminStatus)}>Status: {(interest.adminStatus || "pending").replace(/_/g, " ")}</Pill>
-                <Pill tone="plain">Workflow: {interest.status.replace(/_/g, " ")}</Pill>
+                <Pill tone="plain">{interestLifecycle(interest)}</Pill>
                 {interest.rank ? <Pill tone="plain">Their rank {interest.rank}</Pill> : null}
                 <Pill tone="plain">{interest.visibility.replace(/_/g, " ")}</Pill>
                 {interest.matchId ? <Pill tone="green">Linked to match</Pill> : null}
@@ -381,8 +387,10 @@ export function ProfileDetail({
         )}
       </div>
 
+      {profile.applicantNotesToAdmin && <><h4>Applicant notes to admin</h4><p style={{ whiteSpace: "pre-wrap" }}>{profile.applicantNotesToAdmin}</p></>}
       {sectionHeading("Admin notes")}
       <textarea
+        aria-label="Admin notes"
         rows={5}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
@@ -402,12 +410,15 @@ export function ProfileDetail({
         <button
           className="btn btn-sm"
           onClick={saveNotes}
-          disabled={savingNotes || notes === (profile.adminNotes ?? "")}
+          disabled={savingNotes || !dirty}
         >
           {savingNotes ? "Saving…" : "Save notes"}
         </button>
       </div>
 
+      <p role="status">{dirty ? "Unsaved notes" : "Notes saved"}</p>
+      <h4>Global profile approval</h4>
+      <p>These actions affect the member profile, not event registration or capacity. Manage event acceptance in the roster.</p>
       <div
         style={{
           display: "flex",
@@ -417,16 +428,25 @@ export function ProfileDetail({
           borderTop: "1px solid var(--line-2)",
         }}
       >
+        {rejectionNotice && <p role="status" style={{ flexBasis: "100%" }}>
+          {rejectionNotice.state === "pending" && rejectionNotice.attempted ? "Application notice delivery unconfirmed; retrying with original key. Reversal stops retries but cannot recall an accepted email." :
+           rejectionNotice.state === "pending" ? (rejectionNotice.notBefore ? "Application notice pending — not before " + new Date(rejectionNotice.notBefore).toLocaleString() + ". Reverse rejection before dispatch to cancel." : "Application notice pending reconciliation.") :
+           rejectionNotice.state === "cancelled" ? "Application notice cancelled — not sent. A new rejection starts a fresh 15-minute grace period." :
+           rejectionNotice.state === "accepted" ? "Application notice sent — provider accepted; inbox delivery not confirmed." :
+           rejectionNotice.state === "sending" ? "Application notice dispatch started — it may no longer be recalled." :
+           "Application notice held for provider reconciliation — do not resend."}
+        </p>}
+        {profile.status === "rejected" && <button className="btn" onClick={() => handleStatus("approved")} disabled={busyAction !== null}>Reverse rejection and approve profile</button>}
         {actionError && <p role="alert">{actionError}</p>}
-        {profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke approval"}</button>}
-        {profile.status === "pending" && (
+        {!archived && profile.status === "approved" && <button className="btn" onClick={revokeApproval} disabled={busyAction !== null}>{busyAction === "revoke" ? "Revoking…" : "Revoke profile approval"}</button>}
+        {!archived && profile.status === "pending" && (
           <>
             <button
               className="btn btn-primary"
               onClick={() => handleStatus("approved")}
               disabled={busyAction !== null}
             >
-              {busyAction === "approve" ? "Approving…" : "Approve"}
+              {busyAction === "approve" ? "Approving…" : "Approve profile"}
             </button>
             <button
               className="btn"
@@ -434,8 +454,9 @@ export function ProfileDetail({
               disabled={busyAction !== null}
               style={{ color: "var(--rose)" }}
             >
-              {busyAction === "reject" ? "Rejecting…" : "Reject"}
+              {busyAction === "reject" ? "Rejecting…" : "Reject profile"}
             </button>
+            <p style={{ flexBasis: "100%", margin: 0 }}>Rejecting the whole profile queues the application notice with a 15-minute grace period when rejection emails are enabled. Reversing before dispatch cancels it; rejecting again after an unsent cancellation starts a fresh 15 minutes. Sent or attempted notices are never reset. Event rejection does not send this notice.</p>
           </>
         )}
         <button
@@ -444,9 +465,10 @@ export function ProfileDetail({
           disabled={busyAction !== null}
           style={{ color: "var(--rose)", marginLeft: "auto" }}
         >
-          {busyAction === "delete" ? "Deleting…" : "Delete"}
+          {busyAction === "delete" ? "Deleting…" : "Delete profile"}
         </button>
       </div>
+      <ArchiveParticipant key={profile._id} archivedAt={archivedAt} lastRestoredArchivedAt={profile.lastRestoredArchivedAt} registrationId={profile._id} name={profile.name} onArchived={at => { setLocalArchive({ id: profile._id, at }); refreshAdminData(); }} onRestored={() => { setLocalArchive({ id: profile._id, at: null }); refreshAdminData(); }} />
     </div>
   );
 }

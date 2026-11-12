@@ -1,12 +1,12 @@
 "use client";
+import { dateOfBirthError } from "@/lib/date-of-birth";
+import { educationOptions, isEducation } from "@/lib/education";
 
 import { hijabQuestion, hijabOptions, type HijabResponse } from "@/lib/hijab";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useForm, useStore } from "@tanstack/react-form";
-import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 import { Ico } from "@/components/admin/primitives/icons";
 
@@ -29,7 +29,7 @@ interface RegistrationEvent {
 
 interface RegistrationFormData {
   name: string;
-  age: number;
+  dateOfBirth: string;
   gender: "male" | "female" | "";
   maritalStatus: string;
   education: string;
@@ -57,7 +57,6 @@ const prayerOptions = [
 const photoSharingOptions = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
-  { value: "ask_me_first", label: "Ask me first" },
 ] as const;
 
 const duplicateEmailMessage =
@@ -89,12 +88,11 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
-  const generateUploadUrl = useMutation(api.registrations.generateImageUploadUrl);
 
   const form = useForm({
     defaultValues: {
       name: "",
-      age: 0,
+      dateOfBirth: "",
       gender: "",
       maritalStatus: "",
       education: "",
@@ -127,7 +125,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: value.name,
-            age: value.age,
+            dateOfBirth: value.dateOfBirth,
             gender: value.gender,
             maritalStatus: value.maritalStatus,
             education: value.education,
@@ -190,11 +188,11 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
 
       for (const file of chosenFiles) {
         const preparedFile = await prepareImageFileForUpload(file);
-        const uploadUrl = await generateUploadUrl({});
-        const result = await fetch(uploadUrl, {
+        const result = await fetch("/api/photos/upload", {
           method: "POST",
           headers: {
             "Content-Type": preparedFile.type || "application/octet-stream",
+            "x-upload-context": "signup",
           },
           body: preparedFile,
         });
@@ -269,30 +267,30 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
 
         <div className="profile-grid two">
           <form.Field
-            name="age"
+            name="dateOfBirth"
             validators={{
               onChange: ({ value }) => {
-                if (!value) return "Age is required";
-                if (value < 18 || value > 99) return "Age must be between 18 and 99";
-                return undefined;
+                return dateOfBirthError(value);
               },
             }}
           >
             {(field) => (
               <div className="field">
-                <label htmlFor={field.name}>Age *</label>
+                <label htmlFor={field.name}>Date of birth *</label>
                 <input
                   id={field.name}
-                  type="number"
-                  min="18"
-                  max="99"
+                  type="date"
+                  required
+                  autoComplete="bday"
+                  aria-describedby="birthday-help birthday-error"
+                  aria-invalid={field.state.meta.errors.length > 0}
                   value={field.state.value || ""}
-                  onChange={(e) => field.handleChange(parseInt(e.target.value) || 0)}
+                  onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  placeholder="18-99"
                 />
+                <p id="birthday-help" className="muted">You must be 18–99. Your age is shared with matches, not your date of birth.</p>
                 {field.state.meta.errors?.length > 0 && (
-                  <p className="field-error">{field.state.meta.errors.join(", ")}</p>
+                  <p id="birthday-error" className="field-error">{field.state.meta.errors.join(", ")}</p>
                 )}
               </div>
             )}
@@ -359,7 +357,7 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
           <form.Field
             name="education"
             validators={{
-              onChange: ({ value }) => (!value ? "Education is required" : undefined),
+              onChange: ({ value }) => (!isEducation(value) ? "Select an education level" : undefined),
             }}
           >
             {(field) => (
@@ -372,14 +370,9 @@ export function RegistrationForm({ event }: { event?: RegistrationEvent | null }
                   onBlur={field.handleBlur}
                 >
                   <option value="">Select education level</option>
-                  <option value="highSchool">High School</option>
-                  <option value="bachelor">Bachelor&apos;s</option>
-                  <option value="master">Master&apos;s</option>
-                  <option value="phd">PhD</option>
-                  <option value="jd">JD</option>
-                  <option value="md_do">MD/DO</option>
-                  <option value="md_phd">MD/PhD</option>
-                  <option value="jd_phd">JD/PhD</option>
+                  {educationOptions.map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
                 {field.state.meta.errors?.length > 0 && (
                   <p className="field-error">{field.state.meta.errors.join(", ")}</p>

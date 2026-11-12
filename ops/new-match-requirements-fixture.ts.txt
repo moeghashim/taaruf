@@ -1,0 +1,6 @@
+import { mutation, query } from "./_generated/server";
+export const seed = mutation({args:{},handler:async ctx=>{
+ if((await ctx.db.query("registrations").take(1)).length)throw Error("Fresh synthetic DB only");
+ const ids=[];for(const gender of ["male","female"] as const)for(let i=0;i<3;i++)ids.push(await ctx.db.insert("registrations",{name:"Synthetic "+gender+" "+i,email:gender+i+"@example.invalid",age:30,gender,maritalStatus:"single",education:"synthetic",job:"synthetic",phone:"0000000000",status:"approved",profileCompletionStatus:"completed",searchStatus:"active",photoSharingPermission:"ask_me_first",spouseRequirement1:gender+" requirement one "+i,spouseRequirement2:gender+" requirement two "+i,spouseRequirement3:gender+" requirement three "+i,publicApplicantNumber:ids.length+901,createdAt:Date.now()}));return ids;
+}});
+export const snapshot=query({args:{},handler:async ctx=>({profiles:await ctx.db.query("registrations").collect(),matches:await ctx.db.query("matches").collect(),interests:await ctx.db.query("interests").collect(),flows:await ctx.db.query("interestFlows").collect(),shares:await ctx.db.query("profileShares").collect(),emails:await ctx.db.query("eventRegistrationEmails").collect()})});

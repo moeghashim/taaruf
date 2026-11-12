@@ -1,3 +1,4 @@
+process.env.ATTENDANCE_ADMIN_SECRET ??= "synthetic-admin-test";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "./_generated/api";
@@ -12,7 +13,7 @@ const profileFields = {
   spouseRequirement2: "Patient",
   spouseRequirement3: "Practicing",
   shareableBio: "Test bio",
-  photoSharingPermission: "ask_me_first" as const,
+  photoSharingPermission: "no" as const,
 };
 const registrationFields = {
   name: "Test Applicant", age: 28, maritalStatus: "single",
@@ -47,11 +48,13 @@ describe("hijab persistence", () => {
   test.each(["burqa", "niqab", "yes", "working_on_it", "no", "open"] as const)(
     "supports female %s in signup and both profile editors", async (hijabResponse) => {
       const t = convexTest(schema, modules);
-      const id = await t.mutation(api.registrations.create, {
+      const id = await t.mutation(api.registrations.create, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
         ...registrationFields, ...profileFields, gender: "female", hijabResponse,
       });
       expect((await t.run((ctx) => ctx.db.get(id)))?.hijabResponse).toBe(hijabResponse);
       const imageId = await t.run((ctx) => ctx.storage.store(new Blob(["test"], { type: "image/png" })));
+      // Synthetic upload provenance; HTTP storage ownership is tested in photoUploads.test.ts.
+      await t.run(ctx => ctx.db.insert("photoUploads", { storageId: imageId, registrationId: id, createdAt: Date.now() }));
       const update = { ...profileFields, imageStorageIds: [imageId], hijabResponse };
       await t.run(async (ctx) => {
         await ctx.db.patch(id, { hijabResponse: undefined });
@@ -68,7 +71,7 @@ describe("hijab persistence", () => {
   );
   test.each(["yes", "no", "open"] as const)("still accepts male %s", async (hijabResponse) => {
     const t = convexTest(schema, modules);
-    const id = await t.mutation(api.registrations.create, {
+    const id = await t.mutation(api.registrations.create, { adminSecret: process.env.ATTENDANCE_ADMIN_SECRET!,
       ...registrationFields, ...profileFields, gender: "male", hijabResponse,
     });
     expect((await t.run((ctx) => ctx.db.get(id)))?.hijabResponse).toBe(hijabResponse);

@@ -105,6 +105,7 @@ const eventStatus = v.union(
   v.literal("cancelled")
 );
 const eventRegistrationStatus = v.union(
+  v.literal("waitlisted"),
   v.literal("pending"),
   v.literal("approved"),
   v.literal("rejected"),
@@ -137,7 +138,46 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  interestReopenAudits: defineTable({
+    operationKey: v.string(), interestId: v.id("interests"), fingerprint: v.string(), snapshot: v.string(), actor: v.literal("admin"), reason: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
+  deliveryCancellationAudits: defineTable({
+    operationKey: v.string(), authorization: v.string(), snapshot: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
+  // Kept off registration documents: raw spreads must never disclose birthdays.
+  registrationBirthdays: defineTable({ registrationId: v.id("registrations"), dateOfBirth: v.string() }).index("by_registrationId", ["registrationId"]),
+  profileRejectionNotices: defineTable({
+    registrationId: v.id("registrations"), email: v.string(),
+    state: v.union(v.literal("pending"), v.literal("sending"), v.literal("accepted"), v.literal("cancelled"), v.literal("needs_reconciliation")),
+    notBefore: v.optional(v.number()), attempts: v.number(), nextAttemptAt: v.number(), createdAt: v.number(), updatedAt: v.number(),
+    firstAttemptAt: v.optional(v.number()), providerId: v.optional(v.string()), detail: v.optional(v.string()),
+    payload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string() })),
+  }).index("by_registrationId", ["registrationId"]).index("by_state_and_nextAttemptAt", ["state", "nextAttemptAt"]),
+  photoUploads: defineTable({
+    storageId: v.id("_storage"),
+    registrationId: v.optional(v.id("registrations")),
+    signupCapabilityHash: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_storageId", ["storageId"]),
+  checkoutLinks: defineTable({
+    stripeSessionId: v.string(), registrationId: v.id("registrations"),
+    eventRegistrationId: v.optional(v.id("eventRegistrations")),
+    receiptAttempt: v.optional(v.number()), createdAt: v.number(),
+  }).index("by_session", ["stripeSessionId"]),
+  receiptDeliveries: defineTable({
+    key: v.string(), token: v.string(), leaseUntil: v.number(), firstAttemptAt: v.number(),
+    sentAt: v.optional(v.number()), error: v.optional(v.string()),
+    name: v.string(), email: v.string(), eventTitle: v.optional(v.string()),
+    registrationStatus: v.optional(v.union(v.literal("pending"), v.literal("waitlisted"))),
+    profileUrl: v.optional(v.string()),
+  }).index("by_key", ["key"]),
   registrations: defineTable({
+    backgroundMatchmakingOptIn: v.optional(v.boolean()),
+    backgroundMatchmakingConsentUpdatedAt: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    lastRestoredArchivedAt: v.optional(v.number()),
+    archivedBy: v.optional(v.union(v.literal("participant"), v.literal("admin"))),
+    archivedByRegistrationId: v.optional(v.id("registrations")),
     // Legacy/internal identifier. Keep for compatibility, but human-facing
     // applicant references should use publicApplicantNumber.
     applicantNumber: v.optional(v.number()),
@@ -176,6 +216,7 @@ export default defineSchema({
     searchStatusNote: v.optional(v.string()),
     createdAt: v.number(),
     profileAccessToken: v.optional(v.string()),
+    profileAccessTokenIssuedAt: v.optional(v.number()),
     profileCompletionStatus: v.optional(
       v.union(v.literal("not_started"), v.literal("in_progress"), v.literal("completed"))
     ),
@@ -210,7 +251,37 @@ export default defineSchema({
     .index("by_stripeSessionId", ["stripeSessionId"])
     .index("by_profileAccessToken", ["profileAccessToken"]),
 
+  // Append-only provider callbacks for retired jobs; no workflow authority.
+  retiredDeliveryResults: defineTable({
+    deliveryId: v.id("femaleWorkflowDeliveries"), resetAuditId: v.id("pairTestResetAudits"),
+    attempt: v.number(), success: v.boolean(), receivedAt: v.number(),
+    error: v.optional(v.string()), rateLimited: v.optional(v.boolean()), retryAfterMs: v.optional(v.number()),
+  }).index("by_deliveryId", ["deliveryId"]),
+  femaleWorkflowDeliveries: defineTable({
+    resetAuditId: v.optional(v.id("pairTestResetAudits")),
+    resetAt: v.optional(v.number()),
+    lateResult: v.optional(v.object({ attempt: v.number(), success: v.boolean(), receivedAt: v.number(), error: v.optional(v.string()) })),
+    interestId: v.id("interests"), recipientId: v.id("registrations"),
+    kind: v.union(v.literal("brother_review"), v.literal("sister_confirmation"), v.literal("pending_review"), v.literal("contacts_ready")),
+    key: v.string(), status: v.union(v.literal("pending"), v.literal("sending"), v.literal("sent"), v.literal("failed"), v.literal("cancelled")),
+    attempts: v.number(), nextAttemptAt: v.number(), leaseUntil: v.optional(v.number()),
+    reviewActivationAt: v.optional(v.number()),
+    sisterActivationAt: v.optional(v.number()),
+    sisterAcceptedAt: v.optional(v.number()),
+    sisterRecipientEmail: v.optional(v.string()),
+    providerCooldownUntil: v.optional(v.number()),
+    providerPayload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string() })),
+    firstAttemptAt: v.optional(v.number()), sentAt: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(),
+  }).index("by_kind_and_status_and_nextAttemptAt", ["kind", "status", "nextAttemptAt"]).index("by_key", ["key"]).index("by_interestId", ["interestId"]).index("by_interestId_and_status", ["interestId", "status"]).index("by_status_and_nextAttemptAt", ["status", "nextAttemptAt"]).index("by_providerCooldownUntil", ["providerCooldownUntil"]),
   interests: defineTable({
+    femaleWorkflow: v.optional(v.object({
+      state: v.union(v.literal("private_documented"), v.literal("awaiting_brother_review"), v.literal("awaiting_sister_confirmation"), v.literal("pending_admin_approval"), v.literal("contacts_released"), v.literal("declined"), v.literal("revoked")),
+      reviewTokenHash: v.optional(v.string()), reviewExpiresAt: v.optional(v.number()),
+      brotherAcceptedAt: v.optional(v.number()), sisterConfirmedAt: v.optional(v.number()), adminReleasedAt: v.optional(v.number()),
+    })),
+    senderPhotoConsent: v.optional(v.union(v.literal("yes"), v.literal("no"))),
+    senderPhotoConsentRevokedAt: v.optional(v.number()),
+    testReset: v.optional(v.object({ at: v.number(), reason: v.string(), actor: v.literal("admin") })),
     fromRegistrationId: v.id("registrations"),
     toRegistrationId: v.id("registrations"),
     eventId: v.id("events"),
@@ -231,6 +302,9 @@ export default defineSchema({
     .index("by_fromRegistrationId", ["fromRegistrationId"])
     .index("by_toRegistrationId", ["toRegistrationId"])
     .index("by_fromRegistrationId_and_eventId_and_source", ["fromRegistrationId", "eventId", "source"])
+    .index("by_fromRegistrationId_and_testReset", ["fromRegistrationId", "testReset"])
+    .index("by_toRegistrationId_and_testReset", ["toRegistrationId", "testReset"])
+    .index("by_submission_quota", ["fromRegistrationId", "eventId", "source", "testReset"])
     .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
     .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])
     .index("by_fromRegistrationId_and_toRegistrationId_and_eventId", ["fromRegistrationId", "toRegistrationId", "eventId"])
@@ -253,7 +327,8 @@ export default defineSchema({
     femaleCapacity: v.number(),
     registrationOpensAt: v.optional(v.number()),
     registrationClosesAt: v.optional(v.number()),
-    interestSubmissionClosesAt: v.optional(v.number()),
+    interestSubmissionClosesAt: v.optional(v.number()), // Legacy metadata; never gates submissions.
+    interestSubmissionsEnabled: v.optional(v.boolean()),
     adminNotes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -262,6 +337,7 @@ export default defineSchema({
     .index("by_startsAt", ["startsAt"])
     .index("by_series_and_eventMonth", ["series", "eventMonth"])
     .index("by_series_and_startsAt", ["series", "startsAt"])
+    .index("by_interestSubmissionsEnabled", ["interestSubmissionsEnabled"])
     .index("by_eventCode", ["eventCode"]),
 
   eventAttendees: defineTable({
@@ -281,12 +357,14 @@ export default defineSchema({
     confirmedAt: v.optional(v.number()),
     confirmationRequestedAt: v.optional(v.number()),
     confirmationExpiresAt: v.optional(v.number()),
+    waitlistedAt: v.optional(v.number()),
     waitlistCarryoverFromEventId: v.optional(v.id("events")),
     approvedAt: v.optional(v.number()),
     rejectedAt: v.optional(v.number()),
     cancelledAt: v.optional(v.number()),
     checkedInAt: v.optional(v.number()),
     noShowMarkedAt: v.optional(v.number()),
+    receiptAttempt: v.optional(v.number()),
     registrationReceivedEmailSentAt: v.optional(v.number()),
     registrationReceivedEmailError: v.optional(v.string()),
     adminNotes: v.optional(v.string()),
@@ -337,7 +415,33 @@ export default defineSchema({
     .index("by_registrationId", ["registrationId"])
     .index("by_eventId_and_kind", ["eventId", "kind"]),
 
+  // Private operational history: no public reader or general bridge access.
+  adminEmailChangeAudits: defineTable({
+    registrationId: v.id("registrations"), oldEmail: v.string(), newEmail: v.string(),
+    reason: v.string(), actor: v.literal("authenticated_shared_admin"), createdAt: v.number(),
+  }).index("by_registrationId", ["registrationId"]),
+
+  // Restricted operational audit: intentionally no public query or mutation.
+  pairTestResetAudits: defineTable({
+    operationKey: v.string(), request: v.string(), snapshot: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
+
+  matchmakerNotifications: defineTable({
+    matchId: v.id("matches"), recipientId: v.id("registrations"), key: v.string(),
+    status: v.union(v.literal("pending"), v.literal("claimed"), v.literal("sent"), v.literal("failed")),
+    createdAt: v.number(), activationAt: v.optional(v.number()), claimedAt: v.optional(v.number()), completedAt: v.optional(v.number()),
+  }).index("by_key", ["key"]),
   matches: defineTable({
+    matchmakerPresentedAt: v.optional(v.number()),
+    matchmakerWithdrawnAt: v.optional(v.number()),
+    matchmakerWithdrawnBy: v.optional(v.id("registrations")),
+    maleMatchmakerApprovalAt: v.optional(v.number()),
+    femaleMatchmakerApprovalAt: v.optional(v.number()),
+    maleFollowup: v.optional(v.object({status: v.union(v.literal("contact_made"), v.literal("getting_to_know"), v.literal("not_proceeding"), v.literal("engaged")), authorRegistrationId: v.id("registrations"), updatedAt: v.number()})),
+    femaleFollowup: v.optional(v.object({status: v.union(v.literal("contact_made"), v.literal("getting_to_know"), v.literal("not_proceeding"), v.literal("engaged")), authorRegistrationId: v.id("registrations"), updatedAt: v.number()})),
+    contactGate: v.optional(v.union(v.literal("pending_admin_approval"), v.literal("contacts_released"))),
+    adminReleasedAt: v.optional(v.number()),
+    testResetAt: v.optional(v.number()),
     maleRegistrationId: v.id("registrations"),
     femaleRegistrationId: v.id("registrations"),
     interestType,
@@ -360,6 +464,7 @@ export default defineSchema({
     .index("by_status", ["status"]),
 
   profileShares: defineTable({
+    revokedAt: v.optional(v.number()),
     ownerRegistrationId: v.id("registrations"),
     recipientRegistrationId: v.id("registrations"),
     includeImages: v.boolean(),
@@ -412,6 +517,9 @@ export default defineSchema({
     photoDecision: photoDecision,
     photoRequestedByRegistrationId: v.optional(v.id("registrations")),
     bioVisibleAt: v.optional(v.number()),
+    // Explicit source action, not pair-wide propagation (legacy flags are ambiguous).
+    requesterExplicitFinalAt: v.optional(v.number()),
+    recipientExplicitFinalAt: v.optional(v.number()),
     requesterFinalApprovalAt: v.optional(v.number()),
     recipientFinalApprovalAt: v.optional(v.number()),
     photoRequestedAt: v.optional(v.number()),
