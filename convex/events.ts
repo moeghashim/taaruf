@@ -60,6 +60,14 @@ type ReadCtx = QueryCtx | MutationCtx;
 type EventRegistration = Doc<"eventRegistrations">;
 type ConfirmationStatus = "confirmed" | "not_confirmed" | "cancelled";
 
+// Withdrawal releases only the caller's reservation. Profile restrictions must not
+// trap an existing reservation or disclose event logistics.
+function canWithdrawRegistration(row: EventRegistration, event: Doc<"events"> | null, now: number) {
+  return Boolean(event && event.status === "scheduled" && event.startsAt > now &&
+    row.attendanceStatus === "not_checked_in" &&
+    ["pending", "approved", "waitlisted"].includes(row.registrationStatus));
+}
+
 function assertValidEventTimes(startsAt: number, endsAt: number) {
   if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt <= startsAt) {
     throw new Error("Event end time must be after start time");
@@ -398,13 +406,14 @@ export const getApplicantEvents = query({
       return {
         logisticsRestricted: true,
         upcoming: [],
-        history: eventRegistrations.map(row => ({
+        history: await Promise.all(eventRegistrations.map(async row => ({
           _id: row._id,
           registrationStatus: row.registrationStatus,
           confirmationStatus: row.confirmationStatus,
           attendanceStatus: row.attendanceStatus,
           event: null,
-        })),
+          canWithdraw: canWithdrawRegistration(row, await ctx.db.get(row.eventId), Date.now()),
+        }))),
         canSubmitInterest: false,
       };
     }
@@ -419,8 +428,12 @@ export const getApplicantEvents = query({
         .map((event) => ({
           ...event,
           registration: byEventId.get(event._id) ?? null,
+          canWithdraw: byEventId.has(event._id) && canWithdrawRegistration(byEventId.get(event._id)!, event, Date.now()),
         })),
-      history: await Promise.all(eventRegistrations.map((row) => serializeEventRegistration(ctx, row))),
+      history: await Promise.all(eventRegistrations.map(async (row) => ({
+        ...await serializeEventRegistration(ctx, row),
+        canWithdraw: canWithdrawRegistration(row, await ctx.db.get(row.eventId), Date.now()),
+      }))),
       canSubmitInterest: registration.archivedAt === undefined && Boolean(eligibleEvent),
     };
   },
@@ -968,6 +981,28 @@ export const requestConfirmation = mutation({
       confirmationExpiresAt: now + 24 * 60 * 60 * 1000,
       updatedAt: now,
     });
+    return row._id;
+  },
+});
+
+export const withdrawParticipation = mutation({
+  args: { sessionHash: v.string(), eventRegistrationId: v.id("eventRegistrations") },
+  handler: async (ctx, args) => {
+    const registration = await getRegistrationForSession(ctx, args.sessionHash);
+    const row = await ctx.db.get(args.eventRegistrationId);
+    if (!row || row.registrationId !== registration._id) throw new Error("Event registration not found");
+    // Safe retries neither rewrite timestamps nor affect other applicants.
+    if (row.registrationStatus === "withdrawn" && row.confirmationStatus === "cancelled") return row._id;
+    const now = Date.now();
+    if (!canWithdrawRegistration(row, await ctx.db.get(row.eventId), now)) {
+      throw new Error("This event registration cannot be withdrawn");
+    }
+    await ctx.db.patch(row._id, {
+      registrationStatus: "withdrawn", confirmationStatus: "cancelled",
+      cancelledAt: now, updatedAt: now,
+      confirmationRequestedAt: undefined, confirmationExpiresAt: undefined,
+    });
+    // Deliberately do not promote anyone, send mail, or change selection/capacity.
     return row._id;
   },
 });
