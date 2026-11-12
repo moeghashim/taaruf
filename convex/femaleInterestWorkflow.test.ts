@@ -199,7 +199,8 @@ test("serialized brother review surfaces omit sister identity throughout approva
     }
     expect(dashboard.inbound).toHaveLength(1);
     expect(dashboard.outbound).toHaveLength(1);
-    expect(dashboard.outbound[0].counterparty).toMatchObject({ name: "Synthetic Sister", label: "Synthetic Sister" });
+    expect(dashboard.outbound[0].counterparty).not.toHaveProperty("name");
+    expect(dashboard.outbound[0].counterparty?.label).toBe("Applicant #73");
     expect(JSON.stringify(dashboard.inbound)).not.toContain("Synthetic Sister");
     expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "sister" })).applicant.name).toBe("Synthetic Sister");
     expect((await t.query(api.applicantProfile.getProfile, { sessionHash: "sister" })).registration.name).toBe("Synthetic Sister");

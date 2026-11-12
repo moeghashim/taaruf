@@ -186,3 +186,30 @@ test("3955 outbound name fallback and unrelated identity remain gated", async ()
  await f.t.run(ctx=>ctx.db.patch(f.people[1],{archivedAt:Date.now()}));
  expect((await f.dashboard(0)).outbound[0]?.counterparty ?? null).toBeNull();
 });
+
+for (const damage of ["legacy", "admin_entered", "email", "whatsapp", "wrong-actor", "system-actor", "wrong-flow", "old-receipt", "future-receipt", "wrong-interest"] as const) test("3955 exact verified provenance required: " + damage, async () => {
+ const f=await fixture("male");const submitted=await f.submit();
+ await f.t.run(async ctx=>{
+  const receipt=(await ctx.db.query("interestFlowEvents").withIndex("by_interestId",q=>q.eq("interestId",submitted.interestId)).take(20)).find(e=>e.eventType==="interest_number_submitted")!;
+  if(damage==="legacy") await ctx.db.delete(receipt._id);
+  if(["admin_entered","email","whatsapp"].includes(damage)) await ctx.db.patch(submitted.interestId,{source:damage as "admin_entered"|"email"|"whatsapp"});
+  if(damage==="wrong-actor") await ctx.db.patch(receipt._id,{actorRegistrationId:f.people[1]});
+  if(damage==="system-actor") await ctx.db.patch(receipt._id,{actor:"system"});
+  if(damage==="old-receipt") await ctx.db.patch(receipt._id,{createdAt:0});
+  if(damage==="future-receipt") await ctx.db.patch(receipt._id,{createdAt:Date.now()+86400000});
+  if(damage==="wrong-interest"||damage==="wrong-flow") {
+   const i=(await ctx.db.get(submitted.interestId))!;const {_id,_creationTime,...copy}=i;void _id;void _creationTime;
+   const other=await ctx.db.insert("interests",{...copy,fromRegistrationId:f.people[1],toRegistrationId:f.people[0]});
+   if(damage==="wrong-interest") await ctx.db.patch(receipt._id,{interestId:other});
+   else {const flow=(await ctx.db.get(receipt.interestFlowId))!;const {_id,_creationTime,...fc}=flow;void _id;void _creationTime;const otherFlow=await ctx.db.insert("interestFlows",{...fc,interestId:other});await ctx.db.patch(receipt._id,{interestFlowId:otherFlow});}
+  }
+ });
+ expect((await f.dashboard(0)).outbound[0].counterparty).not.toHaveProperty("name");
+ expect((await f.dashboard(0)).outbound[0].counterparty?.label).toBe("Applicant #2");
+});
+test("3955 public submission rejects forged provenance and wrong target name",async()=>{
+ const f=await fixture("male");
+ await expect(f.t.mutation(api.applicantInterests.submitInterestNumber,{...f.args,applicantName:"Incorrect"})).rejects.toThrow("verified");
+ await expect(f.t.mutation(api.applicantInterests.submitInterestNumber,{...f.args,sessionHash:"forged"})).rejects.toThrow("Unauthorized");
+ expect((await f.snapshot()).interests).toEqual([]);
+});
