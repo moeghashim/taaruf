@@ -63,3 +63,12 @@ test("stale final decisions return generic private conflict",async()=>{
  expect(response.status).toBe(409); expect(JSON.stringify(await response.json())).not.toContain("counterparty");
  expect(response.headers.get("cache-control")).toContain("no-store");
 });
+
+for (const [message, status] of [['Female review unavailable', 409], ['Unauthorized', 401], ['network upstream failed', 409]] as const) test('detail failure remains explicit, not an empty success: ' + message, async () => {
+ query.mockRejectedValue(new Error(message));
+ const response = await GET(new NextRequest('https://test.invalid/api/applicant/female-review?interestId=stale'));
+ expect(response.status).toBe(status);
+ expect(await response.json()).toHaveProperty('error');
+ expect(response.headers.get('cache-control')).toContain('no-store');
+ expect(mutation).not.toHaveBeenCalled();
+});
