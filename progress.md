@@ -806,8 +806,13 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 ## 2026-11-11
 - Request3861: route sister inline workflow reviews/status to Outbound, preserve brother Inbound, synchronize exact-ID selection and counts/empty states; added desktop/mobile regression coverage.
 
+## 2026-11-11
+- Request3840: optional unchecked new-profile matchmaking consent in registration form/API/atomic Convex insert, shared portal wording, and strict validation/new-only retry preservation regression tests. No production deployment or real-data/provider actions.
 ## 2026-11-11 — request 3884
 - Styled viewer decisions with portal pills; moved decision/admin notice below bios in shared inline/standalone and regular details. Added responsive and unit coverage; no backend/action changes.
 
 ## 2026-11-11 — styling recovery
 - Recovered request3884 in an isolated checkout; aligned standalone typography, placed decision immediately after Bio, expanded responsive/state/contact coverage, and preserved original PR153 ancestry.
+
+## 2026-11-12
+- Refreshed existing signup consent PR151 onto live c45880f; preserved newer portal/event/archive changes. No production changes or human certification. <!-- project: github.com/moeghashim/clawscrewskill -->
