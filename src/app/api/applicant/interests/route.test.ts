@@ -36,3 +36,15 @@ test("authorized interception returns before email and follow-up mutations", asy
  expect(body.existingInbound).toEqual({interestId:"existing",route:"connection"});expect(body).not.toHaveProperty("notification");expect(body).not.toHaveProperty("result");expect(mutation).toHaveBeenCalledTimes(1);
  const email=await import("@/lib/email");expect(email.sendInboundInterestReceivedEmail).not.toHaveBeenCalled();
 });
+
+test("4397 repeated name checks are session-bound, uncached and never hourly limited", async () => {
+ mutation.mockResolvedValue({ firstName: "Synthetic" });
+ for (let i = 0; i < 30; i++) {
+  const response = await POST(new NextRequest("https://test.invalid/api/applicant/interests", { method: "POST", body: JSON.stringify({ action: "lookup_name", expectedEventId: "event", applicantNumber: 42, sessionHash: "forged" }) }));
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(await response.json()).toEqual({ firstName: "Synthetic" });
+ }
+ expect(mutation).toHaveBeenCalledTimes(30);
+ expect(mutation.mock.calls[29][1]).toEqual({ sessionHash: "private-hash", expectedEventId: "event", applicantNumber: 42 });
+});

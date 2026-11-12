@@ -379,7 +379,7 @@ export const getDashboard = query({
   },
 });
 
-// Exact-number only; per-applicant budget survives session rotation and failed lookups.
+// Exact-number, authenticated and event-scoped; disclose only the first name.
 export const lookupInterestName = mutation({
   args: { sessionHash: v.string(), applicantNumber: v.number(), expectedEventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -387,12 +387,6 @@ export const lookupInterestName = mutation({
     assertNotArchived(person);
     const event = await findEligibleInterestSubmissionEvent(ctx, person._id);
     if (person.status !== "approved" || !event || event._id !== args.expectedEventId) return { firstName: null };
-    const now = Date.now();
-    const budget = await ctx.db.query("interestLookups").withIndex("by_registrationId", q => q.eq("registrationId", person._id)).unique();
-    const fresh = !budget || now - budget.windowStart >= 3600000;
-    if (!fresh && budget.count >= 12) return { firstName: null, limited: true };
-    if (budget) await ctx.db.patch(budget._id, { windowStart: fresh ? now : budget.windowStart, count: fresh ? 1 : budget.count + 1 });
-    else await ctx.db.insert("interestLookups", { registrationId: person._id, windowStart: now, count: 1 });
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique() : null;
     if (!target || target.archivedAt !== undefined || target.status !== "approved" || target.gender === person.gender || target._id === person._id) return { firstName: null };
@@ -417,9 +411,6 @@ export const submitInterestNumber = mutation({
       throw new Error("Interest submissions are unavailable or the selected event changed. You must be approved, confirmed, and checked in to the event that is ON.");
     }
     if (registration.profileCompletionStatus !== "completed") throw new Error("Requester must complete their profile before matching can begin");
-    const budget = await ctx.db.query("interestLookups").withIndex("by_registrationId", q => q.eq("registrationId", registration._id)).unique();
-    const fresh = !budget || Date.now() - budget.windowStart >= 3600000;
-    if (!fresh && budget.count >= 12) throw new Error("Too many name checks. Please try again in an hour.");
     // Reject quota-full callers before inspecting the target: failed attempts reveal no target eligibility.
     const charged = await ctx.db.query("interests").withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3);
     if (charged.length >= 3) {
@@ -435,9 +426,6 @@ export const submitInterestNumber = mutation({
       }
       throw new Error("You can submit a maximum of 3 interests per event");
     }
-    // Count successful submissions too: withdrawal cannot reset the discovery budget.
-    if (budget) await ctx.db.patch(budget._id, { windowStart: fresh ? Date.now() : budget.windowStart, count: fresh ? 1 : budget.count + 1 });
-    else await ctx.db.insert("interestLookups", { registrationId: registration._id, windowStart: Date.now(), count: 1 });
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique()
       : null;
