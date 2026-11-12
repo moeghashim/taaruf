@@ -32,6 +32,16 @@ for (const gender of ["male", "female"]) for (const width of [1440, 390, 320]) f
       await expect(withdraw).toHaveCount(archived ? 0 : 1);
       if (!archived) { page.once("dialog", dialog => dialog.dismiss()); await withdraw.click(); }
     }
+    if (hash === "#profile") {
+      const birthday = page.getByLabel("Date of birth", { exact: true });
+      await expect(birthday).toBeVisible();
+      await expect(birthday).toHaveAttribute("type", "date");
+      await expect(birthday).toHaveAttribute("autocomplete", "bday");
+      await expect(birthday).toHaveAttribute("aria-describedby", "birthday-error");
+      await expect(page.locator("#birthday-error")).toHaveCount(1);
+      await expect(page.locator("#birthday-help")).toHaveCount(0);
+      await expect(page.getByText("Please add your date of birth for our records and background checks. Only your age is shared with matches.", { exact: true })).toHaveCount(0);
+    }
     if (hash === "#profile" && archived) await expect(page.getByText("Archived profile details are read-only.")).toBeVisible();
     if (hash === "#matchmaker-matching") {
       const consent = page.getByRole("checkbox", { name: "I would like to be considered for background matchmaking." });

@@ -1331,7 +1331,7 @@ export default function ApplicantDashboardPage() {
                     {archived && <p>Archived profile details are read-only.</p>}
                     <fieldset disabled={archived} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
                     <div className="profile-grid two profile-basics">
-                    <DateOfBirthField externalHelp originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
+                    <DateOfBirthField hideHelp originalValue={originalDateOfBirth} value={profile.dateOfBirth} onChange={(dateOfBirth) => setProfile({ ...profile, dateOfBirth })} />
                       <div className="field">
                         <label htmlFor="education">Education level *</label>
                         <select id="education" value={profile.education || ""}
@@ -1397,7 +1397,6 @@ export default function ApplicantDashboardPage() {
                         </select>
                       </div>
                     </div>
-                    <p id="birthday-help" className="muted">Please add your date of birth for our records and background checks. Only your age is shared with matches.</p>
 
                     <div className="photo-upload-box">
                       <div>
