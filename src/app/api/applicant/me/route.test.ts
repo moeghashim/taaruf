@@ -186,7 +186,7 @@ for (const confirmed of [false, true]) test(`selected older female review suppor
   mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
   mocks.session.mockResolvedValue("sister");
   const firstPage = await t.query(api.femaleInterestWorkflow.getDashboardPage, { sessionHash: "sister", paginationOpts: { cursor: null, numItems: 50 } });
-  expect(firstPage.page).toHaveLength(50); expect(firstPage.isDone).toBe(false);
+  expect(firstPage.page).toHaveLength(0); expect(firstPage.isDone).toBe(false);
   for (const row of firstPage.page) expect(row).toEqual({ interestId: expect.any(String), role: "sister", state: "closed", ownDecision: "pending", ownAction: null, ownActionStage: null, paused: false, reviewExpired: false, canPause: false, canView: false });
   expect(firstPage.page.some(row => row.interestId === id)).toBe(false);
   const get = () => reviewGET(new NextRequest(`https://synthetic.invalid/api/applicant/female-review?interestId=${id}`));

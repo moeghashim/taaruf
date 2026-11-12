@@ -381,6 +381,5 @@ for (const decision of ["accept", "keep_open", "decline"] as const) test("own in
     else await w.t.mutation(api.applicantInterests.withdrawOutbound, {sessionHash: "session-0", interestId});
   }
   const history = (await w.t.query(api.applicantInterests.getDashboard, {sessionHash: "session-1"})).history;
-  expect(history[0]).toMatchObject({ownInitialDecision: expected, ownFinalApproval: "pending"});
-  expect(history[0]).not.toHaveProperty("counterparty");
+  if (decision === "decline") { expect(history[0]).toMatchObject({ownInitialDecision: expected, ownFinalApproval: "pending"}); expect(history[0]).not.toHaveProperty("counterparty"); } else expect(history).toEqual([]);
 });

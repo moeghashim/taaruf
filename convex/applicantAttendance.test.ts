@@ -194,13 +194,43 @@ for (const gender of ["male", "female"] as const) test("4257 atomic refund and r
   expect((await t.query(api.applicantInterests.getDashboard, { sessionHash: "session0" })).interestSubmissions).toHaveLength(3);
   expect((await t.run(ctx => ctx.db.query("interestFlowEvents").collect())).filter(e => e.interestId === first.interestId && e.eventType === "outbound_withdrawn")).toHaveLength(1);
 });
-test("4257 exact first name only; failed lookup budget survives session rotation and blocks submit bypass", async () => {
+for (const gender of ["male", "female"] as const) test("4397 unlimited first-name checks preserve auth, eligibility and submission cap: " + gender, async () => {
  const { t, people, event, submit } = await fixture();
+ await t.run(async ctx => { for (let i = 0; i < people.length; i++) await ctx.db.patch(people[i], { gender: i === 0 ? gender : gender === "male" ? "female" : "male" }); });
  const args = { sessionHash: "session0", applicantNumber: 2, expectedEventId: event };
  await expect(t.mutation(api.applicantInterests.lookupInterestName, { ...args, sessionHash: "forged" })).rejects.toThrow("Unauthorized");
- expect(await t.mutation(api.applicantInterests.lookupInterestName, args)).toEqual({ firstName: "Person" });
- for (let i = 0; i < 11; i++) expect(await t.mutation(api.applicantInterests.lookupInterestName, { ...args, applicantNumber: 9999 })).toEqual({ firstName: null });
- await t.run(ctx => ctx.db.insert("applicantSessions", { registrationId: people[0], sessionHash: "rotated", createdAt: Date.now(), expiresAt: Date.now() + 99999 }));
- expect(await t.mutation(api.applicantInterests.lookupInterestName, { ...args, sessionHash: "rotated" })).toEqual({ firstName: null, limited: true });
- await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit())).rejects.toThrow("Too many name checks");
+ for (let i = 0; i < 30; i++) {
+   expect(await t.mutation(api.applicantInterests.lookupInterestName, args)).toEqual({ firstName: "Person" });
+   expect(await t.mutation(api.applicantInterests.lookupInterestName, { ...args, applicantNumber: 9999 })).toEqual({ firstName: null });
+ }
+ expect(await t.run(ctx => ctx.db.query("interestLookups").collect())).toEqual([]);
+ const legacy = await t.run(async ctx => {
+   await ctx.db.insert("applicantSessions", { registrationId: people[0], sessionHash: "rotated", createdAt: Date.now(), expiresAt: Date.now() + 99999 });
+   return await ctx.db.insert("interestLookups", { registrationId: people[0], windowStart: Date.now(), count: 999 });
+ });
+ const before = await t.run(ctx => ctx.db.get(legacy));
+ for (let i = 0; i < 20; i++) expect(await t.mutation(api.applicantInterests.lookupInterestName, { ...args, sessionHash: "rotated" })).toEqual({ firstName: "Person" });
+ // ID-only submissions remain independent of lookup history, including legacy counters.
+ for (const applicantNumber of [2, 3, 4]) await expect(t.mutation(api.applicantInterests.submitInterestNumber, { sessionHash: "session0", expectedEventId: event, applicantNumber })).resolves.toHaveProperty("interestId");
+ await expect(t.mutation(api.applicantInterests.submitInterestNumber, submit(5))).rejects.toThrow("maximum of 3");
+ expect(await t.run(ctx => ctx.db.get(legacy))).toEqual(before);
+ expect(await t.mutation(api.applicantInterests.lookupInterestName, { ...args, applicantNumber: 1 })).toEqual({ firstName: null });
+ await t.run(ctx => ctx.db.patch(people[1], { status: "rejected" }));
+ expect(await t.mutation(api.applicantInterests.lookupInterestName, args)).toEqual({ firstName: null });
+ await t.run(ctx => ctx.db.patch(people[1], { status: "approved", archivedAt: Date.now() }));
+ expect(await t.mutation(api.applicantInterests.lookupInterestName, args)).toEqual({ firstName: null });
+ await t.run(ctx => ctx.db.patch(people[1], { archivedAt: undefined }));
+ await t.run(ctx => ctx.db.patch(people[0], { status: "pending" }));
+ expect(await t.mutation(api.applicantInterests.lookupInterestName, args)).toEqual({ firstName: null });
+ await t.run(ctx => ctx.db.patch(people[0], { status: "approved" }));
+ const attendance = await t.run(ctx => ctx.db.query("eventRegistrations").withIndex("by_eventId_and_registrationId", q => q.eq("eventId", event).eq("registrationId", people[0])).unique());
+ for (const patch of [{ attendanceStatus: "not_checked_in" as const }, { attendanceStatus: "attended" as const, confirmationStatus: "not_confirmed" as const }]) {
+   await t.run(ctx => ctx.db.patch(attendance!._id, patch));
+   expect(await t.mutation(api.applicantInterests.lookupInterestName, args)).toEqual({ firstName: null });
+ }
+ await t.run(ctx => ctx.db.patch(attendance!._id, { confirmationStatus: "confirmed" }));
+ await t.run(ctx => ctx.db.patch(event, { interestSubmissionsEnabled: false }));
+ expect(await t.mutation(api.applicantInterests.lookupInterestName, args)).toEqual({ firstName: null });
+ await t.run(ctx => ctx.db.patch(people[0], { archivedAt: Date.now() }));
+ await expect(t.mutation(api.applicantInterests.lookupInterestName, args)).rejects.toThrow();
 });
