@@ -131,6 +131,10 @@ export async function POST(request: NextRequest) {
         applicantName: body.applicantName,
       });
 
+      if ("existingInbound" in result && result.existingInbound) {
+        return NextResponse.json({ success: true, existingInbound: result.existingInbound, message: "You already have an incoming interest from this applicant. Review the existing interest before submitting another." });
+      }
+
       if (result.inboundInterestNotification) {
         let recipient: { name: string; email: string };
         const appUrl = getAppUrl();

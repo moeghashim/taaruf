@@ -99,6 +99,19 @@ for (const source of sources) for (const femaleOrigin of [false, true]) test(`${
 
 for (const source of sources) for (const femaleFirst of [false, true]) for (const reverse of [false, true]) test(`reciprocal ${source} submissions=${femaleFirst} approvals=${reverse}`, async () => {
   const w = await publicWorld();
+  // Male-first platform sends now route to the existing incoming review.
+  // Keep the single-direction consent assertions rather than manufacturing a reverse row.
+  if (source === "platform_submission" && !femaleFirst) {
+    const male = await w.submit(source);
+    expect(await w.submit(source, 1, 0)).toBe(male);
+    expect(await w.t.run(ctx => ctx.db.query("interests").collect())).toHaveLength(1);
+    await w.open(male);
+    await w.approve(male, reverse ? 1 : 0);
+    expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
+    await w.approve(male, reverse ? 0 : 1);
+    expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
+    return;
+  }
   const ids = femaleFirst ? [await w.submit(source, 1, 0), await w.submit(source)] : [await w.submit(source), await w.submit(source, 1, 0)];
   const female = ids[femaleFirst ? 0 : 1];
   const male = ids[femaleFirst ? 1 : 0];
@@ -204,8 +217,9 @@ for (const femaleOrigin of [false, true]) test(`new frozen notification routes t
 
 for (const afterRelease of [false, true]) test(`female completion joins unopened generic sibling; stale retry released=${afterRelease}`, async () => {
   const w = await publicWorld();
-  const male = await w.submit("email");
+  // Hidden-first preserves the legitimate two-row historical/join scenario.
   const female = await w.submit("platform_submission", 1, 0);
+  const male = await w.submit("email");
   await w.open(female, true);
   await w.t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "session-0", interestId: female, decision: "accept" });
   const result = await w.t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "session-1", interestId: female, confirmed: true });

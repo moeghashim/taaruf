@@ -29,3 +29,10 @@ test("revocation forwards only session-bound owner authorization", async () => {
   expect((await POST(request)).status).toBe(200);
   expect(mutation.mock.calls[0][1]).toEqual({ interestId: "interest", sessionHash: "private-hash" });
 });
+
+test("authorized interception returns before email and follow-up mutations", async () => {
+ mutation.mockResolvedValue({interestId:"existing", private:false, inboundInterestNotification:null, existingInbound:{interestId:"existing",route:"connection"}});
+ const response=await POST(request("event"));const body=await response.json();
+ expect(body.existingInbound).toEqual({interestId:"existing",route:"connection"});expect(body).not.toHaveProperty("notification");expect(body).not.toHaveProperty("result");expect(mutation).toHaveBeenCalledTimes(1);
+ const email=await import("@/lib/email");expect(email.sendInboundInterestReceivedEmail).not.toHaveBeenCalled();
+});

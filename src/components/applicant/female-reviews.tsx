@@ -18,11 +18,10 @@ const contactsReady = (value: Access | null) => {
 };
 const stateCopy: Record<string, string> = {
   in_review: "This connection is being reviewed. Contact details remain private until the team approves sharing them.",
-  contacts_released: "Open this review to check the contact details available to your account.",
   closed: "This connection is no longer available. No further response is needed.",
 };
 const stateLabels: Record<string, string> = {
-  in_review: "Connection review", contacts_released: "Contact sharing update", closed: "Connection closed",
+  in_review: "Connection review", closed: "Connection closed",
 };
 const reviewExpired = (item: Review) => item.reviewExpired === true;
 const needsBrotherReview = (item: Review) => item.role === "brother" && item.ownAction === "review" && !item.paused && !item.reviewExpired && !["closed", "revoked", "expired"].includes(item.state);
@@ -209,8 +208,8 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     </section>}
     {!inline && !selected && !loading && !listError && history.filter(item => !readyIds.includes(item.interestId)).map((item, index) => <section key={item.interestId} className="interest-invitation" aria-label={"Connection update " + (index + 1)}>
       <div className="interest-invitation-copy">
-        <h2>{reviewExpired(item) ? "Review invitation expired" : item.paused ? "Connection paused" : stateLabels[item.state] || "Profile review update"}</h2>
-        <p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p>
+        {item.state !== "contacts_released" && <><h2>{reviewExpired(item) ? "Review invitation expired" : item.paused ? "Connection paused" : stateLabels[item.state] || "Profile review update"}</h2>
+        <p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p></>}
         <ReviewDecision decision={item.ownDecision} awaitingAdmin={item.state === "in_review" && !item.paused && !item.reviewExpired} />
       </div>
       {!reviewExpired(item) && !["closed", "revoked", "expired"].includes(item.state) && item.canView && <a className="btn btn-primary" aria-label={history.length > 1 ? "View review for connection " + (index + 1) : undefined} href={reviewHref(item.interestId)}>View review</a>}
@@ -224,8 +223,10 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       {!rows.length && (!done || loading || selected) && (loading ? <p role="status">Loading reviews…</p> : <p>{done ? "No profile reviews right now." : "No available reviews in the history checked so far. Load more to continue checking."}</p>)}
       {rows.filter(item => item.interestId === selected).map(item => <div key={item.interestId}>
         {item.paused && <p>Paused</p>}
+        {/* Closed reviews have no profile payload, but retain the viewer-owned receipt. */}
+        {item.state === "closed" && !profile && <ReviewDecision decision={item.ownDecision} />}
         {/* The embedded profile already sits under its interest direction; standalone routes retain their review header. */}
-        {(!inline || reviewExpired(item) || item.state !== "in_review") && <><h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : item.ownAction === "review" ? "This connection is awaiting your review." : stateCopy[item.state]}</p></>}
+        {item.state !== "contacts_released" && (!inline || reviewExpired(item) || item.state !== "in_review") && <><h4>{reviewExpired(item) ? "Review invitation expired" : stateLabels[item.state] || "Profile review update"}</h4><p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : item.ownAction === "review" ? "This connection is awaiting your review." : stateCopy[item.state]}</p></>}
 
 
 

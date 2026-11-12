@@ -13,6 +13,10 @@ export function interestLifecycle(interest: Interest): string {
   if (interest.femaleWorkflow) return labels[interest.femaleWorkflow.state] ?? interest.femaleWorkflow.state.replaceAll("_", " ");
   return "Awaiting applicant approvals";
 }
+/** A converted row is history only when its actual linked match is present. */
+export function isResolvedInterest(interest: Interest & { matchId?: Doc<"matches">["_id"] }) {
+  return interest.status === "converted_to_match" && !!interest.matchId && interest.match?._id === interest.matchId;
+}
 export function isArchivedInterest(interest: Interest) {
   return Boolean(interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status) || interestLifecycle(interest) === "Contacts released" || ["revoked", "declined"].includes(interest.femaleWorkflow?.state ?? ""));
 }
