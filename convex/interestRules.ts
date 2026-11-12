@@ -1,3 +1,4 @@
+import { isSecurityRetired } from "./registrationSecurity";
 import { matchesInterestFirstName } from "./interestIdentity";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -57,7 +58,7 @@ export async function getRegistrationOrThrow(ctx: ReadCtx, id: Id<"registrations
 
 /** Archive is independent of search status and consent. */
 export function assertNotArchived(registration: Doc<"registrations">) {
-  if (registration.archivedAt !== undefined) throw new Error("Archived applicants cannot participate in matching");
+  if ((registration.archivedAt !== undefined || isSecurityRetired(registration))) throw new Error("Archived applicants cannot participate in matching");
 }
 
 export async function assertMatchingParticipants(ctx: ReadCtx, ...ids: Id<"registrations">[]) {
@@ -330,10 +331,10 @@ export async function promoteOldestQueuedForRegistration(
   registrationId: Id<"registrations">
 ) {
   const registration = await ctx.db.get(registrationId);
-  if (!registration || registration.archivedAt !== undefined) return null;
+  if (!registration || (registration.archivedAt !== undefined || isSecurityRetired(registration))) return null;
   for (const queued of await getQueuedInterestsForRegistration(ctx, registrationId)) {
     const pair = await Promise.all([ctx.db.get(queued.fromRegistrationId), ctx.db.get(queued.toRegistrationId)]);
-    if (pair.some(person => !person || person.archivedAt !== undefined)) continue;
+    if (pair.some(person => !person || (person.archivedAt !== undefined || isSecurityRetired(person)))) continue;
     await activateInterestAndQueueCompetitors(ctx, queued._id);
     return queued._id;
   }

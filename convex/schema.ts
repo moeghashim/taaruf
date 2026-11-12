@@ -138,6 +138,11 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  registrationMergeAudits: defineTable({
+    operationKey: v.string(), request: v.string(), before: v.string(), afterFingerprint: v.string(),
+    sourceId: v.id("registrations"), targetId: v.id("registrations"), createdAt: v.number(),
+    rolledBackAt: v.optional(v.number()), rollbackFingerprint: v.optional(v.string()),
+  }).index("by_operationKey", ["operationKey"]),
   interestReopenAudits: defineTable({
     operationKey: v.string(), interestId: v.id("interests"), fingerprint: v.string(), snapshot: v.string(), actor: v.literal("admin"), reason: v.string(), createdAt: v.number(),
   }).index("by_operationKey", ["operationKey"]),
@@ -172,6 +177,9 @@ export default defineSchema({
     profileUrl: v.optional(v.string()),
   }).index("by_key", ["key"]),
   registrations: defineTable({
+    // Permanent retirement: rollback must preserve securityRetiredAt.
+    mergedIntoRegistrationId: v.optional(v.id("registrations")),
+    securityRetiredAt: v.optional(v.number()),
     backgroundMatchmakingOptIn: v.optional(v.boolean()),
     backgroundMatchmakingConsentUpdatedAt: v.optional(v.number()),
     archivedAt: v.optional(v.number()),
@@ -353,6 +361,8 @@ export default defineSchema({
   eventRegistrations: defineTable({
     eventId: v.id("events"),
     registrationId: v.id("registrations"),
+    supersededBy: v.optional(v.id("eventRegistrations")),
+    mergedIntoRegistrationId: v.optional(v.id("registrations")),
     gender: v.union(v.literal("male"), v.literal("female")),
     registrationStatus: eventRegistrationStatus,
     confirmationStatus: eventConfirmationStatus,
@@ -382,6 +392,8 @@ export default defineSchema({
     .index("by_eventId_and_gender", ["eventId", "gender"])
     .index("by_eventId_and_registrationStatus", ["eventId", "registrationStatus"])
     .index("by_eventId_and_gender_and_registrationStatus", ["eventId", "gender", "registrationStatus"])
+    .index("by_mergedIntoRegistrationId", ["mergedIntoRegistrationId"])
+    .index("by_eventId_and_mergedIntoRegistrationId", ["eventId", "mergedIntoRegistrationId"])
     .index("by_registrationId_and_attendanceStatus", ["registrationId", "attendanceStatus"]),
 
   eventWaitlistEntries: defineTable({

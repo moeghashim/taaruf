@@ -1,3 +1,4 @@
+import { enrollmentsForRegistration } from "./eventEnrollmentIdentity";
 import { v } from "convex/values";
 import { mutation, type MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -73,7 +74,7 @@ async function archiveParticipant(ctx: MutationCtx, registration: Doc<"registrat
     }
   }
   const released: Doc<"eventRegistrations">[] = [];
-  for await (const row of ctx.db.query("eventRegistrations").withIndex("by_registrationId", q => q.eq("registrationId", registration._id))) {
+  for (const row of await enrollmentsForRegistration(ctx, registration._id)) {
     const event = await ctx.db.get(row.eventId);
     if (!event || event.startsAt <= now || event.endsAt <= now || event.status === "completed" || event.status === "cancelled") continue;
     if (!["pending", "approved", "waitlisted"].includes(row.registrationStatus)) continue;

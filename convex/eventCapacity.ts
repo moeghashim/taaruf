@@ -1,3 +1,4 @@
+import { isCurrentEnrollment, enrollmentRegistrationId } from "./eventEnrollmentIdentity";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { canReceiveEventMessages } from "./eventMessagingEligibility";
@@ -9,13 +10,13 @@ export function requireEventAdmin(secret: string) {
 }
 export function reservesCapacity(status: EventRegistration["registrationStatus"]) { return status === "pending" || status === "approved"; }
 export function confirmationExpired(row: EventRegistration, now: number): boolean {
-  return row.confirmationStatus === "not_confirmed" && row.confirmationExpiresAt !== undefined && row.confirmationExpiresAt < now && !row.confirmedAt && (reservesCapacity(row.registrationStatus) || row.registrationStatus === "waitlisted");
+  return isCurrentEnrollment(row) && row.confirmationStatus === "not_confirmed" && row.confirmationExpiresAt !== undefined && row.confirmationExpiresAt < now && !row.confirmedAt && (reservesCapacity(row.registrationStatus) || row.registrationStatus === "waitlisted");
 }
 export async function countCapacityUsed(ctx: ReadCtx, eventId: Id<"events">, gender: Gender) {
   let used = 0;
   const now = Date.now();
   for (const status of ["pending", "approved"] as const) {
-    for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status))) { if (!confirmationExpired(row, now)) used++; }
+    for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status))) { if (isCurrentEnrollment(row) && !confirmationExpired(row, now)) used++; }
   }
   return used;
 }
@@ -31,6 +32,7 @@ export async function promoteWaitlist(ctx: MutationCtx, eventId: Id<"events">, g
   const queued = [];
   for (const status of ["pending", "approved", "waitlisted"] as const) {
     for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", eventId).eq("gender", gender).eq("registrationStatus", status))) {
+      if (!isCurrentEnrollment(row)) continue;
       if (confirmationExpired(row, now)) await ctx.db.patch(row._id, { registrationStatus: "withdrawn", confirmationStatus: "cancelled", cancelledAt: now, updatedAt: now });
       else if (status === "waitlisted") queued.push(row);
     }
@@ -41,7 +43,7 @@ export async function promoteWaitlist(ctx: MutationCtx, eventId: Id<"events">, g
   let promoted = 0;
   for (const row of queued) {
     if (promoted >= available) break;
-    const registration = await ctx.db.get(row.registrationId);
+    const registration = await ctx.db.get(enrollmentRegistrationId(row));
     if (!registration || registration.archivedAt !== undefined || !canReceiveEventMessages(registration) || registration.profileCompletionStatus !== "completed" || registration.gender !== gender || row.confirmationStatus === "cancelled") continue;
     await ctx.db.patch(row._id, { registrationStatus: "pending", approvedAt: undefined, updatedAt: Date.now() });
     promoted++;

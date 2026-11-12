@@ -1,3 +1,4 @@
+import { assertNotSecurityRetired, assertContactsNotRetired } from "./registrationSecurity";
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAdmin } from "./adminAuthorization";
@@ -11,6 +12,8 @@ export const change = mutation({
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || args.reason.trim().length < 5 || args.reason.length > 500) throw new Error("Invalid email or reason");
     const profile = await ctx.db.get(args.registrationId);
     if (!profile) throw new Error("Profile not found");
+    assertNotSecurityRetired(profile);
+    await assertContactsNotRetired(ctx, email);
     if (profile.email !== args.expectedOldEmail) throw new Error("Email changed; refresh the profile");
     if (normalize(profile.email) === email) throw new Error("Enter a different email");
     // A complete bounded scan includes legacy, non-canonical addresses. Fail closed

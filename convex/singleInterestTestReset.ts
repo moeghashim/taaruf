@@ -89,7 +89,8 @@ async function snapshot(ctx: QueryCtx, args: Scope) {
   if (registrations.length !== 2 || registrations.some(r => r.activeMatchId) || allRegistrations.some(r => r.activeMatchId && matchIds.has(r.activeMatchId))) throw new Error("Missing registration or active match pointer");
   const events = (await bounded("events")).filter(e => interests.some(i => i.eventId === e._id));
   if (interests.some(i => !events.some(e => e._id === i.eventId))) throw new Error("Missing event reference");
-  const eventRegistrations = (await bounded("eventRegistrations")).filter(r => pair.has(r.registrationId));
+  // Fingerprint historical and canonical associations, including superseded rows.
+  const eventRegistrations = (await bounded("eventRegistrations")).filter(r => pair.has(r.registrationId) || (r.mergedIntoRegistrationId !== undefined && pair.has(r.mergedIntoRegistrationId)));
   const attendees = (await bounded("eventAttendees")).filter(r => pair.has(r.registrationId));
   // Preserve every original audit in place, including opaque legacy payloads.
   // Hash the COMPLETE row instead of recursively copying its snapshots.

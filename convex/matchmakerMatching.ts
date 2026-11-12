@@ -1,3 +1,4 @@
+import { isSecurityRetired } from "./registrationSecurity";
 import { currentAge } from "./birthdays";
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
@@ -99,7 +100,7 @@ export const getMine = query({
       if (!manual(m) || m.testResetAt !== undefined || (m.matchmakerPresentedAt === undefined && !released(m))) continue;
       const male = m.maleRegistrationId === owner._id;
       const p = await ctx.db.get(male ? m.femaleRegistrationId : m.maleRegistrationId);
-      const accessible = owner.archivedAt === undefined && p?.archivedAt === undefined && m.closedReason !== "participant_archived" &&
+      const accessible = owner.archivedAt === undefined && !isSecurityRetired(owner) && p?.archivedAt === undefined && !isSecurityRetired(p) && m.closedReason !== "participant_archived" &&
         ![owner, p].some(person => person?.lastRestoredArchivedAt !== undefined && m.createdAt <= person.lastRestoredArchivedAt);
       const contactShared = released(m);
       const images = accessible && (contactShared || active(m)) && p?.photoSharingPermission === "yes" ? (await Promise.all((p.imageStorageIds ?? []).map(async storageId => ({storageId, url: await ctx.storage.getUrl(storageId)})))).filter(image => image.url !== null) : [];
