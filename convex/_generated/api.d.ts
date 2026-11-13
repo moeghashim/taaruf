@@ -10,6 +10,7 @@
 
 import type * as reopen315 from "../reopen315.js";
 import type * as birthdays from "../birthdays.js";
+import type * as adminBirthday from "../adminBirthday.js";
 import type * as adminAuthorization from "../adminAuthorization.js";
 import type * as adminEmailChange from "../adminEmailChange.js";
 import type * as adminPairTestReset from "../adminPairTestReset.js";
@@ -57,6 +58,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   reopen315: typeof reopen315;
   birthdays: typeof birthdays;
+  adminBirthday: typeof adminBirthday;
   adminAuthorization: typeof adminAuthorization;
   adminEmailChange: typeof adminEmailChange;
   adminPairTestReset: typeof adminPairTestReset;

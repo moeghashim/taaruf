@@ -91,3 +91,17 @@ test('mutual scan follows all pages without reverse per-row queries', async () =
  expect(query).toHaveBeenCalledTimes(3);
  expect(query.mock.calls[1][1].paginationOpts.cursor).toBe('next');
 });
+
+test('private birthday detail is session protected, single-profile and never cached', async () => {
+ const body = {kind:'query',name:'adminBirthday.get',args:{registrationId:'synthetic-id'}};
+ expect((await POST(request(body,''))).status).toBe(401);
+ expect(query).not.toHaveBeenCalled();
+ expect((await POST(request(body,token,'https://evil.invalid'))).status).toBe(403);
+ expect(query).not.toHaveBeenCalled();
+ query.mockResolvedValueOnce({dateOfBirth:'2000-02-29'});
+ const response = await POST(request(body));
+ expect(response.status).toBe(200);
+ expect(response.headers.get('cache-control')).toBe('private, no-store');
+ expect(query).toHaveBeenCalledExactlyOnceWith(api.adminBirthday.get,{registrationId:'synthetic-id',adminSecret:'synthetic-service-secret'});
+ expect(await response.json()).toEqual({result:{dateOfBirth:'2000-02-29'}});
+});
