@@ -841,3 +841,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Request4433: shared exact brother/sister contact guidance across ordinary interests, inline/standalone reviews and matchmaker contacts; existing release gates/fields retained. Added exact-copy and synthetic desktop/mobile privacy regressions. Preview only.
 
 - Merge4455 reconciliation: preserved actual live PR171 own-closed/name lookup behavior and PR172 contact guidance while retaining source retirement and enrollment supersession. Fresh full suite1587/130, app+Convex types, lint0errors13warnings, build, real loopback concurrency/rollback proof; no production writes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-13
+- Request4634: add authenticated single-profile birthday lookup and conditional date-only admin drawer display; preserve age, notes, private storage and deployed merge repair. Synthetic UI-only preview and privacy/auth/timezone tests documented in docs/admin-birthday-preview.md. <!-- project: github.com/moeghashim/clawscrewskill -->

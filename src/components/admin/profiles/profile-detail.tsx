@@ -3,6 +3,7 @@ import { ChangeEmailForm } from "./change-email-form";
 import { interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
 import { refreshAdminData } from "@/components/admin/hooks/use-admin-transport";
 import { formatEducation } from "@/lib/education";
+import { formatAdminBirthday } from "@/lib/admin-birthday";
 
 import { ArchiveParticipant } from "@/components/archive-participant";
 import { useEffect, useState } from "react";
@@ -61,6 +62,8 @@ function ProfileDetailBody({
   onClose,
   onDirtyChange,
 }: Props) {
+  const birthday = useQuery("adminBirthday.get", { registrationId: profile._id });
+  const formattedBirthday = formatAdminBirthday(birthday?.dateOfBirth);
   const [localArchive, setLocalArchive] = useState<{ id: string; at: number | null } | null>(null);
   const archivedAt = localArchive?.id === profile._id ? localArchive.at : profile.archivedAt;
   const archived = archivedAt != null;
@@ -105,6 +108,7 @@ function ProfileDetailBody({
   const facts: Fact[] = [
     { label: "Applicant #", value: registrationNumber ?? "—" },
     { label: "Age", value: profile.age },
+    ...(formattedBirthday ? [{ label: "Date of birth", value: formattedBirthday }] : []),
     { label: "Gender", value: profile.gender },
     { label: "Ethnicity", value: profile.ethnicity?.trim() ? profile.ethnicity : "Not provided" },
     { label: "Prayer commitment", value: profile.prayerCommitment?.replace(/_/g, " ") || "—" },
