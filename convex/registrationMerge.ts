@@ -13,39 +13,65 @@ export function canonical(value: unknown): string {
 export function fingerprint(value: unknown) { return Array.from(hash(new TextEncoder().encode(canonical(value))), b=>b.toString(16).padStart(2,"0")).join(""); }
 type Pair = { source: Id<"registrations">; target: Id<"registrations"> };
 type Row = Doc<TableNames>;
-function references(value: unknown, ids: Set<string>): boolean {
-  if (typeof value === "string") return [...ids].some(id => value.includes(id)); // includes compound receipt and serialized audit keys
-  if (Array.isArray(value)) return value.some(x=>references(x,ids));
-  return !!value && typeof value === "object" && Object.values(value).some(x=>references(x,ids));
+function stringLeaves(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") out.push(value);
+  else if (Array.isArray(value)) for (const child of value) stringLeaves(child, out);
+  else if (value && typeof value === "object") for (const child of Object.values(value)) stringLeaves(child, out);
+  return out;
+}
+/** Preserve substring references, including serialized audits. Each frontier is matched once. */
+export function dependencyState(all: Record<string, Row[]>, pair: Pair) {
+  const seeds = [pair.source, pair.target] as string[];
+  for (const r of all.registrations as Doc<"registrations">[]) {
+    if (r._id !== pair.source && r._id !== pair.target) continue;
+    if (r.stripeSessionId) seeds.push(r.stripeSessionId);
+    seeds.push(r.email.trim().toLowerCase());
+  }
+  let pending = Object.values(all).flat().map(row => ({ row, strings: stringLeaves(row) }));
+  const selected = new Set<string>();
+  let frontier = seeds;
+  while (frontier.length) {
+    // Encode literal UTF-16 units; emails/payment keys must never become regex syntax.
+    const matcher = new RegExp(frontier.map(s => s.split("").map(c => "\\u" + c.charCodeAt(0).toString(16).padStart(4,"0")).join("")).join("|"));
+    const next: string[] = [];
+    pending = pending.filter(({row, strings}) => {
+      if (!strings.some(s => matcher.test(s))) return true;
+      selected.add(row._id); next.push(row._id); return false;
+    });
+    frontier = next;
+  }
+  return Object.fromEntries(Object.entries(all).map(([table, rows]) =>
+    [table, rows.filter(r => selected.has(r._id)).sort((a,b) => a._id.localeCompare(b._id))]));
 }
 export async function snapshot(ctx: QueryCtx, pair: Pair) {
-  // Enumerate the schema itself: a newly introduced referencing table cannot silently escape the guard.
+  // Bounded completeness scan required for unindexed legacy text references.
+  // Do not paginate across transactions: reads retain insertion/deletion OCC protection.
   const all: Record<string, Row[]> = {}; let bytes=0;
   for (const table of Object.keys(schema.tables).sort() as TableNames[]) {
     if (table === "registrationMergeAudits") continue;
     const rows=await ctx.db.query(table).take(5001);
-    bytes+=new TextEncoder().encode(canonical(rows)).length;
+    // Key ordering does not affect byte length. Canonicalize only scoped fingerprints.
+    bytes+=new TextEncoder().encode(JSON.stringify(rows)).length;
     if(rows.length>5000 || bytes>10_000_000) throw Error("Merge scan bound exceeded");
     all[table]=rows;
   }
-  const ids=new Set<string>([pair.source,pair.target]);
-  const selected=new Set<string>(); let changed=true;
-  while(changed) { changed=false; for(const rows of Object.values(all)) for(const row of rows) {
-    if(!selected.has(row._id) && references(row,ids)) { selected.add(row._id); ids.add(row._id); changed=true; }
-  }}
-  const state=Object.fromEntries(Object.entries(all).map(([table,rows])=>[table,rows.filter(r=>selected.has(r._id)).sort((a,b)=>a._id.localeCompare(b._id))]));
-  // Include immutable payment session keys, legacy receipt keys and source contact dependencies.
-  const regs=state.registrations as Doc<"registrations">[];
-  for(const r of regs.filter(r=>r._id===pair.source || r._id===pair.target)) {
-    if(r.stripeSessionId) ids.add(r.stripeSessionId);
-    ids.add(r.email.trim().toLowerCase());
-  }
-  changed=true;
-  while(changed) { changed=false; for(const rows of Object.values(all)) for(const row of rows) {
-    if(!selected.has(row._id) && references(row,ids)) { selected.add(row._id);ids.add(row._id);changed=true; }
-  }}
-  for(const [table,rows] of Object.entries(all)) state[table]=rows.filter(r=>selected.has(r._id)).sort((a,b)=>a._id.localeCompare(b._id));
+  const state = dependencyState(all, pair);
   return {state,fingerprint:fingerprint(state)};
+}
+/** Root-to-root substitutions and edges to selected rows preserve closure membership.
+ * The transaction read set already protects concurrent membership changes. */
+function mergeAfterState(state: Record<string, Row[]>, writes: {table: TableNames; id: Id<TableNames>; patch: Record<string, unknown>}[], pair: Pair) {
+  const selected = new Set(Object.values(state).flat().map(r => r._id as string));
+  const patches = new Map(writes.map(w => [w.id, w.patch]));
+  for (const w of writes) for (const [key, value] of Object.entries(w.patch)) {
+    if (key === "securityRetiredAt" && typeof value === "number") continue;
+    if (key === "eligibilityStatus" && value === "awaiting_background_check") continue;
+    if (["mergedIntoRegistrationId", "fromRegistrationId", "toRegistrationId"].includes(key) && value === pair.target) continue;
+    if (key === "supersededBy" && typeof value === "string" && selected.has(value)) continue;
+    throw Error("Merge patch requires closure review");
+  }
+  return Object.fromEntries(Object.entries(state).map(([table, rows]) =>
+    [table, rows.map(row => ({...row, ...patches.get(row._id)}))]));
 }
 const policyValidator=v.union(v.literal("unresolved"),v.literal("retain_target"),v.literal("require_background_check"));
 type Policy="unresolved"|"retain_target"|"require_background_check";
@@ -111,8 +137,9 @@ export async function applyMerge(ctx:MutationCtx,pair:Pair,args:{operationKey:st
   if(p.blockers.length) throw Error(p.blockers.join("; "));
   const before=canonical(p.writes.map(w=>({table:w.table,row:w.before})));
   if(new TextEncoder().encode(before).length>600000) throw Error("Before-image size bound exceeded");
+  const afterState=mergeAfterState(p.state,p.writes,pair);
   for(const w of p.writes) await ctx.db.patch(w.id,w.patch);
-  const after=await snapshot(ctx,pair);
+  const after={fingerprint:fingerprint(afterState)};
   const auditId=await ctx.db.insert("registrationMergeAudits",{operationKey:args.operationKey,request,before,afterFingerprint:after.fingerprint,sourceId:pair.source,targetId:pair.target,createdAt:Date.now()});
   return {auditId,alreadyApplied:false};
 }
