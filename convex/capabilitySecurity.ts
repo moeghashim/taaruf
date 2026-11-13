@@ -1,3 +1,4 @@
+import { isSecurityRetired } from "./registrationSecurity";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 
@@ -12,9 +13,12 @@ export async function capabilityAllowed(ctx: QueryCtx, issuedAt?: number): Promi
   return issuedAt !== undefined && Number.isSafeInteger(issuedAt) && issuedAt > cutoff;
 }
 export async function sessionAllowed(ctx: QueryCtx, session: Doc<"applicantSessions"> | null): Promise<boolean> {
+  if (!session) return false;
+  const registration = await ctx.db.get(session.registrationId);
+  if (!registration || isSecurityRetired(registration)) return false;
   return !!session && session.revokedAt === undefined && session.expiresAt > Date.now() && await capabilityAllowed(ctx, session.createdAt);
 }
 export async function profileCapabilityAllowed(ctx: QueryCtx, registration: Doc<"registrations">): Promise<boolean> {
   // Never use profileUpdateRequestedAt: email retries can change it without rotating a token.
-  return capabilityAllowed(ctx, registration.profileAccessTokenIssuedAt);
+  return !isSecurityRetired(registration) && await capabilityAllowed(ctx, registration.profileAccessTokenIssuedAt);
 }

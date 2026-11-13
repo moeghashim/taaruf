@@ -1,3 +1,4 @@
+import { isSecurityRetired } from "./registrationSecurity";
 import { assertNotArchived } from "./archiveRules";
 import { sisterActivation } from "./sisterConfirmationActivation";
 import { isManualMatchDraft } from "../src/lib/manual-match-draft";
@@ -81,7 +82,7 @@ export async function contactsVisible(ctx: ReadCtx, interest: Doc<"interests">, 
   if (!flow?.contactSharedAt || flow.closedReason === "participant_archived" || ["closed", "declined"].includes(flow.flowStatus)) return false;
   const from = await ctx.db.get(interest.fromRegistrationId);
   const to = await ctx.db.get(interest.toRegistrationId);
-  if (!from || !to || from.archivedAt !== undefined || to.archivedAt !== undefined) return false;
+  if (!from || !to || (from.archivedAt !== undefined || isSecurityRetired(from)) || (to.archivedAt !== undefined || isSecurityRetired(to))) return false;
   if ([from, to].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) return false;
   const match = interest.matchId ? await ctx.db.get(interest.matchId) : null;
   if (interest.matchId) {

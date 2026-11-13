@@ -1,3 +1,4 @@
+import { isSecurityRetired } from "./registrationSecurity";
 import { interestBioVisible } from "./bioVisibility";
 import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { currentAge, withCurrentAge } from "./birthdays";
@@ -53,7 +54,7 @@ async function available(ctx: QueryCtx, share: Doc<"profileShares">) {
   const [owner, recipient] = await Promise.all([
     ctx.db.get(share.ownerRegistrationId), ctx.db.get(share.recipientRegistrationId),
   ]);
-  if (!owner || !recipient || owner.archivedAt !== undefined || recipient.archivedAt !== undefined) return false;
+  if (!owner || !recipient || (owner.archivedAt !== undefined || isSecurityRetired(owner)) || (recipient.archivedAt !== undefined || isSecurityRetired(recipient))) return false;
   // Restoration must not reactivate historical bearer links, even declined ones.
   if ([owner, recipient].some(person => person.lastRestoredArchivedAt !== undefined && share.createdAt <= person.lastRestoredArchivedAt!)) return false;
   return await capabilityAllowed(ctx, share.createdAt) && share.revokedAt === undefined && share.status !== "closed" && await resolvedInterest(ctx, share) !== false;

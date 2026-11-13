@@ -379,3 +379,34 @@ for (const damage of ["closed-flow", "declined-flow", "missing-flow", "wrong-flo
  if(targeted.status===200) expect((await targeted.json()).outbound[0].counterparty).not.toHaveProperty("name");
  else expect(targeted.status).toBe(404);
 });
+
+// Real transactional guard -> actual Next route mapping; no synthetic error substitute.
+for (const shared of [false, true]) for (const viewer of ["brother", "sister"] as const) for (const activeSide of ["brother", "sister"] as const) for (const pointer of [false, true]) test(
+  `4444 conflict shared=${shared} viewer=${viewer} active=${activeSide} pointer=${pointer}`, async () => {
+  const { t, id, maleId, femaleId } = await fixture("platform_submission", shared, false, false);
+  if (shared) {
+    await t.mutation(api.femaleInterestWorkflow.createReview, { adminSecret: secret, interestId: id, reviewTokenHash: "a".repeat(64) });
+    await t.mutation(api.femaleInterestWorkflow.respond, { sessionHash: "brother", interestId: id, decision: "accept" });
+    if (viewer === "brother") await t.mutation(api.femaleInterestWorkflow.confirm, { sessionHash: "sister", interestId: id, confirmed: true });
+    else await t.mutation(api.femaleInterestWorkflow.brotherFinal, { sessionHash: "brother", interestId: id, approved: true });
+  } else {
+    await t.mutation(api.applicantInterests.respondToInbound, { sessionHash: "sister", interestId: id, decision: "accept" });
+    await t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: viewer === "brother" ? "sister" : "brother", interestId: id, approved: true });
+  }
+  await t.run(async ctx => {
+    const other = await ctx.db.insert("registrations", { name: "DO NOT LEAK OTHER", gender: activeSide === "brother" ? "female" : "male", email: "private-other@example.invalid", age: 30, maritalStatus: "single", education: "College", job: "Test", phone: "PRIVATE-PHONE", status: "approved", createdAt: Date.now() });
+    const match = await ctx.db.insert("matches", { maleRegistrationId: activeSide === "brother" ? maleId : other, femaleRegistrationId: activeSide === "sister" ? femaleId : other, status: "contact_shared", interestType: "mutual_interest", initiatedBy: "interest_signal", createdAt: Date.now(), updatedAt: Date.now() });
+    if (pointer) await ctx.db.patch(activeSide === "brother" ? maleId : femaleId, { activeMatchId: match });
+  });
+  const snapshot = () => t.run(async ctx => ({ matches: await ctx.db.query("matches").collect(), flows: await ctx.db.query("interestFlows").collect(), interest: await ctx.db.get(id), events: await ctx.db.query("interestFlowEvents").collect() }));
+  const before = await snapshot();
+  mocks.session.mockResolvedValue(viewer);
+  mocks.mutation.mockImplementation((fn, args) => t.mutation(fn, args));
+  const body = shared ? viewer === "brother" ? { action: "brother_final", approved: true } : { action: "confirm", confirmed: true } : { action: "final_approval", approved: true };
+  const endpoint = shared ? "female-review" : "interests";
+  const response = await (shared ? reviewPOST : interestPOST)(new NextRequest("https://synthetic.invalid/api/applicant/" + endpoint, { method: "POST", headers: { origin: "https://synthetic.invalid" }, body: JSON.stringify({ ...body, interestId: id }) }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "This connection cannot become a match while either participant has another active match. Please contact the team for help." });
+  expect(await snapshot()).toEqual(before);
+  expect(mocks.send).not.toHaveBeenCalled();
+});

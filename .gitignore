@@ -71,3 +71,10 @@ next-env.d.ts
 /ops/security-release-runtime/
 
 /ops/*-runtime*/
+
+# Local evidence and backups are never source artifacts.
+/privateops/
+/backups/
+/exports/
+/.worktrees/
+/.cleanup-quarantine-*/

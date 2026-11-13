@@ -1,3 +1,4 @@
+import { isSecurityRetired } from "./registrationSecurity";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { assertMatchInterest, linkedFlows } from "./contactGate";
@@ -7,6 +8,7 @@ import { active } from "./femaleInterestWorkflow";
  * from absence. No writes: in particular no consent, quota, grant or delivery changes. */
 export async function existingInboundReview(ctx: MutationCtx, viewer: Doc<"registrations">, sender: Doc<"registrations">, eventId: Id<"events">) {
   const rows = await ctx.db.query("interests").withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", q => q.eq("fromRegistrationId", sender._id).eq("toRegistrationId", viewer._id).eq("eventId", eventId)).collect();
+  if (isSecurityRetired(viewer) || isSecurityRetired(sender)) return null;
   if (viewer.status !== "approved" || sender.status !== "approved" || viewer.archivedAt !== undefined || sender.archivedAt !== undefined) return null;
   for (const row of rows) {
     if (row.testReset || ["closed", "declined", "withdrawn"].includes(row.status) || [viewer, sender].some(p => p.lastRestoredArchivedAt !== undefined && row.createdAt <= p.lastRestoredArchivedAt)) continue;

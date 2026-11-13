@@ -1,3 +1,5 @@
+import { enrollmentForEvent } from "./eventEnrollmentIdentity";
+import { assertNotSecurityRetired, assertContactsNotRetired } from "./registrationSecurity";
 import { transition as rejectionNoticeTransition } from "./profileRejectionNotice";
 import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
 import { currentAge, ownerDateOfBirth, saveDateOfBirth, withCurrentAge } from "./birthdays";
@@ -233,12 +235,7 @@ async function createOrRestoreEventRegistration(
     throw new Error("Existing profile is missing a profile number. Please contact admin before registering for this event.");
   }
 
-  const existing = await ctx.db
-    .query("eventRegistrations")
-    .withIndex("by_eventId_and_registrationId", (q) =>
-      q.eq("eventId", args.event._id).eq("registrationId", args.registration._id)
-    )
-    .unique();
+  const existing = await enrollmentForEvent(ctx, args.event._id, args.registration._id);
   if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
     throw new Error("This applicant is already registered for this event.");
   }
@@ -268,7 +265,7 @@ async function createOrRestoreEventRegistration(
   };
 
   if (existing) {
-    await ctx.db.patch(existing._id, payload);
+    await ctx.db.patch(existing._id, { ...payload, registrationId: existing.registrationId });
     return existing._id;
   }
 
@@ -432,7 +429,9 @@ export const create = mutation({
     const emailCanonical = normalizeEmail(args.email);
     const phoneCanonical = normalizePhone(args.phone);
     const nameCanonical = normalizeName(args.name);
+    await assertContactsNotRetired(ctx, args.email, args.phone);
     const existingProfile = await findExistingParticipantProfile(ctx, { ...args, age }, Boolean(event));
+    assertNotSecurityRetired(existingProfile);
     if (existingProfile?.archivedAt != null) throw new Error("This profile is archived. Contact the team before registering again.");
     if (existingProfile && !event) {
       throw new Error("An applicant is already registered with this email.");
@@ -598,6 +597,7 @@ export const updateSearchStatus = mutation({
 
 async function issueProfileAccessToken(ctx: MutationCtx, id: Id<"registrations">, token: string, recoveryOnly = false) {
   const previous = await ctx.db.get(id);
+  assertNotSecurityRetired(previous);
   if (previous?.archivedAt !== undefined && !recoveryOnly) throw new Error("Profile is archived");
   const issuedAt = Date.now();
   if (!previous || previous.profileAccessToken === token || await ctx.db.query("registrations").withIndex("by_profileAccessToken", q => q.eq("profileAccessToken", token)).first()) throw new Error("Use a fresh profile token");
@@ -892,6 +892,7 @@ export const deleteRegistration = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const registration = await ctx.db.get(args.id);
+    assertNotSecurityRetired(registration);
     if (registration?.archivedAt != null) throw new Error("Archived profile history cannot be deleted through this action");
     const birthday = await ctx.db.query("registrationBirthdays").withIndex("by_registrationId", q => q.eq("registrationId", args.id)).unique();
     if (birthday) await ctx.db.delete(birthday._id);
@@ -935,6 +936,7 @@ export const claimWelcomeReceipt = mutation({
     if (!link || link.eventRegistrationId) throw new Error("No safe non-event checkout association");
     const registration = await ctx.db.get(link.registrationId);
     if (!registration || registration.paymentStatus !== "paid") throw new Error("Paid registration not found");
+    assertNotSecurityRetired(registration);
     if (registration.confirmationEmailSent) return { claimed: false };
     const key = "welcome/" + registration._id;
     const existing = await ctx.db.query("receiptDeliveries").withIndex("by_key", q => q.eq("key", key)).unique();

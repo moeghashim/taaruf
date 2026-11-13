@@ -1,3 +1,5 @@
+import { acceptedInboundFirstName } from "./femaleInterestWorkflow";
+import { isSecurityRetired } from "./registrationSecurity";
 import { ownClosedDecision } from "./ownClosedConnection";
 import { enqueueFinalRequests, finalRequestEnabled } from "./finalRequest";
 import { existingInboundReview } from "./existingInboundReview";
@@ -147,7 +149,7 @@ async function safeCounterparty(
   interest: Interest
 )
  {
-  if (!counterparty || viewer.archivedAt !== undefined || counterparty.archivedAt !== undefined) return null;
+  if (!counterparty || (viewer.archivedAt !== undefined || isSecurityRetired(viewer)) || (counterparty.archivedAt !== undefined || isSecurityRetired(counterparty))) return null;
   if ([viewer, counterparty].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) return null;
   const bioVisible = await interestBioVisible(ctx, interest);
   const showProfile = canSeeCounterpartyProfile(viewer, flow, direction);
@@ -174,7 +176,8 @@ async function safeCounterparty(
     }
   }
   const showName = showProfile && (outboundIdentityAllowed || !(viewer.gender === "male" && counterparty.gender === "female"));
-  const displayName = showName ? counterparty.name.trim() : "";
+  const firstName = direction === "inbound" ? await acceptedInboundFirstName(ctx, interest, viewer._id) : null;
+  const displayName = firstName ?? (showName ? counterparty.name.trim() : "");
   const contactShared = await contactsVisible(ctx, interest, flow);
   const fullProfileVisible =
     showProfile &&
@@ -392,7 +395,7 @@ export const lookupInterestName = mutation({
     if (person.status !== "approved" || !event || event._id !== args.expectedEventId) return { firstName: null };
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique() : null;
-    if (!target || target.archivedAt !== undefined || target.status !== "approved" || target.gender === person.gender || target._id === person._id) return { firstName: null };
+    if (!target || (target.archivedAt !== undefined || isSecurityRetired(target)) || target.status !== "approved" || target.gender === person.gender || target._id === person._id) return { firstName: null };
     return { firstName: target.name.trim().split(/\s+/u)[0] };
   },
 });
@@ -420,7 +423,7 @@ export const submitInterestNumber = mutation({
       // Permit exact idempotent retries using only the already-authorized charged rows.
       for (const row of charged) {
         const known = await ctx.db.get(row.toRegistrationId);
-        if (known?.publicApplicantNumber === args.applicantNumber) {
+        if (known?.publicApplicantNumber === args.applicantNumber && !isSecurityRetired(known)) {
           const incoming = await existingInboundReview(ctx, registration, known, selected._id);
           if (incoming) return { interestId: incoming.interestId, private: false, inboundInterestNotification: null, existingInbound: incoming };
           if (!isVisibleInApplicantDashboard(row)) throw new Error("Interest already submitted for this event");
@@ -432,7 +435,7 @@ export const submitInterestNumber = mutation({
     const target = Number.isSafeInteger(args.applicantNumber) && args.applicantNumber > 0
       ? await ctx.db.query("registrations").withIndex("by_publicApplicantNumber", q => q.eq("publicApplicantNumber", args.applicantNumber)).unique()
       : null;
-    if (!target || target.archivedAt !== undefined ||
+    if (!target || (target.archivedAt !== undefined || isSecurityRetired(target)) ||
         target._id === registration._id || target.gender === registration.gender || target.status !== "approved" || target.profileCompletionStatus !== "completed") {
       throw new Error("Applicant details could not be verified");
     }
