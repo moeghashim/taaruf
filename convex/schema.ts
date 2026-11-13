@@ -329,6 +329,7 @@ export default defineSchema({
     .index("by_fromRegistrationId_and_testReset", ["fromRegistrationId", "testReset"])
     .index("by_toRegistrationId_and_testReset", ["toRegistrationId", "testReset"])
     .index("by_canonicalInterestId", ["canonicalInterestId"])
+    .index("by_pair_event_and_testReset", ["fromRegistrationId", "toRegistrationId", "eventId", "testReset"])
     .index("by_submission_quota", ["fromRegistrationId", "eventId", "source", "testReset", "slotReturnedAt"])
     .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
     .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])
