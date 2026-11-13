@@ -844,3 +844,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-13
 - Request4634: add authenticated single-profile birthday lookup and conditional date-only admin drawer display; preserve age, notes, private storage and deployed merge repair. Synthetic UI-only preview and privacy/auth/timezone tests documented in docs/admin-birthday-preview.md. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-13
+- Added authenticated profile content-copy preview/apply/status/rollback with byte-cloned owned photos, unchanged identities/payments/relationships, audit and drift guards; 1626 tests and isolated real-backend concurrency/HTTP proof. Nonlive candidate only; approval required before release. <!-- project: github.com/moeghashim/clawscrewskill -->

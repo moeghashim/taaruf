@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as profileContentCopy from "../profileContentCopy.js";
 import type * as reopen315 from "../reopen315.js";
 import type * as birthdays from "../birthdays.js";
 import type * as adminBirthday from "../adminBirthday.js";
@@ -56,6 +57,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  profileContentCopy: typeof profileContentCopy;
   reopen315: typeof reopen315;
   birthdays: typeof birthdays;
   adminBirthday: typeof adminBirthday;
