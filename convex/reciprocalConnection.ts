@@ -7,7 +7,7 @@ type Interest = Doc<"interests">;
 /** Exact directional reads serialize sends, explicit shares, and withdrawals.
  * Eligibility is read-only: submission never links or changes reciprocal consent. */
 export async function pendingReciprocal(ctx: ReadCtx, from: Doc<"registrations">, to: Doc<"registrations">, eventId: Id<"events">) {
-  const ranges = await Promise.all([[from._id, to._id], [to._id, from._id]].map(([a,b]) => ctx.db.query("interests").withIndex("by_fromRegistrationId_and_toRegistrationId_and_eventId", q => q.eq("fromRegistrationId", a).eq("toRegistrationId", b).eq("eventId", eventId)).take(3)));
+  const ranges = await Promise.all([[from._id, to._id], [to._id, from._id]].map(([a,b]) => ctx.db.query("interests").withIndex("by_pair_event_and_testReset", q => q.eq("fromRegistrationId", a).eq("toRegistrationId", b).eq("eventId", eventId).eq("testReset", undefined)).take(3)));
   const event = await ctx.db.get(eventId);
   if (!event || event.status === "cancelled" || ranges.some(rows => rows.length > 1) || [from,to].some(p => p.status !== "approved" || p.archivedAt !== undefined || isSecurityRetired(p) || p.activeMatchId)) return null;
   for (const row of ranges.flat()) {
