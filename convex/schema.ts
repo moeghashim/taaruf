@@ -138,6 +138,14 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  profileContentCopyAudits: defineTable({
+    operationKey: v.string(), request: v.string(), sourceId: v.id("registrations"), targetId: v.id("registrations"),
+    beforeTarget: v.string(), sourceFingerprint: v.string(), afterFingerprint: v.optional(v.string()),
+    expectedFingerprint: v.string(), sourceNumber: v.number(), targetNumber: v.number(),
+    copiedStorageIds: v.array(v.id("_storage")), changedFields: v.array(v.string()),
+    state: v.union(v.literal("prepared"), v.literal("applied"), v.literal("rolled_back")),
+    createdAt: v.number(), rolledBackAt: v.optional(v.number()),
+  }).index("by_operationKey", ["operationKey"]),
   registrationMergeAudits: defineTable({
     operationKey: v.string(), request: v.string(), before: v.string(), afterFingerprint: v.string(),
     sourceId: v.id("registrations"), targetId: v.id("registrations"), createdAt: v.number(),
