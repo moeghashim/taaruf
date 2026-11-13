@@ -1,6 +1,6 @@
 "use client";
 import { ContactGuidance } from "@/components/applicant/contact-guidance";
-import { interestCategories } from "@/lib/interest-categories";
+import { interestCategories, visibleWorkflowReviews, selectedWorkflowReview } from "@/lib/interest-categories";
 import type { ReviewNoticeInput } from "@/lib/received-interest-updates";
 import { DateOfBirthField } from "@/components/date-of-birth-field";
 import { dateOfBirthError, changedDateOfBirth } from "@/lib/date-of-birth";
@@ -27,6 +27,7 @@ import { Pill, type Tone } from "@/components/admin/primitives/status-pill";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 
 type DashboardInterest = {
+  receiptOnly?: boolean;
   femaleWorkflow?: boolean;
   interestId: string;
   canPause?: boolean;
@@ -289,6 +290,7 @@ function InterestRow({
   onSelect: () => void;
 }) {
   const counterparty = interest.counterparty;
+  if (interest.receiptOnly) return <div className="interest-row" data-interest-id={interest.interestId}><div className="interest-row-main"><h4>Interest sent</h4><p>Your submission has been recorded.</p></div></div>;
   const needsAction = canRespondToInterest(interest) || canFinalApproveInterest(interest);
 
   return (
@@ -539,6 +541,10 @@ function Section({
   children,
   reviewIds = [],
   reviewActive = false,
+  suppressDetail = false,
+  active = true,
+  mutualReviewIds = [],
+  displayedReviewId,
   requestedConnectionId,
   onAction,
   busy,
@@ -547,6 +553,10 @@ function Section({
   children?: React.ReactNode;
   reviewIds?: string[];
   reviewActive?: boolean;
+  suppressDetail?: boolean;
+  active?: boolean;
+  mutualReviewIds?: string[];
+  displayedReviewId?: string | null;
   requestedConnectionId?: string | null;
   title: string;
   description: string;
@@ -556,7 +566,7 @@ function Section({
 }) {
   const [selectedInterestId, setSelectedInterestId] = useState<string | null>(null);
   const selectedInterest =
-    interests.find((interest) => interest.interestId === (requestedConnectionId ?? selectedInterestId)) ?? (requestedConnectionId ? null : interests[0] ?? null);
+    interests.find((interest) => !interest.receiptOnly && interest.interestId === (requestedConnectionId ?? selectedInterestId)) ?? (requestedConnectionId ? null : interests.find(row => !row.receiptOnly) ?? null);
 
   useEffect(() => {
     if (!interests.length) {
@@ -569,13 +579,14 @@ function Section({
   }, [interests, selectedInterestId, requestedConnectionId]);
 
   useEffect(() => {
-    if (reviewActive || !requestedConnectionId || selectedInterest?.interestId !== requestedConnectionId) return;
+    if (!active || suppressDetail || reviewActive || !requestedConnectionId || selectedInterest?.interestId !== requestedConnectionId) return;
     const section = document.getElementById(sectionId(title));
     const target = Array.from(section?.querySelectorAll<HTMLButtonElement>("[data-interest-id]") ?? []).find(button => button.dataset.interestId === requestedConnectionId);
     target?.focus();
     target?.scrollIntoView({ block: "center" });
-  }, [requestedConnectionId, selectedInterest?.interestId, title, reviewActive]);
+  }, [requestedConnectionId, selectedInterest?.interestId, title, reviewActive, suppressDetail, active]);
 
+  const showDetail = !suppressDetail && !reviewActive && !!selectedInterest;
   const extraReviewIds = [...new Set(reviewIds)].filter(id => !interests.some(row => row.interestId === id));
   const itemCount = interests.length + extraReviewIds.length;
   function selectReview(id: string) {
@@ -598,8 +609,8 @@ function Section({
         </span>
       </div>
       {children}
-      {!!extraReviewIds.length && <div className="interest-list">{extraReviewIds.map((id, index) => <button type="button" className={`interest-row ${requestedConnectionId === id ? "selected" : ""}`} key={id} data-interest-id={id} aria-pressed={requestedConnectionId === id} onClick={() => selectReview(id)}>Review connection {index + 1}</button>)}</div>}
-      <div className={`interest-workspace ${interests.length ? "" : "empty"} ${reviewActive ? "review-active" : ""}`}>
+      {!!extraReviewIds.length && <div className="interest-list">{extraReviewIds.map((id, index) => <button type="button" className={`interest-row ${(displayedReviewId ?? requestedConnectionId) === id ? "selected" : ""}`} key={id} data-interest-id={id} aria-pressed={(displayedReviewId ?? requestedConnectionId) === id} onClick={() => selectReview(id)}><span>Review connection {index + 1}</span>{mutualReviewIds.includes(id) && <Pill tone="amber">Mutual Interest</Pill>}</button>)}</div>}
+      <div className={`interest-workspace ${interests.length ? "" : "empty"} ${interests.length && !showDetail ? "list-only" : ""} ${reviewActive ? "review-active" : ""}`}>
         {interests.length ? (
           <>
             <div className="interest-list">
@@ -607,7 +618,7 @@ function Section({
                 <InterestRow
                   key={interest.interestId}
                   interest={interest}
-                  selected={interest.interestId === (requestedConnectionId ?? selectedInterest?.interestId)}
+                  selected={interest.interestId === (displayedReviewId ?? requestedConnectionId ?? selectedInterest?.interestId)}
                   onSelect={() => {
                     setSelectedInterestId(interest.interestId);
                     const url = new URL(window.location.href);
@@ -621,7 +632,7 @@ function Section({
                 />
               ))}
             </div>
-            {!reviewActive && <ProfileSideCard viewerGender={viewerGender} interest={selectedInterest} onAction={onAction} busy={busy} />}
+            {showDetail && selectedInterest && <ProfileSideCard viewerGender={viewerGender} interest={selectedInterest} onAction={onAction} busy={busy} />}
           </>
         ) : !reviewActive && !itemCount ? (
           <div className="coming-soon compact">
@@ -641,6 +652,13 @@ export default function ApplicantDashboardPage() {
   const [reviews, setReviews] = useState<ReviewNoticeInput[] | null>(null);
   const closedHistory = ownClosedHistory(data?.history ?? []);
   const categories = interestCategories(data?.outbound ?? [], data?.privateDocumented ?? [], reviews ?? []);
+  const inboundReviews = visibleWorkflowReviews(reviews ?? [], "inbound");
+  const outboundReviews = visibleWorkflowReviews(reviews ?? [], "outbound");
+  const explicitSelection = !!(selectedReviewId || selectedConnectionId);
+  const selectedWorkflowId = selectedWorkflowReview([...inboundReviews, ...outboundReviews], selectedReviewId, explicitSelection);
+  const outboundReviewId = outboundReviews.some(row => row.interestId === selectedWorkflowId) ? selectedWorkflowId : null;
+  // Unknown/stale explicit links still mount exactly one authoritative recovery panel.
+  const inboundReviewId = outboundReviewId ? null : selectedWorkflowId;
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
@@ -1525,13 +1543,17 @@ export default function ApplicantDashboardPage() {
                 viewerGender={data.applicant.gender}
                 description="People who expressed interest in you."
                 requestedConnectionId={selectedReviewId ?? selectedConnectionId}
-                interests={data.inbound}
-                reviewIds={data.applicant.gender === "male" ? (reviews ?? []).filter(row => row.role === "brother" && row.canView && !row.reviewExpired && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(row.state)).map(row => row.interestId) : []}
-                reviewActive={!archived && data.applicant.status === "approved" && data.applicant.gender === "male" && !!selectedReviewId}
+                interests={data.inbound.filter(row => !inboundReviews.some(review => review.interestId === row.interestId))}
+                reviewIds={inboundReviews.map(row => row.interestId)}
+                mutualReviewIds={inboundReviews.filter(row => row.mutualInterest).map(row => row.interestId)}
+                displayedReviewId={inboundReviewId}
+                active={view === "interests"}
+                reviewActive={!!inboundReviewId}
+                suppressDetail={!!selectedWorkflowId}
                 onAction={async body => { await runAction(body); }}
                 busy={busy || archived}
               >
-                {!archived && data.applicant.status === "approved" && data.applicant.gender === "male" && <FemaleReviews inline active={view === "interests"} />}
+                {!archived && data.applicant.status === "approved" && inboundReviewId && <FemaleReviews key={inboundReviewId} inline interestId={inboundReviewId} focusOnSelect={selectedReviewId === inboundReviewId} active={view === "interests"} />}
               </Section>
               {data.applicant.gender === "female" && data.applicant.status === "approved" && !archived && reviews === null ? <p role="status">Loading interest categories…</p> : <>
               <Section
@@ -1540,15 +1562,21 @@ export default function ApplicantDashboardPage() {
                 requestedConnectionId={selectedReviewId ?? selectedConnectionId}
                 interests={categories.outbound}
                 viewerGender={data.applicant.gender}
-                reviewIds={data.applicant.gender === "female" ? (reviews ?? []).filter(row => row.role === "sister" && row.canView && !row.reviewExpired && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(row.state)).map(row => row.interestId) : []}
-                reviewActive={!archived && data.applicant.status === "approved" && data.applicant.gender === "female" && !!selectedReviewId}
+                reviewIds={outboundReviews.map(row => row.interestId)}
+                mutualReviewIds={outboundReviews.filter(row => row.mutualInterest).map(row => row.interestId)}
+                displayedReviewId={outboundReviewId}
+                active={view === "interests"}
+                reviewActive={!!outboundReviewId}
+                suppressDetail={!!selectedWorkflowId}
                 onAction={async body => { await runAction(body); }}
                 busy={busy || archived}
               >
-                {!archived && data.applicant.status === "approved" && data.applicant.gender === "female" && <FemaleReviews inline active={view === "interests"} />}
+                {!archived && data.applicant.status === "approved" && outboundReviewId && <FemaleReviews key={outboundReviewId} inline interestId={outboundReviewId} focusOnSelect={selectedReviewId === outboundReviewId} active={view === "interests"} />}
               </Section>
               {data.applicant.gender === "female" && (
                 <Section
+                  active={view === "interests"}
+                  suppressDetail={!!selectedWorkflowId}
                   title="Private Documented Interests"
                   description="Interests you documented for yourself and the admin team. These remain private until the team creates a recipient-specific review."
                   requestedConnectionId={selectedReviewId ?? selectedConnectionId}

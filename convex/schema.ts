@@ -295,6 +295,8 @@ export default defineSchema({
   // Legacy hourly counters retained for compatibility; no longer read or written.
   interestLookups: defineTable({ registrationId: v.id("registrations"), windowStart: v.number(), count: v.number() }).index("by_registrationId", ["registrationId"]),
   interests: defineTable({
+    canonicalInterestId: v.optional(v.id("interests")),
+    canonicalizedAt: v.optional(v.number()),
     slotReturnedAt: v.optional(v.number()),
     femaleWorkflow: v.optional(v.object({
       state: v.union(v.literal("private_documented"), v.literal("awaiting_brother_review"), v.literal("awaiting_sister_confirmation"), v.literal("pending_admin_approval"), v.literal("contacts_released"), v.literal("declined"), v.literal("revoked")),
@@ -326,6 +328,7 @@ export default defineSchema({
     .index("by_fromRegistrationId_and_eventId_and_source", ["fromRegistrationId", "eventId", "source"])
     .index("by_fromRegistrationId_and_testReset", ["fromRegistrationId", "testReset"])
     .index("by_toRegistrationId_and_testReset", ["toRegistrationId", "testReset"])
+    .index("by_canonicalInterestId", ["canonicalInterestId"])
     .index("by_submission_quota", ["fromRegistrationId", "eventId", "source", "testReset", "slotReturnedAt"])
     .index("by_fromRegistrationId_and_status", ["fromRegistrationId", "status"])
     .index("by_fromRegistrationId_and_toRegistrationId", ["fromRegistrationId", "toRegistrationId"])

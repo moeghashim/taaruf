@@ -47,5 +47,7 @@ export async function adminMutualInterests(client: Pick<ConvexHttpClient, "consi
         [m.maleRegistrationId, m.femaleRegistrationId].includes(i.toRegistrationId)) legacyReleasedMatches.add(m._id);
   }
   const evidence = mutualEvidence(rows.map(i => ({ ...i, participantsExist: !!i.fromRegistration && !!i.toRegistration, eventExists: !!i.event, eventCancelled: i.event?.status === "cancelled", legacyReleased: !!i.matchId && legacyReleasedMatches.has(i.matchId) })));
-  return rows.map(i => ({ ...i, mutual: evidence.get(i._id) ?? null }));
+  const audit = new Map<string, Interest[]>();
+  for (const row of rows) if (row.canonicalInterestId) { const group = audit.get(row.canonicalInterestId) ?? []; group.push(row); audit.set(row.canonicalInterestId, group); }
+  return rows.filter(i => !i.canonicalInterestId).map(i => ({ ...i, mutual: evidence.get(i._id) ?? null, expressionAudit: audit.get(i._id) ?? [] }));
 }

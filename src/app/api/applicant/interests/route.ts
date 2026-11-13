@@ -140,14 +140,36 @@ export async function POST(request: NextRequest) {
       }
 
       if (result.inboundInterestNotification) {
-        let recipient: { name: string; email: string };
-        const appUrl = getAppUrl();
-        if (!appUrl) {
-          const error = "App URL not configured";
-          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { adminSecret: getAdminSecret(),
-            interestId: result.inboundInterestNotification.interestId,
-            error,
+        // Submission has committed. Explicit sharing can retire this ID before
+        // notification work starts. Keep the saved receipt; never bypass guards.
+        try {
+          const appUrl = getAppUrl();
+          if (!appUrl) throw new Error("App URL not configured");
+          const recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: result.interestId, kind: "inbound" });
+          await convex.mutation(api.interests.assertNotificationEligible, { id: result.inboundInterestNotification.interestId, adminSecret: getAdminSecret() });
+          const emailResult = await sendInboundInterestReceivedEmail({
+            name: recipient.name,
+            email: recipient.email,
+            applicantPortalUrl: appUrl + "/me?connection=" + encodeURIComponent(result.interestId),
           });
+          if (!emailResult.success) throw new Error(emailResult.error || "Failed to send inbound interest email");
+          return NextResponse.json({
+            success: true,
+            result: { interestId: result.interestId, private: result.private },
+            message: "Interest submitted. The recipient has been notified.",
+            notification: { sent: true, providerId: emailResult.id },
+          });
+        } catch {
+          // Best-effort release of the optimistic claim. Alias audit is immutable,
+          // so failure-recording rejection cannot invalidate the committed receipt.
+          const error = "Recipient notification could not be sent.";
+          try {
+            await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, {
+              adminSecret: getAdminSecret(), interestId: result.inboundInterestNotification.interestId, error,
+            });
+          } catch {
+            console.error("Saved interest notification failure could not be recorded");
+          }
           return NextResponse.json({
             success: true,
             result: { interestId: result.interestId, private: result.private },
@@ -155,43 +177,6 @@ export async function POST(request: NextRequest) {
             notification: { sent: false, error },
           });
         }
-
-        try {
-          recipient = await convex.query(api.applicantInterests.getNotificationRecipient, { adminSecret: getAdminSecret(), sessionHash, interestId: result.interestId, kind: "inbound" });
-          await convex.mutation(api.interests.assertNotificationEligible, { id: result.inboundInterestNotification.interestId, adminSecret: getAdminSecret() });
-        } catch (error) {
-          // The claim is optimistic: suppression must release its sent marker.
-          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { adminSecret: getAdminSecret(),
-            interestId: result.inboundInterestNotification.interestId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          throw error;
-        }
-        const emailResult = await sendInboundInterestReceivedEmail({
-          name: recipient.name,
-          email: recipient.email,
-          applicantPortalUrl: `${appUrl}/me?connection=${encodeURIComponent(result.interestId)}`,
-        });
-
-        if (!emailResult.success) {
-          await convex.mutation(api.applicantInterests.recordInboundInterestNotificationFailure, { adminSecret: getAdminSecret(),
-            interestId: result.inboundInterestNotification.interestId,
-            error: emailResult.error || "Failed to send inbound interest email",
-          });
-          return NextResponse.json({
-            success: true,
-            result: { interestId: result.interestId, private: result.private },
-            message: "Interest submitted, but the recipient notification email could not be sent.",
-            notification: { sent: false, error: emailResult.error || "Failed to send inbound interest email" },
-          });
-        }
-
-        return NextResponse.json({
-          success: true,
-          result: { interestId: result.interestId, private: result.private },
-          message: "Interest submitted. The recipient has been notified.",
-          notification: { sent: true, providerId: emailResult.id },
-        });
       }
 
       return NextResponse.json({ success: true, result: { interestId: result.interestId, private: result.private } });

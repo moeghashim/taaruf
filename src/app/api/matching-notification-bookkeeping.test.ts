@@ -62,9 +62,10 @@ it.each([
     if (name === "interests:assertNotificationEligible") throw new Error("Participant is archived");
   });
   const response = await applicant(request({ action, photoConsent: "yes", expectedEventId: "event", applicantNumber: 123, applicantName: "Test", interestId: "interest", approved: true }));
-  expect(response.status).toBe(409);
+  expect(response.status).toBe(action === "submit_number" ? 200 : 409);
+  if (action === "submit_number") expect(await response.json()).toMatchObject({ success: true, result: { interestId: "interest" }, notification: { sent: false } });
   expect(m.send).not.toHaveBeenCalled();
-  expect(calls().at(-1)).toEqual([recorder, { adminSecret: "bridge", interestId: "interest", error: "Participant is archived" }]);
+  expect(calls().at(-1)).toEqual([recorder, { adminSecret: "bridge", interestId: "interest", error: action === "submit_number" ? "Recipient notification could not be sent." : "Participant is archived" }]);
 });
 it("never revives obsolete contact-email delivery from final approval", async () => {
  m.mutation.mockResolvedValue({ contactSharedNotification: { matchId: "old", recipients: [{ name: "Test", email: "test@example.invalid" }] } });
@@ -74,7 +75,9 @@ it("never revives obsolete contact-email delivery from final approval", async ()
 it("releases the claim when recipient revalidation rejects an archived owner", async () => {
  m.mutation.mockResolvedValue({ interestId: "interest", inboundInterestNotification: { interestId: "interest" } });
  m.query.mockRejectedValue(new Error("Participant is archived"));
- expect((await applicant(request({ action: "submit_number", expectedEventId: "event", applicantNumber: 123, applicantName: "Test" }))).status).toBe(409);
+ const response = await applicant(request({ action: "submit_number", expectedEventId: "event", applicantNumber: 123, applicantName: "Test" }));
+ expect(response.status).toBe(200);
+ expect(await response.json()).toMatchObject({ success: true, result: { interestId: "interest" }, notification: { sent: false } });
  expect(m.send).not.toHaveBeenCalled();
  expect(calls().at(-1)?.[0]).toBe("applicantInterests:recordInboundInterestNotificationFailure");
 });

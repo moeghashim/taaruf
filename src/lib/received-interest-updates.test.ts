@@ -36,3 +36,11 @@ for (const role of ["brother", "sister"]) describe("notifications: " + role, () 
   const notices=receivedInterestUpdates([shared],[workflow],["workflow /2"]);expect(notices).toHaveLength(2);expect(notices[0].href).toContain("connection=ordinary%20%2F1");expect(notices[1].href).toContain("femaleReview=workflow%20%2F2");
  });
 });
+
+for (const role of ["sister", "brother"]) it("mutual banner and contact priority: " + role, () => {
+ const mutual = {...review(role), mutualInterest:true, ownAction:null};
+ expect(receivedInterestUpdates([], [mutual])).toMatchObject([{heading:"You Have Received A Mutual Interest",href:"/me?femaleReview=same#inbound-interests"}]);
+ expect(receivedInterestUpdates([], [{...mutual,canView:false}])).toEqual([]);
+ expect(receivedInterestUpdates([], [{...mutual,state:"contacts_released"}], ["same"])[0].heading).toBe("A match has been created!");
+ for(const patch of [{paused:true},{reviewExpired:true},{state:"closed"}]) expect(receivedInterestUpdates([], [{...mutual,...patch}])).toEqual([]);
+});

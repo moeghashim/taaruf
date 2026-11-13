@@ -25,3 +25,17 @@ test("1006 duplicate interests serialize bounded two-direction evidence per row"
  const result=await adminMutualInterests({consistentQuery:query} as unknown as ConvexHttpClient,"test");
  expect(result.every(i=>i.mutual?.submissions.length===2)).toBe(true);expect(JSON.stringify(result).length).toBeLessThan(1000000);
 });
+
+test("complete cross-page aggregation hides alias actions but retains expression evidence",async()=>{
+ const alias={...row(),canonicalInterestId:"r",status:"new",match:null,matchId:undefined};const canonical={...row(true),status:"new",match:null,matchId:undefined};
+ const query=vi.fn().mockResolvedValueOnce({page:[alias],isDone:false,continueCursor:"next"}).mockResolvedValueOnce(page([canonical])).mockResolvedValueOnce(page([]));
+ const result=await adminMutualInterests({consistentQuery:query} as unknown as ConvexHttpClient,"test");
+ expect(result).toHaveLength(1);expect(result[0]._id).toBe("r");expect(result[0].expressionAudit).toHaveLength(1);expect(result[0].mutual?.submissions).toHaveLength(2);
+});
+
+test("before explicit share both independent directional rows remain actionable",async()=>{
+ const rows=[row(),row(true)].map(r=>({...r,status:"new",match:null,matchId:undefined}));
+ const query=vi.fn().mockResolvedValueOnce(page(rows)).mockResolvedValueOnce(page([]));
+ const result=await adminMutualInterests({consistentQuery:query} as unknown as ConvexHttpClient,"test");
+ expect(result.map(r=>r._id)).toEqual(["i","r"]);expect(result.every(r=>r.expressionAudit.length===0)).toBe(true);
+});

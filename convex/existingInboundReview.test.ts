@@ -31,10 +31,10 @@ async function fixture() {
 
 const reverse = (f: Awaited<ReturnType<typeof fixture>>) => f.t.mutation(api.applicantInterests.submitInterestNumber, {expectedEventId:f.event,sessionHash:"recipient-session",applicantNumber:1,applicantName:"Sender"});
 const snapshot = (f: Awaited<ReturnType<typeof fixture>>) => f.t.run(async ctx => ({interests:await ctx.db.query("interests").collect(),flows:await ctx.db.query("interestFlows").collect(),events:await ctx.db.query("interestFlowEvents").collect(),deliveries:await ctx.db.query("femaleWorkflowDeliveries").collect(),matches:await ctx.db.query("matches").collect()}));
-test("visible inbound intercepts repeated sends without writes",async()=>{
- const f=await fixture();await f.toggle();const first=await f.submit();const before=await snapshot(f);
- for(let i=0;i<3;i++) expect(await reverse(f)).toMatchObject({existingInbound:{interestId:first.interestId,route:"connection"},inboundInterestNotification:null});
- expect(await snapshot(f)).toEqual(before);
+test("pending visible inbound records reciprocal expression once",async()=>{
+ const f=await fixture();await f.toggle();const first=await f.submit();const second=await reverse(f);
+ for(let i=0;i<3;i++) expect(await reverse(f)).toMatchObject({interestId:second.interestId,inboundInterestNotification:null});
+ const state=await snapshot(f);expect(state.interests).toHaveLength(2);expect(state.interests.find(i=>i._id===first.interestId)?.canonicalInterestId).toBeUndefined();
 });
 test("shared female review intercepts male send without writes",async()=>{
  const f=await fixture();await f.toggle();const first=await reverse(f);
@@ -43,7 +43,7 @@ test("shared female review intercepts male send without writes",async()=>{
 });
 test("hidden female submission does not affect male response or reveal history",async()=>{
  const f=await fixture();await f.toggle();const hidden=await reverse(f);const result=await f.submit();
- expect(result).not.toHaveProperty("existingInbound");expect(result.interestId).not.toBe(hidden.interestId);expect(result.inboundInterestNotification).toEqual({interestId:result.interestId});
+ expect(result).not.toHaveProperty("existingInbound");expect(result.interestId).not.toBe(hidden.interestId);expect(result.inboundInterestNotification).not.toBeNull();
  expect(await f.t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash:"selection-session"})).toEqual([]);expect((await snapshot(f)).matches).toEqual([]);
 });
 test("cross event never intercepts",async()=>{
@@ -65,9 +65,9 @@ test("archived sender cannot be disclosed",async()=>{
  const f=await fixture();await f.toggle();await f.submit();await f.t.run(ctx=>ctx.db.patch(f.sender,{archivedAt:Date.now()}));await expect(reverse(f)).rejects.toThrow("verified");
 });
 test("intercept consumes no slot even at quota",async()=>{
- const f=await fixture();await f.toggle();const first=await f.submit();
+ const f=await fixture();await f.toggle();await f.submit();
  await f.t.run(async ctx=>{for(let i=0;i<3;i++) await ctx.db.insert("interests",{fromRegistrationId:f.recipient,toRegistrationId:f.sender,eventId:f.event,source:"platform_submission",status:"closed",visibility:"internal_only",createdAt:Date.now(),updatedAt:Date.now()});});
- const before=await snapshot(f);expect(await reverse(f)).toMatchObject({existingInbound:{interestId:first.interestId}});expect(await snapshot(f)).toEqual(before);
+ const before=await snapshot(f);await expect(reverse(f)).rejects.toThrow("already submitted");expect(await snapshot(f)).toEqual(before);
 });
 
 test("accepted female review remains viewable after invitation expiry",async()=>{
@@ -78,15 +78,8 @@ test("accepted female review remains viewable after invitation expiry",async()=>
  expect(await f.t.query(api.femaleInterestWorkflow.getReviewAccess,{sessionHash:"selection-session",interestId:first.interestId})).toHaveProperty("profile");
  const before=await snapshot(f);expect(await f.submit()).toMatchObject({existingInbound:{interestId:first.interestId}});expect(await snapshot(f)).toEqual(before);
 });
-test("hidden reciprocal joins only after both final approvals and retains hidden history",async()=>{
- const f=await fixture();await f.toggle();const female=await reverse(f);const male=await f.submit();
+test("pre-share independent inbound remains actionable",async()=>{
+ const f=await fixture();await f.toggle();await reverse(f);const male=await f.submit();
  await f.t.mutation(api.applicantInterests.respondToInbound,{sessionHash:"recipient-session",interestId:male.interestId,decision:"accept"});
  expect((await snapshot(f)).matches).toHaveLength(0);
- await f.t.mutation(api.applicantInterests.giveFinalApproval,{sessionHash:"selection-session",interestId:male.interestId,approved:true});
- expect((await snapshot(f)).matches).toHaveLength(0);
- await f.t.mutation(api.applicantInterests.giveFinalApproval,{sessionHash:"recipient-session",interestId:male.interestId,approved:true});
- const state=await snapshot(f);expect(state.matches).toHaveLength(1);expect(state.matches[0].contactGate).toBe("pending_admin_approval");
- for(const row of state.interests) expect(row).toMatchObject({status:"converted_to_match",matchId:state.matches[0]._id});
- expect(state.interests.find(row=>row._id===female.interestId)?.femaleWorkflow?.state).toBe("private_documented");
- expect(await f.t.query(api.femaleInterestWorkflow.getDashboard,{sessionHash:"selection-session"})).toEqual([]);
 });

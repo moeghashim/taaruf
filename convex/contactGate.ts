@@ -1,3 +1,4 @@
+import { assertCanonicalAction } from "./reciprocalConnection";
 import { isSecurityRetired } from "./registrationSecurity";
 import { assertNotArchived } from "./archiveRules";
 import { sisterActivation } from "./sisterConfirmationActivation";
@@ -11,6 +12,7 @@ type ReadCtx = MutationCtx | QueryCtx;
 export async function enqueueContactDelivery(ctx: MutationCtx, interestId: Id<"interests">, recipientId: Id<"registrations">, kind: Doc<"femaleWorkflowDeliveries">["kind"]) {
   const source = await ctx.db.get(interestId);
   if (!source) throw new Error("Interest unavailable");
+  await assertCanonicalAction(ctx, source);
   assertNotArchived(await ctx.db.get(source.fromRegistrationId));
   assertNotArchived(await ctx.db.get(source.toRegistrationId));
   const key = interestId + ":" + kind + ":" + recipientId;
@@ -79,6 +81,7 @@ export async function queuePendingReview(ctx: MutationCtx, matchId: Id<"matches"
 }
 /** Preserve disclosure history, but never treat archive-closed history as access. */
 export async function contactsVisible(ctx: ReadCtx, interest: Doc<"interests">, flow: Doc<"interestFlows"> | null) {
+  if (interest.canonicalInterestId) return false;
   if (!flow?.contactSharedAt || flow.closedReason === "participant_archived" || ["closed", "declined"].includes(flow.flowStatus)) return false;
   const from = await ctx.db.get(interest.fromRegistrationId);
   const to = await ctx.db.get(interest.toRegistrationId);
@@ -132,12 +135,22 @@ async function pairHistory(ctx: ReadCtx, interest: Doc<"interests">) {
   return rows;
 }
 
+/** Two platform submissions are independent expressions, even after one is
+ * shared. Only explicit canonicalization or an existing common match authorizes
+ * pooling them. Keep legacy/non-platform pair semantics unchanged. */
+function sharesConsentScope(source: Doc<"interests">, row: Doc<"interests">) {
+  if (source._id === row._id) return true;
+  if (source.matchId && source.matchId === row.matchId) return true;
+  if ((source.canonicalInterestId ?? source._id) === (row.canonicalInterestId ?? row._id)) return true;
+  return source.source !== "platform_submission" || row.source !== "platform_submission";
+}
+
 export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
   assertNotArchived(await ctx.db.get(interest.fromRegistrationId));
   assertNotArchived(await ctx.db.get(interest.toRegistrationId));
   if (interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
   if (interest.fromRegistrationId === interest.toRegistrationId) throw new Error("Linked pair mismatch");
-  const rows = await pairHistory(ctx, interest);
+  const rows = (await pairHistory(ctx, interest)).filter(row => sharesConsentScope(interest, row));
   const result = [];
   for (const row of rows) {
     if (row.testReset || ["closed", "declined", "withdrawn"].includes(row.status) || (row.femaleWorkflow && ["declined", "revoked"].includes(row.femaleWorkflow.state))) continue;
@@ -160,6 +173,7 @@ export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
 
 /** Provenance belongs only to the source explicit action, never propagated flags. */
 export async function recordPairApproval(ctx: MutationCtx, interest: Doc<"interests">, actorId: Id<"registrations">, approved: boolean) {
+  await assertCanonicalAction(ctx, interest);
   if (![interest.fromRegistrationId, interest.toRegistrationId].includes(actorId)) throw new Error("Unauthorized");
   const rows = await pairFlows(ctx, interest);
   if (interest.matchId && rows.some(r => r.interest.femaleWorkflow)) {
@@ -217,6 +231,7 @@ async function pairDecisions(ctx: ReadCtx, rows: Awaited<ReturnType<typeof pairF
 }
 
 export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interests">) {
+  await assertCanonicalAction(ctx, interest);
   const rows = await pairFlows(ctx, interest);
   const decisions = await pairDecisions(ctx, rows);
   if (!decisions.has(interest.fromRegistrationId) || !decisions.has(interest.toRegistrationId)) return null;

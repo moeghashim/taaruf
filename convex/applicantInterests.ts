@@ -1,3 +1,4 @@
+import { pendingReciprocal, assertCanonicalAction, sharedMutual } from "./reciprocalConnection";
 import { acceptedInboundFirstName } from "./femaleInterestWorkflow";
 import { isSecurityRetired } from "./registrationSecurity";
 import { ownClosedDecision } from "./ownClosedConnection";
@@ -236,7 +237,7 @@ function isVisibleInApplicantDashboard(interest: Interest) {
 }
 
 function dashboardDirection(viewer: Registration, interest: Interest) {
-  if (interest.testReset || !isVisibleInApplicantDashboard(interest) || interest.fromRegistrationId === interest.toRegistrationId || (interest.femaleWorkflow && ["declined", "revoked"].includes(interest.femaleWorkflow.state))) return null;
+  if ((interest.canonicalInterestId && interest.fromRegistrationId !== viewer._id) || interest.testReset || !isVisibleInApplicantDashboard(interest) || interest.fromRegistrationId === interest.toRegistrationId || (interest.femaleWorkflow && ["declined", "revoked"].includes(interest.femaleWorkflow.state))) return null;
   if (interest.fromRegistrationId === viewer._id) {
     if (viewer.gender === "female" && interest.visibility === "internal_only") return "private" as const;
     if (viewer.gender === "male" && interest.visibility !== "internal_only") return "outbound" as const;
@@ -262,29 +263,31 @@ async function serializeInterest(
   const released = await contactsVisible(ctx, interest, flow);
   const paused = released && interest.matchId ? (await ctx.db.get(interest.matchId))?.status === "paused" : false;
   const closed = ["closed", "declined", "withdrawn"].includes(interest.status) || ["closed", "declined"].includes(internalStatus);
-  const canRespond = viewer.status === "approved" && !closed && !paused && !interest.femaleWorkflow && direction === "inbound" && interest.visibility !== "internal_only" && ["awaiting_inbound_response", "kept_open"].includes(internalStatus);
-  const canFinalApprove = viewer.status === "approved" && !closed && !interest.femaleWorkflow && !paused && await interestBioVisible(ctx, interest) && ownFinalApproval === "pending" && !["contact_shared", "declined", "closed"].includes(internalStatus);
+  const receiptOnly = viewer._id === interest.fromRegistrationId && (!!interest.canonicalInterestId || await sharedMutual(ctx, interest));
+  const canRespond = !receiptOnly && viewer.status === "approved" && !closed && !paused && !interest.femaleWorkflow && direction === "inbound" && interest.visibility !== "internal_only" && ["awaiting_inbound_response", "kept_open"].includes(internalStatus);
+  const canFinalApprove = !receiptOnly && viewer.status === "approved" && !closed && !interest.femaleWorkflow && !paused && await interestBioVisible(ctx, interest) && ownFinalApproval === "pending" && !["contact_shared", "declined", "closed"].includes(internalStatus);
   return {
     interestId: interest._id,
+    receiptOnly,
     ...(interest.femaleWorkflow ? { femaleWorkflow: true } : {}),
-    canPause: !closed && released && Boolean(interest.matchId),
-    paused,
+    canPause: !receiptOnly && !closed && released && Boolean(interest.matchId),
+    paused: receiptOnly ? false : paused,
     direction,
     status: closed ? "closed" : internalStatus === "contact_shared" ? "contact_shared" : "in_progress",
     flowStatus: closed ? "closed" : internalStatus === "contact_shared" ? "contact_shared" : "in_progress",
     canRespond,
     canFinalApprove,
-    canWithdraw: !closed && !interest.matchId && viewer.status === "approved" && (!interest.femaleWorkflow || (interest.femaleWorkflow.state === "private_documented" && interest.visibility === "internal_only" && (interest.adminStatus ?? "pending") === "pending")) && (direction === "outbound" || direction === "private") && ["awaiting_inbound_response", "kept_open", "private_documented"].includes(internalStatus),
+    canWithdraw: !receiptOnly && !closed && !interest.matchId && viewer.status === "approved" && (!interest.femaleWorkflow || (interest.femaleWorkflow.state === "private_documented" && interest.visibility === "internal_only" && (interest.adminStatus ?? "pending") === "pending")) && (direction === "outbound" || direction === "private") && ["awaiting_inbound_response", "kept_open", "private_documented"].includes(internalStatus),
     ownInitialDecision: direction === "inbound" ? flow?.recipientDecision ?? "pending" : null,
-    ownFinalApproval,
+    ownFinalApproval: receiptOnly ? "pending" as const : ownFinalApproval,
     visibility: interest.visibility,
     createdAt: interest.createdAt,
     keepOpenExpiresAt: direction === "inbound" ? flow?.keepOpenExpiresAt ?? null : null,
-    contactSharedAt: await contactsVisible(ctx, interest, flow) ? flow?.contactSharedAt ?? null : null,
-    photoDecision: flow?.photoDecision ?? "pending",
+    contactSharedAt: !receiptOnly && await contactsVisible(ctx, interest, flow) ? flow?.contactSharedAt ?? null : null,
+    photoDecision: receiptOnly ? "pending" as const : flow?.photoDecision ?? "pending",
     senderPhotoConsent: viewer._id === interest.fromRegistrationId ? interest.senderPhotoConsent ?? null : null,
     senderPhotoConsentRevokedAt: viewer._id === interest.fromRegistrationId ? interest.senderPhotoConsentRevokedAt ?? null : null,
-    counterparty: await safeCounterparty(ctx, viewer, counterparty, counterparty ? numberById.get(counterparty._id) : undefined, flow, direction, interest),
+    counterparty: receiptOnly ? null : await safeCounterparty(ctx, viewer, counterparty, counterparty ? numberById.get(counterparty._id) : undefined, flow, direction, interest),
   };
 }
 
@@ -365,8 +368,9 @@ export const getDashboard = query({
       outbound: await Promise.all(
         visibleOutbound.map((interest) => serializeInterest(ctx, registration, interest, byId, "outbound"))
       ),
-      // Closed rows carry only the viewer's own receipt, never restored profile access.
-      history: (await Promise.all([...inboundRows, ...outboundRows].filter(row => !row.testReset && !isVisibleInApplicantDashboard(row) && (row.fromRegistrationId === registration._id || row.visibility !== "internal_only" || !!row.femaleWorkflow?.reviewTokenHash)).map(async row => {
+      // Canonical closed rows carry own receipts; aliases retain audit only.
+      // Independent pre-share withdrawals retain their unlinked directional receipt.
+      history: (await Promise.all([...inboundRows, ...outboundRows].filter(row => !row.canonicalInterestId && !row.testReset && !isVisibleInApplicantDashboard(row) && (row.fromRegistrationId === registration._id || row.visibility !== "internal_only" || !!row.femaleWorkflow?.reviewTokenHash)).map(async row => {
         const flow = await ensureFlowForQuery(ctx, row);
         const ownDecision = await ownClosedDecision(ctx, row, flow, registration._id);
         if (!ownDecision) return null;
@@ -424,8 +428,6 @@ export const submitInterestNumber = mutation({
       for (const row of charged) {
         const known = await ctx.db.get(row.toRegistrationId);
         if (known?.publicApplicantNumber === args.applicantNumber && !isSecurityRetired(known)) {
-          const incoming = await existingInboundReview(ctx, registration, known, selected._id);
-          if (incoming) return { interestId: incoming.interestId, private: false, inboundInterestNotification: null, existingInbound: incoming };
           if (!isVisibleInApplicantDashboard(row)) throw new Error("Interest already submitted for this event");
           return { interestId: row._id, private: row.visibility === "internal_only", inboundInterestNotification: null };
         }
@@ -440,17 +442,18 @@ export const submitInterestNumber = mutation({
       throw new Error("Applicant details could not be verified");
     }
 
-    // Read the reverse indexed range in this same transaction: concurrent sends/shares
-    // must serialize before any quota charge, flow, photo grant or notification write.
-    const incoming = await existingInboundReview(ctx, registration, target, selected._id);
-    if (incoming) return { interestId: incoming.interestId, private: false, inboundInterestNotification: null, existingInbound: incoming };
-
     const previous = await ctx.db.query("interests")
       .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", selected._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3);
     const retry = previous.find(row => row.toRegistrationId === target._id);
     if (retry) {
       if (!isVisibleInApplicantDashboard(retry)) throw new Error("Interest already submitted for this event");
       return { interestId: retry._id, private: retry.visibility === "internal_only", inboundInterestNotification: null };
+    }
+
+    const pending = await pendingReciprocal(ctx, registration, target, selected._id);
+    if (!pending?.reverse) {
+      const incoming = await existingInboundReview(ctx, registration, target, selected._id);
+      if (incoming) return { interestId: incoming.interestId, private: false, inboundInterestNotification: null, existingInbound: incoming };
     }
 
     const result = await createApplicantInterestWithRules(ctx, {
@@ -503,6 +506,7 @@ export const recordInboundInterestNotificationFailure = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.interestId);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -527,6 +531,7 @@ export const respondToInbound = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) throw new Error("Interest not found");
     if (interest.femaleWorkflow || (!interest.matchId && interest.source === "platform_submission" && interest.visibility === "internal_only")) throw new Error("Use female website workflow");
     if (interest.toRegistrationId !== registration._id || interest.visibility === "internal_only") {
@@ -605,6 +610,7 @@ export const withdrawOutbound = mutation({
       throw new Error("Interest does not belong to this applicant");
     }
     if (interest.status === "withdrawn" && interest.slotReturnedAt !== undefined) return interest._id;
+    await assertCanonicalAction(ctx, interest);
     await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     if (interest.matchId || (interest.femaleWorkflow && (interest.femaleWorkflow.state !== "private_documented" || interest.visibility !== "internal_only" || (interest.adminStatus ?? "pending") !== "pending"))) throw new Error("This interest can no longer be withdrawn");
     if (!["new", "queued", "active", "deferred"].includes(interest.status)) {
@@ -646,6 +652,7 @@ export const closeConnection = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) throw new Error("Interest not found");
     if (interest.fromRegistrationId !== registration._id && interest.toRegistrationId !== registration._id) {
       throw new Error("Interest is not available for this applicant");
@@ -698,6 +705,7 @@ export const giveFinalApproval = mutation({
     const registration = await getRegistrationForSession(ctx, args.sessionHash);
     requireApprovedForInterestAction(registration);
     const interest = await ctx.db.get(args.interestId);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) throw new Error("Interest not found");
     if (interest.femaleWorkflow || (!interest.matchId && interest.source === "platform_submission" && interest.visibility === "internal_only")) throw new Error("Use female website workflow");
     if (interest.fromRegistrationId !== registration._id && interest.toRegistrationId !== registration._id) {
@@ -751,7 +759,9 @@ export const recordFinalApprovalNotificationFailure = mutation({
   },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
-    if ((await ctx.db.get(args.interestId))?.testReset) throw new Error("Reset test interest is read-only");
+    const interest = await ctx.db.get(args.interestId);
+    if (interest) await assertCanonicalAction(ctx, interest);
+    if (interest?.testReset) throw new Error("Reset test interest is read-only");
     const flow = await getFlowByInterestId(ctx, args.interestId);
     if (!flow) {
       throw new Error("Interest flow not found");
@@ -785,6 +795,7 @@ export const getNotificationRecipient = query({
     requireAdmin(args.adminSecret);
     const person = await getRegistrationForSession(ctx, args.sessionHash);
     const interest = await ctx.db.get(args.interestId);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset || ["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest unavailable");
     if (![interest.fromRegistrationId, interest.toRegistrationId].includes(person._id)) throw new Error("Unauthorized");
     if (args.kind === "inbound" && (person._id !== interest.fromRegistrationId || interest.visibility === "internal_only")) throw new Error("Unauthorized");

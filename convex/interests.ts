@@ -1,3 +1,4 @@
+import { assertCanonicalAction } from "./reciprocalConnection";
 import { withCurrentAge } from "./birthdays";
 import { paginationOptsValidator } from "convex/server";
 import { requireAdmin, withoutCapabilities } from "./adminAuthorization";
@@ -85,6 +86,7 @@ export const updateAdminStatus = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -108,6 +110,7 @@ export const claimDeclineNotification = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -160,6 +163,7 @@ export const recordDeclineNotificationFailure = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -182,6 +186,7 @@ export const updateNotes = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -204,6 +209,7 @@ export const updateStatus = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -235,6 +241,7 @@ export const updateRank = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -255,6 +262,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -287,6 +295,7 @@ export const convertToMatch = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.interestId);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest || interest.testReset) {
       throw new Error("Interest not found");
     }
@@ -375,6 +384,7 @@ export const assertNotificationEligible = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const interest = await ctx.db.get(args.id);
+    if (interest) await assertCanonicalAction(ctx, interest);
     if (!interest) throw new Error("Interest not found");
     await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
     const participants = await Promise.all([ctx.db.get(interest.fromRegistrationId), ctx.db.get(interest.toRegistrationId)]);
