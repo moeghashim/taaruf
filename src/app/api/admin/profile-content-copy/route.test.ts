@@ -15,7 +15,7 @@ function request(payload: unknown, origin: string | null = "https://app.invalid"
 beforeEach(() => { vi.clearAllMocks(); vi.stubEnv("ADMIN_PASSWORD", "synthetic"); vi.stubEnv("ADMIN_TOKEN_SALT", "salt"); vi.stubEnv("ATTENDANCE_ADMIN_SECRET", "synthetic-service"); client.query.mockResolvedValue({ fingerprint: "a".repeat(64), changedFields: ["job"] }); client.action.mockResolvedValue({ auditId: "syntheticaudit123", changedFields: ["job"] }); client.mutation.mockResolvedValue({ alreadyRolledBack: false }); });
 afterEach(() => vi.unstubAllEnvs());
 test("admin session and same origin required for every operation", async () => {
- for (const operation of ["preview", "apply", "rollback"]) {
+ for (const operation of ["preview", "apply", "rollback", "status"]) {
   expect((await POST(request({ operation, ...pair }, undefined, false))).status).toBe(401);
   for (const origin of [null, "https://evil.invalid", "http://app.invalid"]) expect((await POST(request({ operation, ...pair }, origin))).status).toBe(403);
  }
@@ -41,4 +41,11 @@ test("rejects client credentials, content injection and malformed requests", asy
 test("backend errors do not expose credentials or profile content", async () => {
  client.query.mockRejectedValueOnce(new Error("private profile and secret contents"));
  const r = await POST(request({ operation: "preview", ...pair })); expect(r.status).toBe(409); expect(await r.text()).not.toContain("private profile");
+});
+
+test("status is authenticated metadata-only query", async () => {
+ const r=await POST(request({operation:"status",operationKey:"synthetic-copy-1"}));
+ expect(r.status).toBe(200);expect(r.headers.get("cache-control")).toContain("no-store");
+ expect(client.query).toHaveBeenCalledWith(expect.anything(),{adminSecret:"synthetic-service",operationKey:"synthetic-copy-1"});
+ expect(client.action).not.toHaveBeenCalled();
 });
