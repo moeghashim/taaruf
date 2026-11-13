@@ -841,3 +841,8 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Request4433: shared exact brother/sister contact guidance across ordinary interests, inline/standalone reviews and matchmaker contacts; existing release gates/fields retained. Added exact-copy and synthetic desktop/mobile privacy regressions. Preview only.
 
 - Merge4455 reconciliation: preserved actual live PR171 own-closed/name lookup behavior and PR172 contact guidance while retaining source retirement and enrollment supersession. Fresh full suite1587/130, app+Convex types, lint0errors13warnings, build, real loopback concurrency/rollback proof; no production writes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Request4557: locally optimized merge closure matching and removed redundant apply after-scan; added synthetic 13,217-document, exact nine-row preservation, fingerprint, idempotence and rollback regressions. Incident hold retained; no deployment or production access. Evidence outside upload roots in privateops/merge-repair4557. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-13
+- Local4717: reconciled PR175 first-name acceptance and neutral conflict responses on repaired e798567 backend; preserved newer receipted PR177 source/schema from1e1ce0f and frontend172. Added private artifact exclusions;1648 isolated tests, app/Convex types, lint and build pass. No uploads, production access, affected credentials or deployment; new tree approval and incident clearance required. <!-- project: github.com/moeghashim/clawscrewskill -->

@@ -1,3 +1,4 @@
+import { acceptedInboundFirstName } from "./femaleInterestWorkflow";
 import { isSecurityRetired } from "./registrationSecurity";
 import { ownClosedDecision } from "./ownClosedConnection";
 import { enqueueFinalRequests, finalRequestEnabled } from "./finalRequest";
@@ -175,7 +176,8 @@ async function safeCounterparty(
     }
   }
   const showName = showProfile && (outboundIdentityAllowed || !(viewer.gender === "male" && counterparty.gender === "female"));
-  const displayName = showName ? counterparty.name.trim() : "";
+  const firstName = direction === "inbound" ? await acceptedInboundFirstName(ctx, interest, viewer._id) : null;
+  const displayName = firstName ?? (showName ? counterparty.name.trim() : "");
   const contactShared = await contactsVisible(ctx, interest, flow);
   const fullProfileVisible =
     showProfile &&

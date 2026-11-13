@@ -2,3 +2,14 @@ ops/
 interest-runtime/
 *.log
 *.stderr
+
+# Private local operations and credentials are never deployment inputs.
+privateops/
+backups/
+exports/
+.worktrees/
+.cleanup-quarantine-*/
+.env
+.env.*
+*.pem
+*.key

@@ -44,6 +44,16 @@ export async function active(ctx: ReadCtx, id: Id<"interests">, allowPaused = fa
   if (match) await linkedFlows(ctx, interest);
   return { interest, workflow: interest.femaleWorkflow, sister, brother, flow, match };
 }
+/** Exact inbound first-name grant approved in name4436/Omar4449. */
+export async function acceptedInboundFirstName(ctx: ReadCtx, interest: Doc<"interests">, viewerId: Id<"registrations">): Promise<string | null> {
+  if (viewerId !== interest.toRegistrationId || !interest.femaleWorkflow) return null;
+  try {
+    const { workflow, sister } = await active(ctx, interest._id, true);
+    checkReview(workflow);
+    if (!await interestBioVisible(ctx, interest)) return null;
+    return sister.name.trim().split(/\s+/u)[0] || null;
+  } catch { return null; }
+}
 function checkReview(workflow: NonNullable<Doc<"interests">["femaleWorkflow"]>, hash?: string) {
   if (!workflow.reviewTokenHash || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now() || (hash !== undefined && hash !== workflow.reviewTokenHash)) throw new Error("Review link expired or invalid");
 }
@@ -141,8 +151,9 @@ export const getReviewAccess = query({ args: reviewArgs, handler: async (ctx, ar
       (data.flow.photoDecision === "approved" && data.flow.photoRequestedByRegistrationId === person._id);
   const imageUrls = photos ? (await Promise.all((profile.imageStorageIds ?? []).map(id => ctx.storage.getUrl(id)))).filter((url): url is string => !!url) : [];
   const released = await contactsVisible(ctx, data.interest, data.flow);
+  const firstName = await acceptedInboundFirstName(ctx, data.interest, person._id);
   return { ...applicantReview(data.interest, person._id === data.brother._id ? "brother" : "sister", data.flow, data.match?.status === "paused", false, released),
-    profile: { requirementsVisible: person._id === data.brother._id || Boolean(data.workflow.brotherAcceptedAt), ...(person._id === data.brother._id ? {} : { name: profile.name }), label: person._id === data.brother._id ? `Applicant #${profile.publicApplicantNumber ?? "—"}` : profile.name, applicantNumber: profile.publicApplicantNumber ?? null, age: await currentAge(ctx, profile), maritalStatus: profile.maritalStatus, education: profile.education, job: profile.job, ethnicity: profile.ethnicity ?? null, shareableBio: await interestBioVisible(ctx, data.interest) ? profile.shareableBio ?? null : null, prayerCommitment: profile.prayerCommitment ?? null, hijabResponse: profile.hijabResponse ?? null, spouseRequirement1: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement1 ?? null : null, spouseRequirement2: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement2 ?? null : null, spouseRequirement3: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement3 ?? null : null, imageUrls, email: released ? profile.email : null, phone: released ? profile.phone : null } };
+    profile: { requirementsVisible: person._id === data.brother._id || Boolean(data.workflow.brotherAcceptedAt), ...(person._id === data.brother._id ? (firstName ? { name: firstName } : {}) : { name: profile.name }), label: person._id === data.brother._id ? firstName ?? `Applicant #${profile.publicApplicantNumber ?? "—"}` : profile.name, applicantNumber: profile.publicApplicantNumber ?? null, age: await currentAge(ctx, profile), maritalStatus: profile.maritalStatus, education: profile.education, job: profile.job, ethnicity: profile.ethnicity ?? null, shareableBio: await interestBioVisible(ctx, data.interest) ? profile.shareableBio ?? null : null, prayerCommitment: profile.prayerCommitment ?? null, hijabResponse: profile.hijabResponse ?? null, spouseRequirement1: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement1 ?? null : null, spouseRequirement2: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement2 ?? null : null, spouseRequirement3: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement3 ?? null : null, imageUrls, email: released ? profile.email : null, phone: released ? profile.phone : null } };
 }});
 export const respond = mutation({ args: { ...reviewArgs, decision: v.union(v.literal("accept"), v.literal("decline")) }, handler: async (ctx, args) => {
   const person = await actor(ctx, args.sessionHash);
