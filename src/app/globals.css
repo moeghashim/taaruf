@@ -1245,6 +1245,8 @@
 }
 
 [data-admin] .applicant-shell .interest-workspace.empty { min-height: 120px; grid-template-columns: 1fr; }
+[data-admin] .applicant-shell .interest-workspace.list-only { min-height: 0; grid-template-columns: 1fr; }
+[data-admin] .applicant-shell .interest-workspace.list-only > .interest-list { border-right: 0; }
 [data-admin] .applicant-shell .interest-workspace.review-active { min-height: 0; grid-template-columns: 1fr; }
 [data-admin] .applicant-shell .interest-workspace.review-active.empty { display: none; }
 

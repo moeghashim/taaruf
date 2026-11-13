@@ -846,3 +846,11 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-13
 - Local4717: reconciled PR175 first-name acceptance and neutral conflict responses on repaired e798567 backend; preserved newer receipted PR177 source/schema from1e1ce0f and frontend172. Added private artifact exclusions;1648 isolated tests, app/Convex types, lint and build pass. No uploads, production access, affected credentials or deployment; new tree approval and incident clearance required. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Request4831 local draft: exact next-step copy and inline sister final controls; canonical reciprocal sister workflow with directional audit/quota receipts, guarded alias actions, mutual Inbound presentation and receipt-only Outbound. Full1673 tests/types/lint pass; independent review and isolated runtime/browser verification pending; withdrawal policy awaits owner decision. Preview-only, no production changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Correction4849: moved reciprocal canonicalization from submission into explicit admin share; independent pre-share withdrawal preserves opposite actionability, removed reciprocalClosedAt, honored alias photo denial/revocation. Fresh backend 1099 tests, Convex/app types and targeted lint pass; evidence privateops/portal4831/correction4849-backend.md. No deployment/commit/push. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- UI4831 follow-up: coordinated workflow detail suppression across all interest sections, restored stale-link authoritative recovery and explicit focus, collapsed receipt-only workspace; added22 mounted browser cases (execution deferred to runtime rerun),47focused tests/types/lint pass. No backend or deployment. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- P1 review fix: scoped platform consent aggregation to same expression, canonical link or existing common match; added11 public-handler regressions.1709 tests, app/Convex types and lint pass. Final isolated HTTP recheck pending; prior26 screenshots inspected. Preview only. <!-- project: github.com/moeghashim/clawscrewskill -->

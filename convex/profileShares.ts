@@ -35,7 +35,7 @@ async function resolvedInterest(ctx: QueryCtx, share: ShareScope & { createdAt?:
   }
   if (interestId) {
     const interest = await ctx.db.get(interestId);
-    if (!interest || interest.testReset || interest.visibility === "internal_only" ||
+    if (!interest || interest.canonicalInterestId || interest.testReset || interest.visibility === "internal_only" ||
         ["closed", "declined", "withdrawn"].includes(interest.status)) return false;
     if (![interest.fromRegistrationId, interest.toRegistrationId].includes(share.ownerRegistrationId) ||
         ![interest.fromRegistrationId, interest.toRegistrationId].includes(share.recipientRegistrationId)) return false;

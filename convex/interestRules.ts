@@ -1,3 +1,4 @@
+import { assertCanonicalAction } from "./reciprocalConnection";
 import { isSecurityRetired } from "./registrationSecurity";
 import { matchesInterestFirstName } from "./interestIdentity";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -270,6 +271,7 @@ export async function activateInterestAndQueueCompetitors(
     throw new Error("Interest not found");
   }
 
+  await assertCanonicalAction(ctx, interest);
   await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
   const now = Date.now();
   const inboundCompetitors = await ctx.db
@@ -333,6 +335,7 @@ export async function promoteOldestQueuedForRegistration(
   const registration = await ctx.db.get(registrationId);
   if (!registration || (registration.archivedAt !== undefined || isSecurityRetired(registration))) return null;
   for (const queued of await getQueuedInterestsForRegistration(ctx, registrationId)) {
+    if (queued.canonicalInterestId) continue;
     const pair = await Promise.all([ctx.db.get(queued.fromRegistrationId), ctx.db.get(queued.toRegistrationId)]);
     if (pair.some(person => !person || (person.archivedAt !== undefined || isSecurityRetired(person)))) continue;
     await activateInterestAndQueueCompetitors(ctx, queued._id);

@@ -9,7 +9,7 @@ export async function interestBioVisible(
   ctx: QueryCtx | MutationCtx,
   interest: Doc<"interests">,
 ): Promise<boolean> {
-  if (interest.testReset || interest.fromRegistrationId === interest.toRegistrationId ||
+  if (interest.canonicalInterestId || interest.testReset || interest.fromRegistrationId === interest.toRegistrationId ||
       ["closed", "declined", "withdrawn"].includes(interest.status)) return false;
   const workflow = interest.femaleWorkflow;
   if (workflow && ["private_documented", "awaiting_brother_review", "declined", "revoked"].includes(workflow.state)) return false;

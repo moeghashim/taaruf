@@ -99,22 +99,20 @@ for (const source of sources) for (const femaleOrigin of [false, true]) test(`${
 
 for (const source of sources) for (const femaleFirst of [false, true]) for (const reverse of [false, true]) test(`reciprocal ${source} submissions=${femaleFirst} approvals=${reverse}`, async () => {
   const w = await publicWorld();
-  // Male-first platform sends now route to the existing incoming review.
-  // Keep the single-direction consent assertions rather than manufacturing a reverse row.
-  if (source === "platform_submission" && !femaleFirst) {
-    const male = await w.submit(source);
-    expect(await w.submit(source, 1, 0)).toBe(male);
-    expect(await w.t.run(ctx => ctx.db.query("interests").collect())).toHaveLength(1);
-    await w.open(male);
-    await w.approve(male, reverse ? 1 : 0);
-    expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
-    await w.approve(male, reverse ? 0 : 1);
-    expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(1);
-    return;
-  }
   const ids = femaleFirst ? [await w.submit(source, 1, 0), await w.submit(source)] : [await w.submit(source), await w.submit(source, 1, 0)];
   const female = ids[femaleFirst ? 0 : 1];
   const male = ids[femaleFirst ? 1 : 0];
+  if (source === "platform_submission") {
+    expect((await w.t.query(api.applicantInterests.getDashboard,{sessionHash:"session-1"})).inbound.some(i=>i.interestId===male)).toBe(true);
+    await w.open(female,true);
+    await expect(w.open(male)).rejects.toThrow("Inbound discovery failed");
+    await w.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"session-0",interestId:female,decision:"accept"});
+    const sister=()=>w.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"session-1",interestId:female,confirmed:true});
+    const brother=()=>w.t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"session-0",interestId:female,approved:true});
+    await (reverse?sister():brother());expect(await w.t.run(ctx=>ctx.db.query("matches").collect())).toHaveLength(0);
+    await (reverse?brother():sister());const matches=await w.t.run(ctx=>ctx.db.query("matches").collect());expect(matches).toHaveLength(1);expect(matches[0].interestId).toBe(female);
+    return;
+  }
   await w.open(male);
   await w.open(female, true);
   expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
@@ -276,7 +274,7 @@ test("test-reset submission cannot approve or pause through a stale applicant ac
   expect(await w.t.run(ctx => ctx.db.query("matches").collect())).toHaveLength(0);
 });
 
-for (const source of sources) for (const releaseBeforeShare of [false, true]) test(`private sibling remains unpublished through ${source} approvals, released=${releaseBeforeShare}`, async () => {
+for (const source of sources.filter(s => s !== "platform_submission")) for (const releaseBeforeShare of [false, true]) test(`private sibling remains unpublished through ${source} approvals, released=${releaseBeforeShare}`, async () => {
   const w = await publicWorld();
   await w.t.run(async ctx => {
     const image = await ctx.storage.store(new Blob(["synthetic-private-photo"], { type: "image/png" }));

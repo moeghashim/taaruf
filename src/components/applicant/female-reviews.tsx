@@ -10,7 +10,7 @@ import { ReviewNextSteps } from "./review-next-steps";
 import { formatEducation } from "@/lib/education";
 import { FactList } from "@/components/admin/primitives/fact-list";
 
-type Review = { paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
+type Review = { mutualInterest?: boolean; paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
 type Profile = { requirementsVisible?: boolean; name?: string; label?: string; applicantNumber?: number; publicApplicantNumber?: number; age?: number; shareableBio?: string; education?: string; job?: string; ethnicity?: string; imageUrls?: string[]; email?: string; phone?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string };
 type Access = { paused?: boolean; canPause?: boolean; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; ownDecision?: string; state: string; role: string; profile?: Profile; counterparty?: Profile };
 // List status is not authorization: only the existing detail GET supplies contacts.
@@ -28,10 +28,11 @@ const stateLabels: Record<string, string> = {
 const reviewExpired = (item: Review) => item.reviewExpired === true;
 const needsBrotherReview = (item: Review) => item.role === "brother" && item.ownAction === "review" && !item.paused && !item.reviewExpired && !["closed", "revoked", "expired"].includes(item.state);
 const needsSisterConfirmation = (item: Review) => item.role === "sister" && item.ownAction === "review" && !item.paused && !item.reviewExpired && !["closed", "revoked", "expired"].includes(item.state);
-export function FemaleReviews({ inline = false, active = true }: { inline?: boolean; active?: boolean }) {
+/** An embedded interestId selects a review, never authorizes it: detail GET remains authoritative. */
+export function FemaleReviews({ inline = false, active = true, interestId, focusOnSelect = false }: { inline?: boolean; active?: boolean; interestId?: string; focusOnSelect?: boolean }) {
   const [loginHref, setLoginHref] = useState("/login");
   const [rows, setRows] = useState<Review[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(interestId ?? null);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const [token, setToken] = useState<string | undefined>();
@@ -66,7 +67,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     const sync = () => {
       setLoginHref(applicantLoginHref(window.location.pathname + window.location.search));
       const params = new URLSearchParams(window.location.search);
-      const nextSelected = params.get("femaleReview");
+      const nextSelected = interestId ?? params.get("femaleReview");
       if (selectedRef.current !== nextSelected) {
         // Invalidate in-flight reads synchronously before navigation can render.
         ++accessRequest.current;
@@ -86,7 +87,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     const visible = () => { if (document.visibilityState === "visible") refresh(); };
     document.addEventListener("visibilitychange", visible);
     return () => { window.removeEventListener("focus", refresh); window.removeEventListener("popstate", sync); window.removeEventListener("hashchange", sync); document.removeEventListener("visibilitychange", visible); };
-  }, [load, inline]);
+  }, [load, inline, interestId]);
   const row = rows.find(item => item.interestId === selected);
   // Retain the current view during revalidation so a focus event cannot
   // unmount a pressed button before its click. A changed selection is cleared.
@@ -126,17 +127,18 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     return () => controller.abort();
   }, [rows, loading, listError, selected, accessVersion]);
   useEffect(() => {
-    if (contactsReady(access) && window.location.hash === "#contact-details") {
+    if (active && !interestId && contactsReady(access) && window.location.hash === "#contact-details") {
       document.getElementById("contact-details")?.focus();
     }
-  }, [access]);
+  }, [access, active, interestId]);
   const focusedSelection = useRef<string | null>(null);
   useEffect(() => {
-    if (!active || !selected) { focusedSelection.current = null; return; }
-    if (!inline || !selected || !access || reviewLoading || focusedSelection.current === selected) return;
-    const panel = document.getElementById("inline-selected-review");
+    if (!active || !selected || (interestId && !focusOnSelect)) { focusedSelection.current = null; return; }
+    // Automatically embedded panels must not steal focus or scroll on page load.
+    if ((interestId && !focusOnSelect) || !inline || (!access && !error) || reviewLoading || focusedSelection.current === selected) return;
+    const panel = document.getElementById(interestId ? "inline-review-" + interestId : "inline-selected-review");
     if (panel) { panel.focus({ preventScroll: true }); panel.scrollIntoView({ block: "start" }); focusedSelection.current = selected; }
-  }, [inline, active, selected, access, reviewLoading]);
+  }, [inline, active, selected, access, error, reviewLoading, interestId, focusOnSelect]);
   function returnToPortal() {
     // Leave the obsolete link, not the account. Never infer revocation from an
     // empty/partial list or a generic 409 (which can also wrap backend failures).
@@ -151,7 +153,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     void load();
   }
   const reviewHref = (id: string, contacts = false) => inline
-    ? "/me?femaleReview=" + encodeURIComponent(id) + (rows.find(item => item.interestId === id)?.role === "sister" ? "#outbound-interests" : "#inbound-interests")
+    ? "/me?femaleReview=" + encodeURIComponent(id) + (rows.some(item => item.interestId === id && item.role === "sister" && !item.mutualInterest) ? "#outbound-interests" : "#inbound-interests")
     : "/dashboard?femaleReview=" + encodeURIComponent(id) + (contacts ? "#contact-details" : "");
   async function act(body: Record<string, unknown>) {
     if (actionInFlight.current) return;
@@ -174,15 +176,15 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
     finally { actionInFlight.current = false; setBusy(false); }
   }
   const actionable = access?.ownAction === "review" && !access.paused && !["closed", "revoked", "expired"].includes(access.state);
-  // Explicit stages are required for brothers: never infer final approval from legacy responses.
+  // Explicit stages are required: never infer final approval from legacy responses.
   const brotherInitial = actionable && access?.role === "brother" && access.ownActionStage === "initial";
   const brotherFinal = actionable && access?.role === "brother" && access.ownActionStage === "final";
-  const sisterFinal = actionable && access?.role === "sister";
+  const sisterFinal = actionable && access?.role === "sister" && access.ownActionStage === "final";
   const profile = access?.profile || access?.counterparty;
   const invitations = rows.filter(needsBrotherReview);
   const confirmations = rows.filter(needsSisterConfirmation);
   const history = rows.filter(item => !needsBrotherReview(item) && !needsSisterConfirmation(item));
-  return <section id="review-notifications" aria-label="Interest notifications" className="applicant-section" onClick={event => {
+  return <section id={interestId ? "review-notifications-" + interestId : "review-notifications"} aria-label="Interest notifications" className="applicant-section" onClick={event => {
     if (!inline || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = (event.target as HTMLElement).closest<HTMLAnchorElement>("a");
     if (!link || !link.getAttribute("href")?.startsWith("/me")) return;
@@ -220,7 +222,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
       <div className="interest-invitation-copy">
         <h2 id="sister-confirmation-heading">Your review is needed</h2>
         <p>This connection is awaiting your review.</p>
-        <p className="interest-invitation-privacy">You can confirm or decline after reviewing. Contact details stay private until final admin approval.</p>
+        <p className="interest-invitation-privacy">You can approve or decline after reviewing. Contact details stay private until final admin approval.</p>
       </div>
       <ul className="interest-invitation-actions">
         {confirmations.map((item, index) => <li key={item.interestId}>
@@ -254,8 +256,8 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
 
 
       </div>)}
-      {!done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
-      {selected && <section id={inline ? "inline-selected-review" : undefined} tabIndex={-1} aria-label="Selected profile review" className={inline ? "interest-detail-panel" : "selected-profile-review"}>
+      {!interestId && !done && <button type="button" className="btn" disabled={busy || loading} onClick={() => void load(cursor)}>Load more reviews</button>}
+      {selected && <section id={inline ? (interestId ? "inline-review-" + interestId : "inline-selected-review") : undefined} tabIndex={-1} aria-label="Selected profile review" className={inline ? "interest-detail-panel" : "selected-profile-review"}>
         {access?.canPause && <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: access.paused ? "resume" : "pause", interestId: selected })}>{access.paused ? "Resume" : "Pause"}</button>}
         {reviewLoading && !access && <p role="status">Loading profile…</p>}
         {profile && inline && <div className="inline-review-content" style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}>
@@ -271,7 +273,7 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
           </div>}
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
           {row && <ReviewDecision decision={row.ownDecision} awaitingAdmin={row.state === "in_review" && !row.paused && !row.reviewExpired} />}
-          {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4><ContactGuidance viewerGender={access?.role === "brother" ? "male" : access?.role === "sister" ? "female" : undefined} />{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
+          {contactsReady(access) && <section id={interestId ? "contact-details-" + interestId : "contact-details"} tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4><ContactGuidance viewerGender={access?.role === "brother" ? "male" : access?.role === "sister" ? "female" : undefined} />{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
         {profile && !inline && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
           <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: formatEducation(profile.education) || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
@@ -279,12 +281,12 @@ export function FemaleReviews({ inline = false, active = true }: { inline?: bool
           {row && <ReviewDecision decision={row.ownDecision} awaitingAdmin={row.state === "in_review" && !row.paused && !row.reviewExpired} />}
           {profile.requirementsVisible && <ProfileRequirements profile={profile} />}
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
-          {contactsReady(access) && <section id="contact-details" tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4><ContactGuidance viewerGender={access?.role === "brother" ? "male" : access?.role === "sister" ? "female" : undefined} />{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
+          {contactsReady(access) && <section id={interestId ? "contact-details-" + interestId : "contact-details"} tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4><ContactGuidance viewerGender={access?.role === "brother" ? "male" : access?.role === "sister" ? "female" : undefined} />{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
         {(brotherInitial || brotherFinal || sisterFinal) && <ReviewNextSteps stage={brotherInitial ? "workflow-initial" : "final"} recipientGender={access?.role === "brother" ? "male" : "female"} />}
         {actionable && access?.role === "brother" && !brotherInitial && !brotherFinal && <p role="status">This review needs to be refreshed before you can respond. Return to your portal and refresh.</p>}
         {sisterFinal && <div className="action-row">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Confirm interest</button>
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Approve</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>
         </div>}
         {brotherInitial && <><p>Initial review: accept to unlock the bio. You will give your final decision separately.</p><div className="action-row">

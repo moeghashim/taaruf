@@ -11,7 +11,7 @@ export async function existingInboundReview(ctx: MutationCtx, viewer: Doc<"regis
   if (isSecurityRetired(viewer) || isSecurityRetired(sender)) return null;
   if (viewer.status !== "approved" || sender.status !== "approved" || viewer.archivedAt !== undefined || sender.archivedAt !== undefined) return null;
   for (const row of rows) {
-    if (row.testReset || ["closed", "declined", "withdrawn"].includes(row.status) || [viewer, sender].some(p => p.lastRestoredArchivedAt !== undefined && row.createdAt <= p.lastRestoredArchivedAt)) continue;
+    if (row.canonicalInterestId || row.testReset || ["closed", "declined", "withdrawn"].includes(row.status) || [viewer, sender].some(p => p.lastRestoredArchivedAt !== undefined && row.createdAt <= p.lastRestoredArchivedAt)) continue;
     const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
     if (!flow || flow.fromRegistrationId !== sender._id || flow.toRegistrationId !== viewer._id || ["closed", "declined"].includes(flow.flowStatus)) continue;
     if (row.femaleWorkflow) {
