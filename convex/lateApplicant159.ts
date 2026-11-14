@@ -3,7 +3,7 @@ import { mutation } from "./_generated/server";
 import { requireEventAdmin, registrationStatusForCapacity } from "./eventCapacity";
 import { assertNotArchived } from "./archiveRules";
 import { requireEventMessagingEligibility } from "./eventMessagingEligibility";
-import { enrollmentForEvent } from "./eventEnrollmentIdentity";
+import { enrollmentForEvent, isCurrentEnrollment } from "./eventEnrollmentIdentity";
 
 /** Explicit one-person exception; ordinary public/admin registration guards remain unchanged. */
 export const registerNovember159 = mutation({
@@ -29,6 +29,10 @@ export const registerNovember159 = mutation({
       throw new Error("Existing enrollment requires separate review");
     }
     if (await registrationStatusForCapacity(ctx, event, profile.gender) !== "pending") throw new Error("Capacity unavailable; separate review required");
+    // Do not jump a queue or mutate other applicants through waitlist promotion.
+    for await (const queued of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", event._id).eq("gender", profile.gender).eq("registrationStatus", "waitlisted"))) {
+      if (isCurrentEnrollment(queued)) throw new Error("Existing waitlist requires separate review");
+    }
     // This insert is the only write. Indexed duplicate reads participate in OCC.
     const eventRegistrationId = await ctx.db.insert("eventRegistrations", {
       eventId: event._id, registrationId: profile._id, gender: profile.gender,
