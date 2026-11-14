@@ -1,4 +1,5 @@
 "use client";
+import { ACTIVE_MATCH_CONFLICT_MESSAGE } from "@/lib/applicant-match-conflict";
 import { ContactGuidance } from "@/components/applicant/contact-guidance";
 import { ownClosedHistory } from "@/lib/own-closed-history";
 import { applicantLoginHref } from "@/lib/applicant-destination";
@@ -49,6 +50,7 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
   const actionInFlight = useRef(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [matchConflict, setMatchConflict] = useState(false);
   const load = useCallback(async (next: string | null = null) => {
     const requestId = ++listRequest.current;
     setLoading(true); setListError(""); setReadyIds([]);
@@ -76,7 +78,7 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
       }
       setSelected(nextSelected);
       setToken(inline ? undefined : params.get("reviewToken") || undefined);
-      setError(""); setMessage("");
+      setError(""); setMessage(""); setMatchConflict(false);
     };
     sync();
     window.addEventListener("popstate", sync);
@@ -160,10 +162,16 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
     actionInFlight.current = true;
     const actionSelection = selected;
     ++accessRequest.current;
-    setBusy(true); setError(""); setMessage("");
+    setBusy(true); setError(""); setMessage(""); setMatchConflict(false);
     try {
       const response = await fetch(["pause", "resume"].includes(String(body.action)) ? "/api/applicant/interests" : "/api/applicant/female-review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(["pause", "resume"].includes(String(body.action)) ? { ...body, action: body.action === "pause" ? "pause_connection" : "resume_connection" } : body) });
       const payload = await response.json();
+      // Availability is a business rule, not an authentication or load failure.
+      // Preserve the authorized review and require an explicit retry.
+      if (response.status === 409 && payload.error === ACTIVE_MATCH_CONFLICT_MESSAGE) {
+        if (selectedRef.current === actionSelection) { setReviewLoading(false); setMatchConflict(true); }
+        return;
+      }
       if (!response.ok) throw new Error(payload.error || "Unable to record your decision.");
       window.dispatchEvent(new Event("applicant-interest-updated"));
       if (selectedRef.current !== actionSelection) { await load(); return; }
@@ -285,6 +293,7 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
         </div>}
         {(brotherInitial || brotherFinal || sisterFinal) && <ReviewNextSteps stage={brotherInitial ? "workflow-initial" : "final"} recipientGender={access?.role === "brother" ? "male" : "female"} />}
         {actionable && access?.role === "brother" && !brotherInitial && !brotherFinal && <p role="status">This review needs to be refreshed before you can respond. Return to your portal and refresh.</p>}
+        {matchConflict && <p className="notice error" role="alert">{ACTIVE_MATCH_CONFLICT_MESSAGE}</p>}
         {sisterFinal && <div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Approve</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>
