@@ -4,9 +4,20 @@
 
 ## Exact recipient-facing copy
 
-**Subject:** Your contacts are ready in the portal
+**Subject:** Alhamdulillah — you have a match! 🎉
 
-Your contacts have been shared. Sign in to your applicant portal to view them: https://www.1plus1match.com/me
+Assalamu alaikum!
+
+Alhamdulillah, a match has been created for you, and your contact details have now been shared with each other!
+
+Sign in to your portal to view your match’s contact details and take the next step:
+https://www.1plus1match.com/me
+
+May Allah place barakah in this connection and guide you both toward what is best. We’re excited for you!
+
+The 1 Plus 1 Team
+
+Plain text and matching HTML paragraphs/link are included in the actual provider payload. Existing frozen retry payloads are never rewritten.
 
 Sent separately to each participant’s registered email. No partner name, phone, email, photo, or private interest appears in the notice. Sign-in remains required.
 

@@ -48,7 +48,11 @@ export const claim=internalMutation({args:{},handler:async ctx=>{
 export const authorize=internalMutation({args:{id:v.id("contactReleaseEmails"),attempt:v.number()},handler:async(ctx,args)=>{
  const row=await ctx.db.get(args.id);if(!row||row.status!=="sending"||row.attempts!==args.attempt||!row.leaseUntil||row.leaseUntil<=Date.now())return null;
  try{const config=await eligible(ctx,row);const cooldown=await ctx.db.query("contactReleaseEmails").withIndex("by_cooldown").order("desc").first();if((cooldown?.cooldownUntil??0)>Date.now())return null;
- const payload=row.payload??{from:config.from,to:[row.email],subject:"Your contacts are ready in the portal",text:"Your contacts have been shared. Sign in to your applicant portal to view them: "+new URL("/me",config.portal).toString()};
+ const portal = new URL("/me",config.portal).toString();
+ const text = "Assalamu alaikum!\n\nAlhamdulillah, a match has been created for you, and your contact details have now been shared with each other!\n\nSign in to your portal to view your match’s contact details and take the next step:\nhttps://www.1plus1match.com/me\n\nMay Allah place barakah in this connection and guide you both toward what is best. We’re excited for you!\n\nThe 1 Plus 1 Team".replace("https://www.1plus1match.com/me",portal);
+ const escapeHtml = (value:string) => value.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+ const html = text.split("\n\n").map(paragraph=>"<p>"+escapeHtml(paragraph).replace(escapeHtml(portal),'<a href="'+escapeHtml(portal)+'">'+escapeHtml(portal)+'</a>').replace(/\n/g,"<br>")+"</p>").join("\n");
+ const payload=row.payload??{from:config.from,to:[row.email],subject:"Alhamdulillah — you have a match! 🎉",text,html};
  if(payload.from!==config.from||payload.to.length!==1||payload.to[0]!==row.email)throw Error("Frozen payload mismatch");
  await ctx.db.patch(row._id,{payload,firstAttemptAt:row.firstAttemptAt??Date.now(),leaseUntil:Date.now()+120000,nextAttemptAt:Date.now()+120000});return {payload,key:row.key};
  }catch{await ctx.db.patch(row._id,{status:"cancelled",error:"Contacts or recipient no longer available"});return null;}

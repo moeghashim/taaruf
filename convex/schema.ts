@@ -279,7 +279,7 @@ export default defineSchema({
     releaseAt:v.number(), activationAt:v.number(), createdAt:v.number(),
     status:v.union(v.literal("pending"),v.literal("sending"),v.literal("sent"),v.literal("failed"),v.literal("cancelled")),
     attempts:v.number(),nextAttemptAt:v.number(),leaseUntil:v.optional(v.number()),firstAttemptAt:v.optional(v.number()),sentAt:v.optional(v.number()),providerId:v.optional(v.string()),cooldownUntil:v.optional(v.number()),error:v.optional(v.string()),
-    payload:v.optional(v.object({from:v.string(),to:v.array(v.string()),subject:v.string(),text:v.string()})),
+    payload:v.optional(v.object({from:v.string(),to:v.array(v.string()),subject:v.string(),text:v.string(),html:v.optional(v.string())})),
   }).index("by_key",["key"]).index("by_matchId",["matchId"]).index("by_status_due",["status","nextAttemptAt"]).index("by_cooldown",["cooldownUntil"]),
   femaleWorkflowDeliveries: defineTable({
     resetAuditId: v.optional(v.id("pairTestResetAudits")),
