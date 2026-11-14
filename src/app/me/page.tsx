@@ -1,4 +1,5 @@
 "use client";
+import { SupportRibbon } from "@/components/applicant/support-ribbon";
 import { ContactGuidance } from "@/components/applicant/contact-guidance";
 import { interestCategories, visibleWorkflowReviews, selectedWorkflowReview } from "@/lib/interest-categories";
 import type { ReviewNoticeInput } from "@/lib/received-interest-updates";
@@ -1587,6 +1588,7 @@ export default function ApplicantDashboardPage() {
               )}
               </>}
             </div>
+            <SupportRibbon />
           </div>
         </div>
       </div>
