@@ -72,3 +72,12 @@ for (const [message, status] of [['Female review unavailable', 409], ['Unauthori
  expect(response.headers.get('cache-control')).toContain('no-store');
  expect(mutation).not.toHaveBeenCalled();
 });
+
+for (const action of ["brother_final", "confirm"] as const) test(action + " returns established private active-match notice, not authentication failure", async () => {
+ mutation.mockRejectedValue(new Error("Applicant already has an active match"));
+ const response = await POST(post({ action, interestId: "id", ...(action === "confirm" ? { confirmed: true } : { approved: true }) }));
+ expect(response.status).toBe(409);
+ expect(await response.json()).toEqual({ error: "This connection cannot become a match while either participant has another active match. Please contact the team for help." });
+ expect(response.headers.get("cache-control")).toContain("no-store");
+ expect(response.headers.get("set-cookie")).toBeNull();
+});
