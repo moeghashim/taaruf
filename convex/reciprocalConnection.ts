@@ -41,9 +41,13 @@ export async function sharedMutual(ctx: ReadCtx, row: Interest) {
   return linked.length === 1 && linked[0].eventId === row.eventId && linked[0].fromRegistrationId === row.toRegistrationId && linked[0].toRegistrationId === row.fromRegistrationId && !linked[0].testReset && !["withdrawn", "closed", "declined"].includes(linked[0].status);
 }
 
+export function validInitialTimestamp(at: number | undefined) {
+  return at !== undefined && Number.isFinite(at) && at > 0 && at <= Date.now();
+}
+
 /** Final receipts never stand in for an initial decision. */
 export async function mutualInitialsComplete(ctx: ReadCtx, row: Interest) {
   if (!await sharedMutual(ctx, row)) return true;
   const w = row.femaleWorkflow!;
-  return [w.brotherAcceptedAt, w.sisterInitialAcceptedAt].every(at => at !== undefined && Number.isFinite(at) && at > 0 && at <= Date.now());
+  return [w.brotherAcceptedAt, w.sisterInitialAcceptedAt].every(validInitialTimestamp);
 }

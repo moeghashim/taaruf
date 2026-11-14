@@ -1,13 +1,13 @@
-import { assertCanonicalAction, sharedMutual, mutualInitialsComplete, pendingReciprocal, linkPendingReciprocal, aliases } from "./reciprocalConnection";
+import { validInitialTimestamp, assertCanonicalAction, sharedMutual, mutualInitialsComplete, pendingReciprocal, linkPendingReciprocal, aliases } from "./reciprocalConnection";
 import { ownClosedDecision } from "./ownClosedConnection";
 import { enqueueFinalRequests, currentFinalRequest } from "./finalRequest";
 import { assertNotArchived } from "./archiveRules";
-import { interestBioVisible } from "./bioVisibility";
+import { interestBioVisible, initialInboundAccepted } from "./bioVisibility";
 import { currentSisterConfirmation } from "./sisterConfirmationActivation";
 import { currentAge } from "./birthdays";
 import { deliveryAuthorized } from "./brotherReviewActivation";
 import { sessionAllowed } from "./capabilitySecurity";
-import { contactsVisible, enqueueContactDelivery, deliveryParticipants, linkedFlows, recordPairApproval, releasePairContacts } from "./contactGate";
+import { contactsVisible, enqueueContactDelivery, deliveryParticipants, linkedFlows, recordInitialDecline, recordPairApproval, releasePairContacts } from "./contactGate";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
@@ -52,7 +52,7 @@ export async function acceptedInboundFirstName(ctx: ReadCtx, interest: Doc<"inte
   try {
     const { workflow, sister } = await active(ctx, interest._id, true);
     checkReview(workflow);
-    if (!await interestBioVisible(ctx, interest)) return null;
+    if (!await initialInboundAccepted(ctx, interest)) return null;
     return sister.name.trim().split(/\s+/u)[0] || null;
   } catch { return null; }
 }
@@ -103,12 +103,12 @@ function applicantReview(row: Doc<"interests">, role: "brother" | "sister", flow
   const ownDecision = role === "brother" && !row.matchId && flow?.recipientFinalApproval === "approved" && flow.recipientExplicitFinalAt === undefined ? "pending" : (role === "brother" ? flow?.recipientFinalApproval : flow?.requesterFinalApproval)
     ?? ((role === "sister" && workflow.sisterConfirmedAt !== undefined) ? "approved" : "pending");
   const initial = !row.matchId && (mutual
-    ? ["awaiting_brother_review", "awaiting_sister_confirmation"].includes(workflow.state) && (role === "brother" ? workflow.brotherAcceptedAt : workflow.sisterInitialAcceptedAt) === undefined
+    ? ["awaiting_brother_review", "awaiting_sister_confirmation"].includes(workflow.state) && !validInitialTimestamp(role === "brother" ? workflow.brotherAcceptedAt : workflow.sisterInitialAcceptedAt)
     : role === "brother" && workflow.state === "awaiting_brother_review");
-  const final = (!mutual || workflow.sisterInitialAcceptedAt !== undefined) && !row.matchId && workflow.state === "awaiting_sister_confirmation" && flow?.recipientDecision === "accepted" && !!workflow.brotherAcceptedAt && ownDecision === "pending";
+  const final = (!mutual || [workflow.brotherAcceptedAt, workflow.sisterInitialAcceptedAt].every(validInitialTimestamp)) && !row.matchId && workflow.state === "awaiting_sister_confirmation" && flow?.recipientDecision === "accepted" && !!workflow.brotherAcceptedAt && ownDecision === "pending";
   const ownReview = initial || final;
   const expired = role === "brother" && ownReview && (!workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now());
-  return { interestId: row._id, role, ...(mutual ? { ownInitialDecision: (role === "brother" ? workflow.brotherAcceptedAt : workflow.sisterInitialAcceptedAt) !== undefined ? "accepted" as const : "pending" as const } : {}), paused: released && paused, ownDecision,
+  return { interestId: row._id, role, ...(mutual ? { ownInitialDecision: validInitialTimestamp(role === "brother" ? workflow.brotherAcceptedAt : workflow.sisterInitialAcceptedAt) ? "accepted" as const : "pending" as const } : {}), paused: released && paused, ownDecision,
     state: closed ? "closed" as const : workflow.state === "contacts_released" ? "contacts_released" as const : "in_review" as const,
     ownAction: !closed && !paused && ownReview && !expired ? "review" as const : null,
     ownActionStage: !closed && !paused && ownReview && !expired ? initial ? "initial" as const : "final" as const : null,
@@ -179,18 +179,18 @@ export const respond = mutation({ args: { ...reviewArgs, decision: v.union(v.lit
     if (!["awaiting_brother_review", "awaiting_sister_confirmation"].includes(workflow.state)) throw new Error("Review already decided");
     if (person._id === brother._id) checkReview(workflow, args.reviewTokenHash);
     const ownAt = person._id === brother._id ? workflow.brotherAcceptedAt : workflow.sisterInitialAcceptedAt;
-    if (ownAt !== undefined) {
+    if (validInitialTimestamp(ownAt)) {
       if (args.decision === "decline") throw new Error("Initial decision already recorded");
       return { ownInitialDecision: "accepted" as const, ownDecision: "pending" as const };
     }
     const now = Date.now();
     if (args.decision === "decline") {
       // Preserve actor-attributed closure history; never expose counterpart action.
-      await recordPairApproval(ctx, interest, person._id, false);
+      await recordInitialDecline(ctx, interest, person._id);
       return { ownInitialDecision: "declined" as const, ownDecision: "declined" as const };
     }
     const next = { ...workflow, ...(person._id === brother._id ? { brotherAcceptedAt: now } : { sisterInitialAcceptedAt: now }) };
-    const both = next.brotherAcceptedAt !== undefined && next.sisterInitialAcceptedAt !== undefined;
+    const both = [next.brotherAcceptedAt, next.sisterInitialAcceptedAt].every(validInitialTimestamp);
     await ctx.db.patch(interest._id, { femaleWorkflow: { ...next, state: both ? "awaiting_sister_confirmation" : workflow.state }, updatedAt: now });
     await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: interest._id, actor: "applicant", actorRegistrationId: person._id, eventType: "mutual_initial_accepted", createdAt: now });
     if (person._id === brother._id) await ctx.db.patch(flow._id, { recipientDecision: "accepted", updatedAt: now });
@@ -285,7 +285,7 @@ export const retryDelivery = mutation({ args: { adminSecret: v.optional(v.string
   if (row.kind === "final_request") await currentFinalRequest(ctx, row);
   else if (interest?.femaleWorkflow) {
     const { workflow, brother, sister } = await active(ctx, row.interestId, true);
-    if (row.kind === "sister_confirmation" && (!currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email))) throw new Error("Sister confirmation unavailable for retry");
+    if (row.kind === "sister_confirmation" && (!await currentSisterConfirmation(ctx, interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email))) throw new Error("Sister confirmation unavailable for retry");
     if (row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !workflow.reviewTokenHash || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) throw new Error("Review unavailable for retry");
   } else await deliveryParticipants(ctx, row.interestId);
   if (row.firstAttemptAt !== undefined && Date.now() - row.firstAttemptAt >= 23 * 3600000) throw new Error("Idempotency window expired; reconcile provider delivery manually");

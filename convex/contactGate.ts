@@ -1,4 +1,4 @@
-import { assertCanonicalAction, mutualInitialsComplete } from "./reciprocalConnection";
+import { assertCanonicalAction, sharedMutual, validInitialTimestamp, mutualInitialsComplete } from "./reciprocalConnection";
 import { isSecurityRetired } from "./registrationSecurity";
 import { assertNotArchived } from "./archiveRules";
 import { sisterActivation } from "./sisterConfirmationActivation";
@@ -169,6 +169,22 @@ export async function pairFlows(ctx: ReadCtx, interest: Doc<"interests">) {
   }
   if (new Set(result.flatMap(r => r.interest.matchId ? [r.interest.matchId] : [])).size > 1) throw new Error("Linked match mismatch");
   return result;
+}
+
+/** Initial closure preserves all historical initial and final receipts. */
+export async function recordInitialDecline(ctx: MutationCtx, interest: Doc<"interests">, actorId: Id<"registrations">) {
+  await assertCanonicalAction(ctx, interest);
+  if (interest.matchId || !await sharedMutual(ctx, interest) || ![interest.fromRegistrationId, interest.toRegistrationId].includes(actorId)) throw new Error("Initial review unavailable");
+  const ownAt = actorId === interest.fromRegistrationId ? interest.femaleWorkflow?.sisterInitialAcceptedAt : interest.femaleWorkflow?.brotherAcceptedAt;
+  if (validInitialTimestamp(ownAt)) throw new Error("Initial decision already recorded");
+  const rows = await pairFlows(ctx, interest);
+  if (rows.some(r => r.interest.matchId)) throw new Error("Close or pause the official connection instead");
+  const now = Date.now();
+  for (const { interest: row, flow } of rows) {
+    await ctx.db.patch(flow._id, { flowStatus: "declined", updatedAt: now });
+    await ctx.db.patch(row._id, { status: "declined", adminStatus: "declined", ...(row.femaleWorkflow ? { femaleWorkflow: { ...row.femaleWorkflow, state: "declined" as const } } : {}), updatedAt: now });
+    await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: row._id, actor: "applicant", actorRegistrationId: actorId, eventType: "mutual_initial_declined", createdAt: now });
+  }
 }
 
 /** Provenance belongs only to the source explicit action, never propagated flags. */

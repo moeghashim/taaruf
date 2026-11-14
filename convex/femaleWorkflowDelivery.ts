@@ -70,7 +70,7 @@ export const claim = internalMutation({ args: {}, handler: async ctx => {
       if (row.kind === "brother_review" && row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== brother.email)) throw new Error("stale brother recipient");
       if (row.kind === "sister_confirmation") {
         const interest = await ctx.db.get(row.interestId);
-        if (!interest || !currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email) || (row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== sister.email))) throw new Error("stale sister confirmation");
+        if (!interest || !await currentSisterConfirmation(ctx, interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email) || (row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== sister.email))) throw new Error("stale sister confirmation");
       }
       if ((row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) || ![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
       const recipient = row.recipientId === sister._id ? sister : brother;
@@ -99,7 +99,7 @@ export const markAttempt = internalMutation({ args: { id: v.id("femaleWorkflowDe
       if (row.kind === "brother_review" && row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== brother.email)) throw new Error("stale brother recipient");
       if (row.kind === "sister_confirmation") {
         const interest = await ctx.db.get(row.interestId);
-        if (!interest || !currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email) || (row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== sister.email))) throw new Error("stale sister confirmation");
+        if (!interest || !await currentSisterConfirmation(ctx, interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email) || (row.providerPayload && (row.providerPayload.to.length !== 1 || row.providerPayload.to[0] !== sister.email))) throw new Error("stale sister confirmation");
       }
     if ((row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) || ![sister._id, brother._id].includes(row.recipientId) || (row.kind === "sister_confirmation" && (row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation")) || (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") || (row.kind === "contacts_ready" && workflow.state !== "contacts_released")) throw new Error("stale");
     email = row.recipientId === sister._id ? sister.email : brother.email;
@@ -167,7 +167,7 @@ export const authorizeSend = internalMutation({ args: { id: v.id("femaleWorkflow
     if (row.kind === "brother_review" && (row.recipientId !== brother._id || workflow.state !== "awaiting_brother_review" || !("reviewTokenHash" in workflow) || !workflow.reviewTokenHash || !("reviewExpiresAt" in workflow) || !workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) return false;
     if (row.kind === "sister_confirmation") {
       const interest = await ctx.db.get(row.interestId);
-      if (!interest || row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation" || !currentSisterConfirmation(interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email)) return false;
+      if (!interest || row.recipientId !== sister._id || workflow.state !== "awaiting_sister_confirmation" || !await currentSisterConfirmation(ctx, interest, row) || (row.sisterRecipientEmail !== undefined && row.sisterRecipientEmail !== sister.email)) return false;
     }
     if (row.kind === "pending_review" && workflow.state !== "pending_admin_approval" && workflow.state !== "contacts_released") return false;
     if (row.kind === "contacts_ready" && workflow.state !== "contacts_released") return false;

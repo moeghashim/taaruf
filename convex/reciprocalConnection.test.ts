@@ -175,7 +175,7 @@ test.each(["brother-initial", "brother-final", "sister-final"])("linked %s decli
  expect(own.history).toHaveLength(1);expect(own.history[0]).toMatchObject({interestId:female.interestId,ownDecision:"declined"});
  expect((await f.t.query(api.applicantInterests.getDashboard,{sessionHash:actor==="recipient-session"?"selection-session":"recipient-session"})).history).toEqual([]);
  const state=await snapshot(f);expect(state.interests).toHaveLength(2);
- expect(state.events.filter(e=>e.eventType==="final_approval_declined").map(e=>e.interestId).sort()).toEqual([male.interestId,female.interestId].sort());
+ expect(state.events.filter(e=>e.eventType===(kind==="brother-initial"?"mutual_initial_declined":"final_approval_declined")).map(e=>e.interestId).sort()).toEqual([male.interestId,female.interestId].sort());
 });
 
 test("stale alias notification reads and both failure recorders deny without mutation",async()=>{

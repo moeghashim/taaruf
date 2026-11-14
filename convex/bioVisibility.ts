@@ -1,5 +1,6 @@
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { mutualInitialsComplete } from "./reciprocalConnection";
 import { assertMatchInterest } from "./contactGate";
 
 /** Initial acceptance belongs to this exact interest, never its reverse or another event.
@@ -9,6 +10,12 @@ export async function interestBioVisible(
   ctx: QueryCtx | MutationCtx,
   interest: Doc<"interests">,
 ): Promise<boolean> {
+  if (!interest.matchId && !await mutualInitialsComplete(ctx, interest)) return false;
+  return initialInboundAccepted(ctx, interest);
+}
+
+/** Brother-only name grant is independent of bilateral bio consent. */
+export async function initialInboundAccepted(ctx: QueryCtx | MutationCtx, interest: Doc<"interests">): Promise<boolean> {
   if (interest.canonicalInterestId || interest.testReset || interest.fromRegistrationId === interest.toRegistrationId ||
       ["closed", "declined", "withdrawn"].includes(interest.status)) return false;
   const workflow = interest.femaleWorkflow;

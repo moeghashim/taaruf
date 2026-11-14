@@ -14,11 +14,12 @@ export async function ownClosedDecision(ctx: QueryCtx | MutationCtx, row: Doc<"i
   // The latest closure must be attributable to this viewer alone. Tied or
   // later admin/counterpart/lifecycle records are ambiguous and fail closed.
   const latest = lifecycle.filter(e => e.createdAt === latestAt);
-  if (!latest.length || latest.some(e => e.actor !== "applicant" || e.actorRegistrationId !== viewer || !["inbound_declined", "final_approval_declined", "outbound_withdrawn"].includes(e.eventType))) return null;
+  if (!latest.length || latest.some(e => e.actor !== "applicant" || e.actorRegistrationId !== viewer || !["inbound_declined", "final_approval_declined", "mutual_initial_declined", "outbound_withdrawn"].includes(e.eventType))) return null;
   const own = latest;
   if (row.status === "withdrawn" && row.fromRegistrationId === viewer && flow.flowStatus === "closed" && flow.closedReason === "requester_withdrew" && own.some(e => e.eventType === "outbound_withdrawn")) return "withdrawn";
   if (row.status !== "declined" || flow.flowStatus !== "declined") return null;
   if (row.toRegistrationId === viewer && flow.recipientDecision === "declined" && own.some(e => e.eventType === "inbound_declined")) return "declined";
+  if (own.some(e => e.eventType === "mutual_initial_declined")) return "declined";
   const final = row.fromRegistrationId === viewer ? flow.requesterFinalApproval : flow.recipientFinalApproval;
   const finalAt = row.fromRegistrationId === viewer ? flow.requesterFinalApprovalAt : flow.recipientFinalApprovalAt;
   return final === "declined" && own.some(e => e.eventType === "final_approval_declined" && e.createdAt === finalAt) ? "declined" : null;
