@@ -16,4 +16,6 @@ crons.interval("deliver female workflow outbox", { minutes: 1 }, internal.female
 crons.cron("advance birthday calendar", "0 5,6 * * *", internal.birthdays.tick, {});
 crons.interval("deliver profile rejection notices", { minutes: 1 }, internal.profileRejectionNotice.drain, {});
 
+crons.interval("deliver contact release emails", { minutes: 1 }, internal.contactReleaseEmail.drain, {});
+
 export default crons;

@@ -19,6 +19,7 @@ export async function reviewActivation(ctx: MutationCtx | QueryCtx) {
 // Production invitation authorization is independent of the shared outbox switch.
 // Isolated mode retains the existing simulator-only, exact-allowlist workflow.
 export async function deliveryAuthorized(ctx: MutationCtx | QueryCtx, row: Pick<Doc<"femaleWorkflowDeliveries">, "kind" | "createdAt" | "reviewActivationAt" | "sisterActivationAt" | "finalActivationAt">) {
+  if (row.kind === "contacts_ready" && (process.env.CONTACT_RELEASE_EMAIL_ENABLED === "true" || await ctx.db.query("settings").withIndex("by_key", q => q.eq("key", "contactReleaseEmailActivatedAt")).unique())) return false;
   if (row.kind === "final_request") {
     const at = await finalActivation(ctx);
     return finalRequestEnabled() && process.env.FEMALE_WORKFLOW_PRODUCTION_APPROVED === "true" && at !== null && row.finalActivationAt === at && row.createdAt > at;

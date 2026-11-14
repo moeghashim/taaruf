@@ -20,3 +20,9 @@ test.each(["new", "reviewing", "paused", "closed", "declined"])("rejects %s manu
 test("unauthenticated notification never reaches backend", async () => {
  expect((await POST(request(false))).status).toBe(401); expect(query).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled();
 });
+
+test("automatic contact-sharing gate blocks manual Notify before either provider send", async () => {
+ query.mockResolvedValueOnce({_id:"match",interestId:"interest",status:"contact_shared",interestType:"mutual_interest",maleRegistrationId:"male",femaleRegistrationId:"female"}).mockResolvedValueOnce({_id:"male",name:"Synthetic",email:"male@example.invalid"}).mockResolvedValueOnce({_id:"female",name:"Synthetic",email:"female@example.invalid"});
+ mutation.mockRejectedValue(new Error("Contact-sharing notifications are automatic; manual Notify is disabled to prevent duplicates"));
+ const response=await POST(request());expect(response.status).toBe(409);expect(send).not.toHaveBeenCalled();expect(mutation).toHaveBeenCalledTimes(1);
+});

@@ -22,6 +22,7 @@ import type * as archiveRules from "../archiveRules.js";
 import type * as brotherReviewActivation from "../brotherReviewActivation.js";
 import type * as capabilitySecurity from "../capabilitySecurity.js";
 import type * as contactGate from "../contactGate.js";
+import type * as contactReleaseEmail from "../contactReleaseEmail.js";
 import type * as crons from "../crons.js";
 import type * as eventAttendees from "../eventAttendees.js";
 import type * as eventCapacity from "../eventCapacity.js";
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   brotherReviewActivation: typeof brotherReviewActivation;
   capabilitySecurity: typeof capabilitySecurity;
   contactGate: typeof contactGate;
+  contactReleaseEmail: typeof contactReleaseEmail;
   crons: typeof crons;
   eventAttendees: typeof eventAttendees;
   eventCapacity: typeof eventCapacity;
