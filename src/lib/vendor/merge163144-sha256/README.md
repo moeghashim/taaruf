@@ -1,0 +1,1 @@
+Vendored from installed fast-sha256 (see package-lock.json), with its MIT license and types; only trailing whitespace normalized. Kept private to this single-pair operation to avoid repartitioning existing deployed shared chunks. Table inventory and module-hash parity are release gates.

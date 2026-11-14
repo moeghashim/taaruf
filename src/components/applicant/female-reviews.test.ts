@@ -41,3 +41,12 @@ test("mounted inactive panels cannot steal contact focus and contacts have scope
  expect(source).toContain('if (active && !interestId && contactsReady(access)');
  expect(source).toContain('id={interestId ? "contact-details-" + interestId : "contact-details"}');
 });
+
+test("sister initial controls require the authoritative initial stage, not reciprocal interest", () => {
+  expect(source).toContain('const sisterInitial = actionable && access?.role === "sister" && access.ownActionStage === "initial"');
+  expect(source).toContain("{(brotherInitial || sisterInitial) &&");
+  expect(source).toContain('action: "respond", interestId: selected, decision: "accept"');
+  expect(source).toContain('action: "respond", interestId: selected, decision: "decline"');
+  expect(source).not.toContain('const sisterInitial = row?.mutualInterest');
+  expect(source).toContain("Your initial acceptance is recorded. Final approval is a separate step.");
+});

@@ -19,3 +19,11 @@ test("unknown initial recipient retains neutral copy",()=>expect(paragraphs("ini
 test("workflow initial neutral copy distinguishes final approval",()=>{
  expect(paragraphs("workflow-initial")[0]).toBe("Accept to unlock the bio, then review it before giving your separate final approval. Initial acceptance is not final approval and does not share contact details.");
 });
+
+test("mutual initial copy explains independent decisions without implying final consent", () => {
+ const markup = renderToStaticMarkup(ReviewNextSteps({stage:"workflow-initial",recipientGender:"female",mutual:true}));
+ expect(markup).toContain("now, independently");
+ expect(markup).toContain("After both initial acceptances");
+ expect(markup).toContain("separate final approvals");
+ expect(markup).toContain("admin approval");
+});

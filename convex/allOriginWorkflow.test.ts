@@ -107,6 +107,7 @@ for (const source of sources) for (const femaleFirst of [false, true]) for (cons
     await w.open(female,true);
     await expect(w.open(male)).rejects.toThrow("Inbound discovery failed");
     await w.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"session-0",interestId:female,decision:"accept"});
+    await w.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"session-1",interestId:female,decision:"accept"});
     const sister=()=>w.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"session-1",interestId:female,confirmed:true});
     const brother=()=>w.t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"session-0",interestId:female,approved:true});
     await (reverse?sister():brother());expect(await w.t.run(ctx=>ctx.db.query("matches").collect())).toHaveLength(0);

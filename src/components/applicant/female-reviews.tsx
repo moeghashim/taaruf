@@ -13,7 +13,7 @@ import { FactList } from "@/components/admin/primitives/fact-list";
 
 type Review = { mutualInterest?: boolean; paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
 type Profile = { requirementsVisible?: boolean; name?: string; label?: string; applicantNumber?: number; publicApplicantNumber?: number; age?: number; shareableBio?: string; education?: string; job?: string; ethnicity?: string; imageUrls?: string[]; email?: string; phone?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string };
-type Access = { paused?: boolean; canPause?: boolean; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; ownDecision?: string; state: string; role: string; profile?: Profile; counterparty?: Profile };
+type Access = { mutualInterest?: boolean; ownInitialDecision?: "pending" | "accepted" | "declined"; paused?: boolean; canPause?: boolean; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; ownDecision?: string; state: string; role: string; profile?: Profile; counterparty?: Profile };
 // List status is not authorization: only the existing detail GET supplies contacts.
 const contactsReady = (value: Access | null) => {
   const profile = value?.profile || value?.counterparty;
@@ -175,7 +175,7 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
       if (!response.ok) throw new Error(payload.error || "Unable to record your decision.");
       window.dispatchEvent(new Event("applicant-interest-updated"));
       if (selectedRef.current !== actionSelection) { await load(); return; }
-      setMessage(body.action === "pause" ? "Connection paused." : body.action === "resume" ? "Connection resumed. New contact disclosure still requires final admin approval." : body.action === "respond" && body.decision === "accept" ? "Initial acceptance recorded. Review the bio, then choose Approve or Decline. No final approval or contact sharing has occurred." : "Your decision is recorded. Contact details stay private until final admin approval.");
+      setMessage(body.action === "pause" ? "Connection paused." : body.action === "resume" ? "Connection resumed. New contact disclosure still requires final admin approval." : body.action === "respond" && body.decision === "accept" ? "Your initial acceptance is recorded. Final approval is a separate step. No contact details have been shared." : "Your decision is recorded. Contact details stay private until final admin approval.");
       setAccess(null);
       setAccessVersion(value => value + 1);
       if (body.decision === "decline" || body.confirmed === false || body.approved === false) { setSelected(null); setToken(undefined); }
@@ -186,6 +186,7 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
   const actionable = access?.ownAction === "review" && !access.paused && !["closed", "revoked", "expired"].includes(access.state);
   // Explicit stages are required: never infer final approval from legacy responses.
   const brotherInitial = actionable && access?.role === "brother" && access.ownActionStage === "initial";
+  const sisterInitial = actionable && access?.role === "sister" && access.ownActionStage === "initial";
   const brotherFinal = actionable && access?.role === "brother" && access.ownActionStage === "final";
   const sisterFinal = actionable && access?.role === "sister" && access.ownActionStage === "final";
   const profile = access?.profile || access?.counterparty;
@@ -274,7 +275,7 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
             <h4>Profile details</h4>
             <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: formatEducation(profile.education) || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
           </div>
-          <div className="profile-review-box">{profile.requirementsVisible && <ProfileRequirements profile={profile} />}</div>
+          {profile.requirementsVisible && <div className="profile-review-box"><ProfileRequirements profile={profile} /></div>}
           {!!profile.imageUrls?.length && <div className="profile-review-box">
             <h4>Photos</h4>
             <div className="photo-grid">{profile.imageUrls.map((url, index) => <div key={url} className="photo-card"><Image src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 900px) 100vw, 1000px" unoptimized /></div>)}</div>
@@ -291,14 +292,15 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {contactsReady(access) && <section id={interestId ? "contact-details-" + interestId : "contact-details"} tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4><ContactGuidance viewerGender={access?.role === "brother" ? "male" : access?.role === "sister" ? "female" : undefined} />{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
-        {(brotherInitial || brotherFinal || sisterFinal) && <ReviewNextSteps stage={brotherInitial ? "workflow-initial" : "final"} recipientGender={access?.role === "brother" ? "male" : "female"} />}
+        {(brotherInitial || sisterInitial || brotherFinal || sisterFinal) && <ReviewNextSteps stage={brotherInitial || sisterInitial ? "workflow-initial" : "final"} recipientGender={access?.role === "brother" ? "male" : "female"} mutual={access?.mutualInterest} />}
         {actionable && access?.role === "brother" && !brotherInitial && !brotherFinal && <p role="status">This review needs to be refreshed before you can respond. Return to your portal and refresh.</p>}
+        {access?.ownInitialDecision === "accepted" && access.ownDecision === "pending" && access.ownAction === null && access.state === "in_review" && <p role="status">Your initial acceptance is recorded. Your separate final review will appear here when it is available. Contact details remain private.</p>}
         {matchConflict && <p className="notice error" role="alert">{ACTIVE_MATCH_CONFLICT_MESSAGE}</p>}
         {sisterFinal && <div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: true })}>Approve</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "confirm", interestId: selected, confirmed: false })}>Decline</button>
         </div>}
-        {brotherInitial && <><p>Initial review: accept to unlock the bio. You will give your final decision separately.</p><div className="action-row">
+        {(brotherInitial || sisterInitial) && <><p>{access?.mutualInterest ? "Initial review: record your own acceptance or decline. Your final decision is separate." : "Initial review: accept to unlock the bio. You will give your final decision separately."}</p><div className="action-row">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "accept", ...(token ? { reviewToken: token } : {}) })}>Accept</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void act({ action: "respond", interestId: selected, decision: "decline", ...(token ? { reviewToken: token } : {}) })}>Decline</button>
         </div></>}

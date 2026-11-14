@@ -1,3 +1,4 @@
+import { mutualInitialsComplete } from "./reciprocalConnection";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 export const SISTER_CONFIRMATION_ACTIVATION_KEY = "sisterConfirmationEmailActivatedAt";
@@ -7,9 +8,9 @@ export async function sisterActivation(ctx: MutationCtx | QueryCtx) {
   const at = Number(row?.value);
   return row && Number.isSafeInteger(at) && at > 0 && at <= Date.now() ? at : null;
 }
-export function currentSisterConfirmation(interest: Doc<"interests">, row: Doc<"femaleWorkflowDeliveries">) {
+export async function currentSisterConfirmation(ctx: MutationCtx | QueryCtx, interest: Doc<"interests">, row: Doc<"femaleWorkflowDeliveries">) {
   const w = interest.femaleWorkflow;
-  return !interest.matchId && row.recipientId === interest.fromRegistrationId &&
+  return await mutualInitialsComplete(ctx, interest) && !interest.matchId && row.recipientId === interest.fromRegistrationId &&
     w?.state === "awaiting_sister_confirmation" && w.sisterConfirmedAt === undefined && !!w.reviewTokenHash &&
     (row.sisterActivationAt === undefined || w.brotherAcceptedAt! > row.sisterActivationAt) &&
     !!w.reviewExpiresAt && w.reviewExpiresAt > Date.now() && !!w.brotherAcceptedAt &&

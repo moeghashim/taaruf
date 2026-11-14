@@ -1,6 +1,12 @@
 type Stage = "initial" | "workflow-initial" | "final";
 /** Explain only the viewer's available action, never the other person's decision. */
-export function ReviewNextSteps({ stage, recipientGender }: { stage: Stage; recipientGender?: string }) {
+export function ReviewNextSteps({ stage, recipientGender, mutual = false }: { stage: Stage; recipientGender?: string; mutual?: boolean }) {
+  if (stage !== "final" && mutual) return <section className="review-next-steps" aria-label="What happens next">
+    <h4>What happens next</h4>
+    <p>You can accept or decline this initial review now, independently.</p>
+    <p>After both initial acceptances, you can read each other’s bios and give separate final approvals. Initial acceptance is not final approval and does not share contact details.</p>
+    <p>Contact sharing requires both final approvals and admin approval. Declining closes this connection without sharing contact details.</p>
+  </section>;
   if (stage !== "final" && (recipientGender === "male" || recipientGender === "female")) return <section className="review-next-steps" aria-label="What happens next">
     <h4>What happens next</h4>
     <p>This applicant has expressed interest in getting to know you better.</p>
