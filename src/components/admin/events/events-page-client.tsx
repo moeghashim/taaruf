@@ -11,6 +11,7 @@ import { Ico } from "@/components/admin/primitives/icons";
 import { EventParticipantProfile } from "./event-participant-profile";
 import { Pill } from "@/components/admin/primitives/status-pill";
 
+import { RegistrationClosedIndicator, registrationIsClosed } from "./registration-closed-indicator";
 import { InterestSubmissionsToggle } from "./interest-submissions-toggle";
 
 const eventStatuses = ["draft", "scheduled", "completed", "cancelled"] as const;
@@ -521,7 +522,8 @@ export function EventsPageClient() {
                 </div>
                 <div className="interest-row-meta">
                   <Pill tone={event.status === "draft" ? "amber" : "plain"}>{titleize(event.status)}</Pill>
-                  {event.status === "scheduled" && event.startsAt >= Date.now() && <Pill tone="green">Homepage</Pill>}
+                  <RegistrationClosedIndicator closesAt={event.registrationClosesAt} />
+                  {event.status === "scheduled" && event.startsAt >= Date.now() && !registrationIsClosed(event.registrationClosesAt) && <Pill tone="green">Homepage</Pill>}
                   <span className="mono">
                     M {event.counts.malePending + event.counts.maleApproved}/{event.maleCapacity} · F {event.counts.femalePending + event.counts.femaleApproved}/{event.femaleCapacity}
                   </span>
@@ -543,6 +545,7 @@ export function EventsPageClient() {
               <p>{formatDateTime(detail.startsAt)} · {detail.location}</p>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <RegistrationClosedIndicator closesAt={detail.registrationClosesAt} />
               {(detail.status === "draft" || detail.status === "scheduled") && (
                 <button
                   type="button"
