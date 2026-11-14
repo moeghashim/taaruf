@@ -1,4 +1,4 @@
-import { assertCanonicalAction } from "./reciprocalConnection";
+import { assertCanonicalAction, mutualInitialsComplete } from "./reciprocalConnection";
 import { isSecurityRetired } from "./registrationSecurity";
 import { assertNotArchived } from "./archiveRules";
 import { sisterActivation } from "./sisterConfirmationActivation";
@@ -180,6 +180,7 @@ export async function recordPairApproval(ctx: MutationCtx, interest: Doc<"intere
     if (approved) return interest.matchId;
     throw new Error("Close or pause the official connection instead");
   }
+  if (approved && !await mutualInitialsComplete(ctx, interest)) throw new Error("Both initial acceptances required");
   const source = rows.find(r => r.interest._id === interest._id);
   if (!source) throw new Error("Interest unavailable");
   const now = Date.now();

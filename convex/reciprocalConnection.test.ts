@@ -61,6 +61,7 @@ test.each(["sister", "brother", "concurrent"])("independent until explicit share
  expect((await f.t.query(api.applicantInterests.getDashboard,{sessionHash:"recipient-session"})).privateDocumented[0]).toMatchObject({receiptOnly:true,counterparty:null});
  await expect(f.t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"selection-session",interestId:female.interestId,approved:true})).rejects.toThrow();
  await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"selection-session",interestId:female.interestId,decision:"accept"});
+ await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"recipient-session",interestId:female.interestId,decision:"accept"});
  await Promise.all([f.t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"selection-session",interestId:female.interestId,approved:true}),f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"recipient-session",interestId:female.interestId,confirmed:true})]);
  const done=await snapshot(f);expect(done.matches).toHaveLength(1);expect(done.matches[0]).toMatchObject({interestId:female.interestId,contactGate:"pending_admin_approval"});
  expect(done.interests.every(row=>row.matchId===done.matches[0]._id)).toBe(true);
@@ -165,6 +166,7 @@ test.each(["brother-initial", "brother-final", "sister-final"])("linked %s decli
  const f=await fixture();await f.toggle();const female=await reverse(f);const male=await f.submit();
  await f.t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret:"selection-secret",interestId:female.interestId,reviewTokenHash:"a".repeat(64)});
  if(kind!=="brother-initial") await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"selection-session",interestId:female.interestId,decision:"accept"});
+ if(kind!=="brother-initial") await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"recipient-session",interestId:female.interestId,decision:"accept"});
  if(kind==="brother-initial") await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"selection-session",interestId:female.interestId,decision:"decline"});
  else if(kind==="brother-final") await f.t.mutation(api.femaleInterestWorkflow.brotherFinal,{sessionHash:"selection-session",interestId:female.interestId,approved:false});
  else await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"recipient-session",interestId:female.interestId,confirmed:false});

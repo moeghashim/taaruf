@@ -13,7 +13,7 @@ export async function pendingReciprocal(ctx: ReadCtx, from: Doc<"registrations">
   for (const row of ranges.flat()) {
     if (row.source !== "platform_submission" || row.canonicalInterestId || row.testReset || row.matchId || row.slotReturnedAt !== undefined || !["new", "queued"].includes(row.status) || (row.adminStatus ?? "pending") !== "pending" || [from,to].some(p => p.lastRestoredArchivedAt !== undefined && row.createdAt <= p.lastRestoredArchivedAt)) return null;
     const w = row.femaleWorkflow;
-    if (w && (w.state !== "private_documented" || w.reviewTokenHash || w.brotherAcceptedAt !== undefined || w.sisterConfirmedAt !== undefined || w.adminReleasedAt !== undefined)) return null;
+    if (w && (w.state !== "private_documented" || w.reviewTokenHash || w.brotherAcceptedAt !== undefined || w.sisterInitialAcceptedAt !== undefined || w.sisterConfirmedAt !== undefined || w.adminReleasedAt !== undefined)) return null;
     const f = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
     if (!f || f.fromRegistrationId !== row.fromRegistrationId || f.toRegistrationId !== row.toRegistrationId || !["private_documented", "awaiting_inbound_response"].includes(f.flowStatus) || f.recipientDecision !== "pending" || f.requesterFinalApproval !== "pending" || f.recipientFinalApproval !== "pending" || f.bioVisibleAt !== undefined || f.contactSharedAt !== undefined || f.requesterExplicitFinalAt !== undefined || f.recipientExplicitFinalAt !== undefined || f.photoDecision !== "pending" || f.photoRequestedByRegistrationId !== undefined || f.requesterFinalApprovalAt !== undefined || f.recipientFinalApprovalAt !== undefined || f.photosVisibleAt !== undefined || f.photoRequestedAt !== undefined || f.photoDecisionAt !== undefined || f.keepOpenExpiresAt !== undefined || f.closedReason !== undefined) return null;
   }
@@ -39,4 +39,11 @@ export async function sharedMutual(ctx: ReadCtx, row: Interest) {
   if (!row.femaleWorkflow?.reviewTokenHash || row.femaleWorkflow.state === "private_documented" || row.canonicalInterestId) return false;
   const linked = await aliases(ctx, row);
   return linked.length === 1 && linked[0].eventId === row.eventId && linked[0].fromRegistrationId === row.toRegistrationId && linked[0].toRegistrationId === row.fromRegistrationId && !linked[0].testReset && !["withdrawn", "closed", "declined"].includes(linked[0].status);
+}
+
+/** Final receipts never stand in for an initial decision. */
+export async function mutualInitialsComplete(ctx: ReadCtx, row: Interest) {
+  if (!await sharedMutual(ctx, row)) return true;
+  const w = row.femaleWorkflow!;
+  return [w.brotherAcceptedAt, w.sisterInitialAcceptedAt].every(at => at !== undefined && Number.isFinite(at) && at > 0 && at <= Date.now());
 }

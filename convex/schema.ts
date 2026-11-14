@@ -301,7 +301,7 @@ export default defineSchema({
     femaleWorkflow: v.optional(v.object({
       state: v.union(v.literal("private_documented"), v.literal("awaiting_brother_review"), v.literal("awaiting_sister_confirmation"), v.literal("pending_admin_approval"), v.literal("contacts_released"), v.literal("declined"), v.literal("revoked")),
       reviewTokenHash: v.optional(v.string()), reviewExpiresAt: v.optional(v.number()),
-      brotherAcceptedAt: v.optional(v.number()), sisterConfirmedAt: v.optional(v.number()), adminReleasedAt: v.optional(v.number()),
+      brotherAcceptedAt: v.optional(v.number()), sisterInitialAcceptedAt: v.optional(v.number()), sisterConfirmedAt: v.optional(v.number()), adminReleasedAt: v.optional(v.number()),
     })),
     senderPhotoConsent: v.optional(v.union(v.literal("yes"), v.literal("no"))),
     senderPhotoConsentRevokedAt: v.optional(v.number()),

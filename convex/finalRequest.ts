@@ -1,3 +1,4 @@
+import { mutualInitialsComplete } from "./reciprocalConnection";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { interestBioVisible } from "./bioVisibility";
@@ -24,7 +25,7 @@ export async function finalParticipants(ctx: MutationCtx | QueryCtx, id: Id<"int
   let own = requester ? flow.requesterFinalApproval : flow.recipientFinalApproval;
   if (interest.femaleWorkflow) {
     const { workflow } = await active(ctx, id);
-    if (interest.matchId || workflow.state !== "awaiting_sister_confirmation" || !workflow.reviewTokenHash) throw new Error("Final review unavailable");
+    if (!await mutualInitialsComplete(ctx, interest) || interest.matchId || workflow.state !== "awaiting_sister_confirmation" || !workflow.reviewTokenHash) throw new Error("Final review unavailable");
     // Male review expires; sister's authenticated final action has no token TTL.
     if (!requester && (!workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now())) throw new Error("Review expired");
     if (!requester && own === "approved" && flow.recipientExplicitFinalAt === undefined) own = "pending";
