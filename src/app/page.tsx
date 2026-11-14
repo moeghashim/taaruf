@@ -1,3 +1,4 @@
+import { openHomepageEvents } from "@/lib/homepage-events";
 import { formatEventDate } from "@/lib/event-date";
 import Link from "next/link";
 import { api } from "../../convex/_generated/api";
@@ -20,7 +21,11 @@ type PublicEvent = {
 
 async function getActiveEvents(): Promise<PublicEvent[]> {
   try {
-    return await getConvexClient().query(api.events.getPublicActive, {});
+    const client = getConvexClient();
+    const events = await client.query(api.events.getPublicActive, {});
+    return await openHomepageEvents(events, eventCode =>
+      client.query(api.events.getPublicByCode, { eventCode }),
+    );
   } catch (error) {
     console.error("Failed to load public events", error);
     return [];
