@@ -727,6 +727,16 @@ export const registerForEvent = mutation({
   },
 });
 
+// Nov14 admin-only exception: public registration remains unchanged.
+function postclosureAdmin(event: Doc<"events">, now: number) {
+  return event.eventCode === "nov26" && event.startsAt === 1794681900000 && event.status === "scheduled" && Boolean(event.registrationClosesAt && event.registrationClosesAt < now);
+}
+async function adminCapacityStatus(ctx: MutationCtx, event: Doc<"events">, gender: "male" | "female") {
+  for await (const row of ctx.db.query("eventRegistrations").withIndex("by_eventId_and_gender_and_registrationStatus", q => q.eq("eventId", event._id).eq("gender", gender).eq("registrationStatus", "waitlisted"))) {
+    if (isCurrentEnrollment(row)) return "waitlisted" as const;
+  }
+  return registrationStatusForCapacity(ctx, event, gender);
+}
 export const addRegistration = mutation({
   args: {
     adminSecret: v.string(),
@@ -745,15 +755,16 @@ export const addRegistration = mutation({
     if (event.status === "cancelled" || event.status === "completed") throw new Error("Event registration is closed");
     const now = Date.now();
     if (event.registrationOpensAt && event.registrationOpensAt > now) throw new Error("Event registration is not open yet");
-    if (event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
+    const adminLate = postclosureAdmin(event, now);
+    if (!adminLate && event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
 
     const existing = await enrollmentForEvent(ctx, event._id, registration._id);
     if (existing && !["withdrawn", "rejected"].includes(existing.registrationStatus)) {
       return { eventRegistrationId: existing._id, registrationStatus: existing.registrationStatus, event, registration: await withCurrentAge(ctx, registration) };
     }
 
-    await promoteWaitlist(ctx, event._id, registration.gender);
-    const registrationStatus = await registrationStatusForCapacity(ctx, event, registration.gender);
+    if (!adminLate) await promoteWaitlist(ctx, event._id, registration.gender);
+    const registrationStatus = adminLate ? await adminCapacityStatus(ctx, event, registration.gender) : await registrationStatusForCapacity(ctx, event, registration.gender);
     const payload = {
       eventId: event._id,
       registrationId: registration._id,
@@ -761,14 +772,15 @@ export const addRegistration = mutation({
       registrationStatus,
       waitlistedAt: registrationStatus === "waitlisted" ? now : undefined,
       approvedAt: undefined,
-      confirmationStatus: "confirmed" as const,
+      confirmationStatus: adminLate ? existing?.confirmationStatus ?? "not_confirmed" as const : "confirmed" as const,
       attendanceStatus: "not_checked_in" as const,
       eligibilityStatus: deriveEligibilityStatus(registration),
-      confirmedAt: now,
-      confirmationRequestedAt: undefined,
-      confirmationExpiresAt: undefined,
+      confirmedAt: adminLate ? existing?.confirmedAt : now,
+      confirmationRequestedAt: adminLate ? existing?.confirmationRequestedAt : undefined,
+      confirmationExpiresAt: adminLate ? existing?.confirmationExpiresAt : undefined,
       cancelledAt: undefined,
       rejectedAt: undefined,
+      adminNotes: adminLate ? [existing?.adminNotes, "Authenticated admin postclosure add5591; confirmation preserved; no email or queue processing."].filter(Boolean).join("\n") : existing?.adminNotes,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -794,20 +806,21 @@ export const forceRegisterWaitlisted = mutation({
     requireEventAdmin(args.adminSecret);
     const row = await ctx.db.get(args.eventRegistrationId);
     requireCurrentEnrollment(row);
-    if (row.registrationStatus !== "waitlisted") throw new Error("Only an existing waitlisted registration can be force-registered");
     const event = await ctx.db.get(row.eventId);
     if (!event) throw new Error("Event not found");
     const now = Date.now();
+    if (postclosureAdmin(event, now) && row.registrationStatus === "pending") return row._id;
+    if (row.registrationStatus !== "waitlisted") throw new Error("Only an existing waitlisted registration can be force-registered");
     if (event.status === "cancelled" || event.status === "completed") throw new Error("Event registration is closed");
     if (event.registrationOpensAt && event.registrationOpensAt > now) throw new Error("Event registration is not open yet");
-    if (event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
+    if (!postclosureAdmin(event, now) && event.registrationClosesAt && event.registrationClosesAt < now) throw new Error("Event registration is closed");
     const registration = await ctx.db.get(enrollmentRegistrationId(row));
     if (!registration) throw new Error("Profile not found");
     assertNotArchived(registration);
     if (confirmationExpired(row, now) || row.confirmationStatus === "cancelled") throw new Error("Renew the applicant's confirmation before force-registering");
     // Preserve confirmation, attendance, payment, profile approval and queue history.
     // Pending reserves a place; approval remains its own explicit admin action.
-    await ctx.db.patch(row._id, { registrationStatus: "pending", approvedAt: undefined, updatedAt: now });
+    await ctx.db.patch(row._id, { registrationStatus: "pending", approvedAt: undefined, adminNotes: postclosureAdmin(event, now) ? [row.adminNotes, "Authenticated explicit capacity override to Pending5591; confirmation preserved; no email or queue processing."].filter(Boolean).join("\n") : row.adminNotes, updatedAt: now });
     return row._id;
   },
 });
@@ -827,19 +840,21 @@ export const updateRegistrationStatus = mutation({
     const event = await ctx.db.get(row.eventId);
     if (!event) throw new Error("Event not found");
     const now = Date.now();
+    const adminLate = postclosureAdmin(event, now);
+    if (adminLate && row.registrationStatus === args.registrationStatus && !args.adminNotes && !args.overrideCapacity) return row._id;
 
     if (["pending", "approved", "waitlisted"].includes(args.registrationStatus)) assertNotArchived(await ctx.db.get(enrollmentRegistrationId(row)));
     if (args.overrideCapacity) throw new Error("Capacity overrides are not allowed");
     if (args.registrationStatus === "approved" && row.registrationStatus !== "pending" && row.registrationStatus !== "approved") throw new Error("Only Pending registrations may be approved");
     if (args.registrationStatus === "waitlisted") throw new Error("Waitlisting is determined by capacity");
     if (row.registrationStatus === "waitlisted" && args.registrationStatus === "pending") {
-      await promoteWaitlist(ctx, event._id, row.gender);
+      if (!adminLate) await promoteWaitlist(ctx, event._id, row.gender);
       return row._id; // Preserve queue position; manual clicks cannot jump the queue.
     }
     let nextStatus: EventRegistration["registrationStatus"] = args.registrationStatus;
     if (nextStatus === "pending" && !reservesCapacity(row.registrationStatus)) {
-      await promoteWaitlist(ctx, event._id, row.gender);
-      nextStatus = await registrationStatusForCapacity(ctx, event, row.gender);
+      if (!adminLate) await promoteWaitlist(ctx, event._id, row.gender);
+      nextStatus = adminLate ? await adminCapacityStatus(ctx, event, row.gender) : await registrationStatusForCapacity(ctx, event, row.gender);
     }
     await ctx.db.patch(row._id, {
       registrationStatus: nextStatus,
@@ -847,10 +862,10 @@ export const updateRegistrationStatus = mutation({
       approvedAt: nextStatus === "approved" ? row.approvedAt ?? now : undefined,
       rejectedAt: args.registrationStatus === "rejected" ? row.rejectedAt ?? now : row.rejectedAt,
       cancelledAt: args.registrationStatus === "withdrawn" ? row.cancelledAt ?? now : row.cancelledAt,
-      adminNotes: args.adminNotes?.trim() || row.adminNotes,
+      adminNotes: adminLate ? [args.adminNotes?.trim() || row.adminNotes, "Authenticated admin postclosure status change5591; confirmation preserved; no queue processing."].filter(Boolean).join("\n") : args.adminNotes?.trim() || row.adminNotes,
       updatedAt: now,
     });
-    await promoteWaitlist(ctx, row.eventId, row.gender);
+    if (!adminLate) await promoteWaitlist(ctx, row.eventId, row.gender);
     return row._id;
   },
 });

@@ -857,3 +857,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-14
 - Added force337338 exception and isolated tests for Layla5509; local only, no production writes.
+
+## 2026-11-14
+- Scoped Nov14 admin postclosure/poststart add and status management5591; public guards unchanged, new additions unconfirmed, no unrelated queue processing; tests updated for authorized admin semantics.
