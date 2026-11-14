@@ -264,7 +264,7 @@ export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches"
     if ([male, female].some(p => !p.email || !p.phone)) throw new Error("Both applicants must have contact details");
     const now = Date.now();
     await ctx.db.patch(match._id, {status: "contact_shared", contactGate: "contacts_released", adminReleasedAt: match.adminReleasedAt ?? now, updatedAt: now});
-    if (match.adminReleasedAt === undefined) await enqueueReleasedContacts(ctx, match._id);
+    if (match.adminReleasedAt === undefined && match.contactGate !== "contacts_released" && match.status !== "contact_shared" && match.contactSharedNotificationSentAt === undefined) await enqueueReleasedContacts(ctx, match._id);
     for (const p of [male, female]) await ctx.db.patch(p._id, {activeMatchId: match._id});
     return;
   }
@@ -275,7 +275,7 @@ export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches"
   if (flows.some(f => f.requesterFinalApproval !== "approved" || f.recipientFinalApproval !== "approved")) throw new Error("Both applicants must give final approval before contacts can be shared");
   const { male, female } = await assertParticipantsAvailable(ctx, match.maleRegistrationId, match.femaleRegistrationId, match._id);
   if ([male, female].some(p => !p.email || !p.phone)) throw new Error("Both applicants must have contact details");
-  const alreadyReleased = match.contactGate === "contacts_released" || (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
+  const alreadyReleased = match.adminReleasedAt !== undefined || match.status === "contact_shared" || match.contactSharedNotificationSentAt !== undefined || match.contactGate === "contacts_released" || (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
   const now = Date.now();
   if (!alreadyReleased) {
     await ctx.db.patch(match._id, { contactGate: "contacts_released", adminReleasedAt: now });

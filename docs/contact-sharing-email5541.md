@@ -20,7 +20,7 @@ Only the first actual admin contact release—not match creation, mutual interes
 2. Enable the separate `CONTACT_RELEASE_EMAIL_ENABLED=true` only under exclusive configuration ownership, then quiesce legacy/manual requests before creating the independent cutoff with `contactReleaseEmail:activate`. Sender/portal credential slots are reused; never print them.
 3. Releases before activation or while disabled persist negative delivery rows and cannot be backfilled. Do not retry historical shared-outbox contacts rows.
 4. The one-minute contact worker sends only matching epoch, post-cutoff actual releases and rechecks current release, participant, recipient address, archive/reset/revocation/closed status. Each recipient has a stable provider idempotency key and immutable payload.
-5. When this gate is enabled, manual **Notify** is blocked to avoid duplicate/early match notices; use actual contact release. Existing automatic inbound/final emails remain unchanged.
+5. Once this gate is enabled/activated, manual **Notify** is blocked (also during later rollback) to avoid duplicate/early match notices; use actual contact release. Existing automatic inbound/final emails remain unchanged.
 
 ## Rollback
 
@@ -28,4 +28,4 @@ Set only `CONTACT_RELEASE_EMAIL_ENABLED=false`; preserve its cutoff and existing
 
 ## Preview testing boundary
 
-Automated tests use a local Convex simulator, synthetic participants and a mocked provider, and execute the real contact-release transaction and delivery worker. Never use real participants or production writes to review this PR. A hosted frontend preview is **UI-review-only** unless a compatible isolated backend is separately verified; it is not authorization to submit live data. No provider delivery is claimed from synthetic tests.
+Automated tests use a local Convex simulator, synthetic participants and a mocked provider, and execute the real contact-release transaction and delivery worker. Never use real participants or production writes to review this PR. A hosted frontend preview is **UI-review-only** unless a compatible isolated backend is separately verified; it is not authorization to submit live data. No provider delivery is claimed from synthetic tests. Historical matchmaker release evidence (gate/status/notification marker) is fenced even when older records lack a release timestamp. Same-match reopen/reset never reissues contact notices; a distinct new connection requires a new match identity.
