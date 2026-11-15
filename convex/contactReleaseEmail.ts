@@ -52,7 +52,7 @@ export const authorize=internalMutation({args:{id:v.id("contactReleaseEmails"),a
  const text = "Assalamu alaikum!\n\nAlhamdulillah, a match has been created for you, and your contact details have now been shared with each other!\n\nSign in to your portal to view your match’s contact details and take the next step:\nhttps://www.1plus1match.com/me\n\nMay Allah place barakah in this connection and guide you both toward what is best. We’re excited for you!\n\nThe 1 Plus 1 Team".replace("https://www.1plus1match.com/me",portal);
  const escapeHtml = (value:string) => value.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
  const html = text.split("\n\n").map(paragraph=>"<p>"+escapeHtml(paragraph).replace(escapeHtml(portal),'<a href="'+escapeHtml(portal)+'">'+escapeHtml(portal)+'</a>').replace(/\n/g,"<br>")+"</p>").join("\n");
- const payload=row.payload??{from:config.from,to:[row.email],subject:"Alhamdulillah — you have a match! 🎉",text,html};
+ const payload=row.payload??{from:config.from,to:[row.email],cc:["1plus1@plus1htx.org"],subject:"Alhamdulillah — you have a match! 🎉",text,html};
  if(payload.from!==config.from||payload.to.length!==1||payload.to[0]!==row.email)throw Error("Frozen payload mismatch");
  await ctx.db.patch(row._id,{payload,firstAttemptAt:row.firstAttemptAt??Date.now(),leaseUntil:Date.now()+120000,nextAttemptAt:Date.now()+120000});return {payload,key:row.key};
  }catch{await ctx.db.patch(row._id,{status:"cancelled",error:"Contacts or recipient no longer available"});return null;}
