@@ -14,7 +14,7 @@ vi.mock('react', async (importOriginal) => {
 });
 vi.mock('@/components/applicant/support-ribbon', () => ({ SupportRibbon: () => null }));
 import ApplicantDashboardPage from './page';
-const reassurance = 'May Allah bring whatever is best for you.';
+const reassurance = 'May Allah provide what is best for you.';
 beforeEach(() => { fixture.stateIndex = 0; });
 function dashboard(gender: string, count: number, ownDecline = false) {
   return {
@@ -34,7 +34,7 @@ for (const gender of ['male', 'female']) {
         expect(html).not.toContain(reassurance);
         expect(html).not.toContain('Closed connections');
       } else {
-        const message = count === 1 ? 'Your outbound interest has been declined.' : count + ' of your outbound interests have been declined.';
+        const message = count === 1 ? 'Your outbound interest has been closed.' : count + ' of your outbound interests have been closed.';
         expect(html).toContain('<p>' + message + ' ' + reassurance + '</p>');
         expect(html.split(reassurance)).toHaveLength(2);
       }
