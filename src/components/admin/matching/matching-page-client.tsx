@@ -8,7 +8,7 @@ import { useProfileEventPages } from "@/components/admin/hooks/use-profile-event
 import { workbenchEventLabel } from "@/lib/workbench-event-label";
 import { matchEventId, inEventScope, scopedWorkbenchRecords } from "@/lib/workbench-event-filter";
 import Link from "next/link";
-import { canReleaseContacts, interestLifecycle, isArchivedInterest, isResolvedInterest } from "@/lib/interest-lifecycle";
+import { activeConnectionLabel, canReleaseContacts, interestLifecycle, isArchivedInterest, isResolvedInterest } from "@/lib/interest-lifecycle";
 import { FemaleWorkflowActions, FemaleWorkflowOutbox } from "./female-workflow-actions";
 import { MatchmakerActions, isMatchmaker } from "./matchmaker-actions";
 import { NewMatchDialog } from "./new-match-dialog";
@@ -1137,7 +1137,7 @@ export function WorkbenchPageClient() {
                 {[left, right].map((person) => person && <section key={person._id}>
                   <h4>{person.name}: other interests and workflows in this filter</h4>
                   {data.matches.some(m => m._id !== selectedMatch?._id && [m.maleRegistrationId, m.femaleRegistrationId].includes(person._id) && !["closed", "declined", "paused"].includes(m.status) && !inEventScope(matchEventId(m), eventScope)) && <p><strong>Another active match exists outside this filter.</strong> Global safety checks still apply.</p>}
-                  <p>{person.activeMatchId ? "Contacts already released in an active connection. A second release is blocked." : "No released active connection"}</p>
+                  <p>{activeConnectionLabel(person, data.matches)}</p>
                   {interests.filter((i) => (i.fromRegistrationId === person._id || i.toRegistrationId === person._id) && i._id !== selectedInterest?._id && i._id !== selectedMatch?.interestId).map((i) => <p key={i._id} style={{ opacity: isOpenInterest(i.status) ? 1 : 0.5 }}>#{i.fromRegistration?.publicApplicantNumber} {i.fromRegistration?.name} → #{i.toRegistration?.publicApplicantNumber} {i.toRegistration?.name} · {interestLifecycle(i)}</p>)}
                   {matches.filter((m) => m._id !== selectedMatch?._id && [m.maleRegistrationId, m.femaleRegistrationId].includes(person._id) && !["closed", "declined", "paused"].includes(m.status)).map((m) => <p key={m._id}><strong>Other active match:</strong> {m.maleRegistration?.name} + {m.femaleRegistration?.name} · {titleize(m.status)}</p>)}
                 </section>)}

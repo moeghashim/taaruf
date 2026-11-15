@@ -103,7 +103,7 @@ test.each(["requester", "recipient"] as const)("queued consent stays pair-specif
     expect(row).toMatchObject({ finalApprovals: { requester: occupied === "requester" ? "approved" : "pending", recipient: "pending" } });
     expect((occupied === "requester" ? row.fromRegistration : row.toRegistration)?.activeMatchId).toBe(otherMatchId);
     expect(canReleaseContacts(row.match)).toBe(false);
-    expect(interestLifecycle(row)).toBe(occupied === "requester" ? scenarios[0][2] : scenarios[2][2]);
+    expect(interestLifecycle(row)).toBe(`Queued — ${occupied === "requester" ? scenarios[0][2] : scenarios[2][2]}`);
   }
   expect(await snapshot()).toEqual(before);
 });
