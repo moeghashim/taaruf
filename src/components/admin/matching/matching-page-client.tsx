@@ -646,7 +646,7 @@ function InterestRow({
       <td>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           <MutualBadge interest={interest} />
-          <Pill tone="plain">{interestLifecycle(interest)}</Pill>
+          <span className="pill plain" style={{ whiteSpace: "normal", overflowWrap: "anywhere", textTransform: "none" }}>{interestLifecycle(interest)}</span>
           <Pill tone={interest.visibility === "internal_only" ? "blue" : "plain"}>
             {titleize(interest.visibility)}
           </Pill>
@@ -1107,7 +1107,7 @@ export function WorkbenchPageClient() {
                   <option value="" disabled>Select an interest</option>
                   {[...interests].sort((a,b) => Number(!isOpenInterest(a.status)) - Number(!isOpenInterest(b.status))).map((interest) => (
                     <option key={interest._id} value={interest._id} style={{ color: isOpenInterest(interest.status) ? undefined : "gray" }}>
-                      #{interest.fromRegistration ? data.registrationNumbers.get(interest.fromRegistration._id) : "-"} {interest.fromRegistration?.name ?? "Unknown"} to #{interest.toRegistration ? data.registrationNumbers.get(interest.toRegistration._id) : "-"} {interest.toRegistration?.name ?? "Unknown"} · {interestLifecycle(interest)}
+                      {interestLifecycle(interest)} · #{interest.fromRegistration ? data.registrationNumbers.get(interest.fromRegistration._id) : "-"} {interest.fromRegistration?.name ?? "Unknown"} to #{interest.toRegistration ? data.registrationNumbers.get(interest.toRegistration._id) : "-"} {interest.toRegistration?.name ?? "Unknown"}
                     </option>
                   ))}
                 </select>
@@ -1152,7 +1152,7 @@ export function WorkbenchPageClient() {
 
           <div className="panel">
             <div className="panel-head">
-              <h3>{mode === "interest" ? "Evaluating interest" : "Evaluating match"} · {selectedInterest ? interestLifecycle(selectedInterest) : selectedMatch?.status ?? "No selection"}</h3>
+              <h3 style={{ overflowWrap: "anywhere", textTransform: "none" }}>{mode === "interest" ? "Evaluating interest" : "Evaluating match"} · {selectedInterest ? interestLifecycle(selectedInterest) : selectedMatch?.status ?? "No selection"}</h3>
             </div>
             <div style={{ padding: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               {selectedInterest && !selectedInterest.femaleWorkflow && selectedInterest.visibility === "internal_only" && selectedInterest.fromRegistration?.gender === "female" && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <FemaleWorkflowActions interestId={selectedInterest._id} state="private_documented" />}
