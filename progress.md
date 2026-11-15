@@ -874,3 +874,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Added synthetic queued/competing-released-match approval projection regressions for both occupied sides; verified no pooled consent, release eligibility, or read-side mutations. UI queue visibility remains a review blocker. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Preserved explicit queued status with final-approval actors and validated referenced-match availability warnings (including declined stale pointers); added UI/archive regressions and real isolated synthetic three-case browser proof. No production writes, decisions, progression or emails. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-15
+- Added internal fingerprint-guarded real paused-pair removal, distinct audit/tombstone, reference and capability cleanup, synthetic regressions and release gates; preserves eligibility, participant decisions and accepted receipts, no queue/email effects. <!-- project: github.com/moeghashim/clawscrewskill -->
