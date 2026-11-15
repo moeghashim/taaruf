@@ -9,7 +9,7 @@ async function request(body: Record<string, unknown>) {
   if (!response.ok) throw new Error(result.error || "Unable to update review.");
   return result;
 }
-export function FemaleWorkflowActions({ interestId, state, compact = false }: { interestId: string; state: string; compact?: boolean }) {
+export function FemaleWorkflowActions({ interestId, state, statusLabel, compact = false }: { interestId: string; state: string; statusLabel?: string; compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const actionInFlight = useRef(false);
   const [message, setMessage] = useState("");
@@ -29,7 +29,7 @@ export function FemaleWorkflowActions({ interestId, state, compact = false }: { 
     finally { actionInFlight.current = false; setBusy(false); }
   }
   return <div style={{ display: "grid", gap: 8 }}>
-    {state !== "private_documented" && <span>{state.replaceAll("_", " ")}</span>}
+    {state !== "private_documented" && <span>{statusLabel ?? (state === "awaiting_sister_confirmation" ? "Final approvals in review" : state.replaceAll("_", " "))}</span>}
     <div className="action-row">
       {state === "private_documented" && <button type="button" className={compact ? "btn btn-sm btn-primary" : "btn btn-primary"} disabled={busy} onClick={() => void act("create")}>{busy ? "Creating…" : "Share requester profile"}</button>}
       {state === "awaiting_brother_review" && <button type="button" className="btn" disabled={busy} onClick={() => void act("create")}>Reissue review link</button>}

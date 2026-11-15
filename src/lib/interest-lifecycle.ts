@@ -1,5 +1,6 @@
 import type { Doc } from "../../convex/_generated/dataModel";
-type Interest = Pick<Doc<"interests">, "status" | "testReset" | "femaleWorkflow"> & { match?: Doc<"matches"> | null };
+import type { WorkbenchFinalApprovals } from "../../convex/workbenchApproval";
+export type Interest = Pick<Doc<"interests">, "status" | "testReset" | "femaleWorkflow"> & { match?: Doc<"matches"> | null; finalApprovals?: WorkbenchFinalApprovals | null };
 export function canReleaseContacts(match?: Doc<"matches"> | null) {
   return Boolean(match?.interestId && !match.testResetAt && match.contactGate === "pending_admin_approval" && ["new", "reviewing"].includes(match.status));
 }
@@ -9,7 +10,16 @@ export function interestLifecycle(interest: Interest): string {
   if (interest.match?.status === "paused") return "Paused";
   if (interest.match?.contactGate === "contacts_released" || interest.match?.status === "contact_shared" || interest.femaleWorkflow?.state === "contacts_released") return "Contacts released";
   if (canReleaseContacts(interest.match)) return "Both approved — awaiting contact release";
-  const labels: Record<string, string> = { private_documented: "Requester profile not yet shared", awaiting_brother_review: "Awaiting recipient review", awaiting_sister_confirmation: "Recipient approved — awaiting requester confirmation", pending_admin_approval: "Both approved — awaiting contact release", revoked: "Review revoked", declined: "Declined" };
+  if (interest.femaleWorkflow?.state === "awaiting_sister_confirmation") {
+    const finals = interest.finalApprovals;
+    if (!finals) return "Final approval status unavailable";
+    if (finals.requester === "declined" || finals.recipient === "declined") return "Declined";
+    if (finals.requester === "approved" && finals.recipient === "approved") return "Both final approvals saved";
+    if (finals.requester === "approved") return "Sister approved — awaiting brother’s final approval";
+    if (finals.recipient === "approved") return "Brother approved — awaiting sister’s final approval";
+    return "Awaiting both final approvals";
+  }
+  const labels: Record<string, string> = { private_documented: "Requester profile not yet shared", awaiting_brother_review: "Awaiting recipient review", pending_admin_approval: "Both approved — awaiting contact release", revoked: "Review revoked", declined: "Declined" };
   if (interest.femaleWorkflow) return labels[interest.femaleWorkflow.state] ?? interest.femaleWorkflow.state.replaceAll("_", " ");
   return "Awaiting applicant approvals";
 }

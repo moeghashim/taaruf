@@ -33,6 +33,7 @@ type PipelineStage = MatchStatus;
 type ShareStatus = Doc<"profileShares">["status"];
 
 type InterestRecord = Doc<"interests"> & {
+  finalApprovals?: import("../../../../convex/workbenchApproval").WorkbenchFinalApprovals | null;
   mutual?: MutualEvidence | null;
   fromRegistration: RegistrationWithImages | null;
   toRegistration: RegistrationWithImages | null;
@@ -555,7 +556,7 @@ function InterestActions({
   if (interest.testReset) return <span role="status">Test reset — audit retained</span>;
   if (interest.femaleWorkflow || (interest.visibility === "internal_only" && interest.fromRegistration?.gender === "female" && !interest.matchId)) return <div>
     <ContactRelease match={interest.match} femaleInterestId={interest.femaleWorkflow ? interest._id : undefined} onMessage={onMessage} />
-    <FemaleWorkflowActions interestId={interest._id} state={interest.femaleWorkflow?.state ?? (isOpenInterest(interest.status) ? "private_documented" : "declined")} compact />
+    <FemaleWorkflowActions interestId={interest._id} statusLabel={interestLifecycle(interest)} state={interest.femaleWorkflow?.state ?? (isOpenInterest(interest.status) ? "private_documented" : "declined")} compact />
     {isOpenInterest(interest.status) && !interest.matchId && <>
       <button className="btn btn-sm" disabled={busy !== null} onClick={() => void run("decline", () => data.actions.updateInterestStatus(interest._id, "declined"), "Interest declined.")}>Decline interest</button>
       <button className="btn btn-sm" disabled={busy !== null} onClick={() => void run("close", () => data.actions.updateInterestStatus(interest._id, "closed"), "Interest closed.")}>Close interest</button>
@@ -867,7 +868,7 @@ function MatchCard({
 
       <MatchmakerActions match={match} male={match.maleRegistration} female={match.femaleRegistration} onMessage={onMessage} />
       <ContactRelease match={match} femaleInterestId={match.interest?.femaleWorkflow ? match.interest._id : undefined} onMessage={onMessage} />
-      {match.interest?.femaleWorkflow && <FemaleWorkflowActions interestId={match.interest._id} state={match.interest.femaleWorkflow.state} />}
+      {match.interest?.femaleWorkflow && <FemaleWorkflowActions interestId={match.interest._id} statusLabel={interestLifecycle({ ...match.interest, match: match })} state={match.interest.femaleWorkflow.state} />}
       {!isManualMatchDraft(match) && match.status === "paused" && <button type="button" className="btn" disabled={busy !== null} onClick={() => void run("resume", () => data.actions.resumeMatch(match._id), "Match resumed.")}>Resume</button>}
       {!["closed", "declined"].includes(match.status) && <AdminSelect label="Close or pause match" value={match.status} values={[match.status, ...((isManualMatchDraft(match) ? ["closed"] : ["closed", "declined", "paused"]) as MatchStatus[]).filter(status => status !== match.status)]} onChange={(nextStatus) => void run("status", () => data.actions.updateMatchStatus(match._id, nextStatus, match.adminNotes), "Match status updated.")} />}
       <NotesEditor initialValue={match.adminNotes} placeholder="Match notes..." onSave={(notes) => data.actions.updateMatchStatus(match._id, match.status, notes)} />
@@ -1155,9 +1156,9 @@ export function WorkbenchPageClient() {
               <h3>{mode === "interest" ? "Evaluating interest" : "Evaluating match"} · {selectedInterest ? interestLifecycle(selectedInterest) : selectedMatch?.status ?? "No selection"}</h3>
             </div>
             <div style={{ padding: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              {selectedInterest && !selectedInterest.femaleWorkflow && selectedInterest.visibility === "internal_only" && selectedInterest.fromRegistration?.gender === "female" && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <FemaleWorkflowActions interestId={selectedInterest._id} state="private_documented" />}
-              {selectedInterest?.femaleWorkflow && <FemaleWorkflowActions interestId={selectedInterest._id} state={selectedInterest.femaleWorkflow.state} />}
-              {selectedMatch?.interest?.femaleWorkflow && <FemaleWorkflowActions interestId={selectedMatch.interest._id} state={selectedMatch.interest.femaleWorkflow.state} />}
+              {selectedInterest && !selectedInterest.femaleWorkflow && selectedInterest.visibility === "internal_only" && selectedInterest.fromRegistration?.gender === "female" && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <FemaleWorkflowActions interestId={selectedInterest._id} statusLabel={interestLifecycle(selectedInterest)} state="private_documented" />}
+              {selectedInterest?.femaleWorkflow && <FemaleWorkflowActions interestId={selectedInterest._id} statusLabel={interestLifecycle(selectedInterest)} state={selectedInterest.femaleWorkflow.state} />}
+              {selectedMatch?.interest?.femaleWorkflow && <FemaleWorkflowActions interestId={selectedMatch.interest._id} statusLabel={interestLifecycle({ ...selectedMatch.interest, match: selectedMatch })} state={selectedMatch.interest.femaleWorkflow.state} />}
               {selectedInterest && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && (
                 <button
                   className="btn"
