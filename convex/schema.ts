@@ -138,6 +138,7 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  adminNameChangeAudits: defineTable({ registrationId: v.id("registrations"), oldName: v.string(), newName: v.string(), actor: v.literal("authenticated_shared_admin"), reason: v.string(), createdAt: v.number() }).index("by_registrationId", ["registrationId"]),
   profileContentCopyAudits: defineTable({
     operationKey: v.string(), request: v.string(), sourceId: v.id("registrations"), targetId: v.id("registrations"),
     beforeTarget: v.string(), sourceFingerprint: v.string(), afterFingerprint: v.optional(v.string()),

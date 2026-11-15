@@ -860,3 +860,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-14
 - Scoped Nov14 admin postclosure/poststart add and status management5591; public guards unchanged, new additions unconfirmed, no unrelated queue processing; tests updated for authorized admin semantics.
+
+## 2026-11-14
+- Prepared exact329 authenticated name-only correction with separate audit table and mandatory merge inventory coverage; production release gated.
