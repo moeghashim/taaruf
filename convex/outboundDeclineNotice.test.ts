@@ -129,5 +129,21 @@ test("canonical aliases and repeated outgoing projection count once",async()=>{
  await f.t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret:"selection-secret",interestId:female.interestId,reviewTokenHash:"a".repeat(64)});
  await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"selection-session",interestId:female.interestId,decision:"accept"});
  await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"recipient-session",interestId:female.interestId,confirmed:false});
- await f.t.run(async ctx=>{const alias=(await ctx.db.get(male.interestId))!,canonical=(await ctx.db.get(female.interestId))!;expect(await outboundDeclineCount(ctx,[alias,canonical,alias],f.sender)).toBe(1);});
+ await f.t.run(async ctx=>{const alias=(await ctx.db.get(male.interestId))!,canonical=(await ctx.db.get(female.interestId))!;expect(await outboundDeclineCount(ctx,[alias,canonical,alias],f.sender,f.event)).toBe(1);});
+});
+
+for(const role of ["brother","sister"] as const)test("active event only, >150 mixed historical rows cannot crowd count, no active/ambiguous event hidden: "+role,async()=>{
+ const f=await fixture();await f.toggle();const sessionHash=role==="brother"?"selection-session":"recipient-session",targetSession=role==="brother"?"recipient-session":"selection-session";
+ const decline=async(eventId:typeof f.event)=>{const x=await f.t.mutation(api.applicantInterests.submitInterestNumber,{sessionHash,expectedEventId:eventId,applicantNumber:role==="brother"?2:1});if(role==="brother")await f.t.mutation(api.applicantInterests.respondToInbound,{sessionHash:targetSession,interestId:x.interestId,decision:"decline"});else{await f.t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret:"selection-secret",interestId:x.interestId,reviewTokenHash:"a".repeat(64)});await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:targetSession,interestId:x.interestId,decision:"decline"});}return x.interestId;};
+ const prior=await decline(f.event);
+ await f.t.run(async ctx=>{const row=(await ctx.db.get(prior))!;const {_id,_creationTime,...fields}=row;void _id;void _creationTime;for(let i=0;i<151;i++)await ctx.db.insert("interests",{...fields,eventId:f.event});const roster=(await ctx.db.get(f.row))!;const {_id:a,_creationTime:b,...rr}=roster;void a;void b;await ctx.db.insert("eventRegistrations",{...rr,eventId:f.other,registrationId:f.recipient,gender:"female"});});
+ await f.toggle(f.event,false);await f.toggle(f.other);await decline(f.other);
+ let d=await f.t.query(api.applicantInterests.getDashboard,{sessionHash});expect(d.interestSubmissionEventId).toBe(f.other);expect(d.outboundDeclineCount).toBe(1);
+ await f.toggle(f.other,false);d=await f.t.query(api.applicantInterests.getDashboard,{sessionHash});expect(d.interestSubmissionEventId).toBe(null);expect(d.outboundDeclineCount).toBe(0);
+ await f.t.run(async ctx=>{await ctx.db.patch(f.event,{interestSubmissionsEnabled:true});await ctx.db.patch(f.other,{interestSubmissionsEnabled:true});});d=await f.t.query(api.applicantInterests.getDashboard,{sessionHash});expect(d.interestSubmissionEventId).toBe(null);expect(d.outboundDeclineCount).toBe(0);
+});
+
+test("event-scoped canonical dedup rejects cross-event and eventless canonical receipts",async()=>{
+ const f=await fixture();await f.toggle();const female=await reverse(f);const male=await f.submit();await f.t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret:"selection-secret",interestId:female.interestId,reviewTokenHash:"a".repeat(64)});await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"selection-session",interestId:female.interestId,decision:"accept"});await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"recipient-session",interestId:female.interestId,confirmed:false});
+ await f.t.run(async ctx=>{const alias=(await ctx.db.get(male.interestId))!;expect(await outboundDeclineCount(ctx,[alias,alias],f.sender,f.event)).toBe(1);expect(await outboundDeclineCount(ctx,[alias],f.sender,null)).toBe(0);expect(await outboundDeclineCount(ctx,[alias],f.sender,f.other)).toBe(0);await ctx.db.patch(female.interestId,{eventId:f.other});expect(await outboundDeclineCount(ctx,[alias],f.sender,f.event)).toBe(0);const eventless={...alias};Reflect.deleteProperty(eventless,"eventId");expect(await outboundDeclineCount(ctx,[eventless],f.sender,f.event)).toBe(0);});
 });

@@ -349,10 +349,13 @@ export const getDashboard = query({
 
     const submissions = eligibleEvent ? await ctx.db.query("interests")
       .withIndex("by_submission_quota", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id).eq("source", "platform_submission").eq("testReset", undefined).eq("slotReturnedAt", undefined)).take(3) : [];
+    // Exact event index prefix avoids crowding by the legacy 100-row history window.
+    const noticeRows = eligibleEvent ? await ctx.db.query("interests")
+      .withIndex("by_fromRegistrationId_and_eventId_and_source", q => q.eq("fromRegistrationId", registration._id).eq("eventId", eligibleEvent._id)).collect() : [];
     return {
       eventLogisticsRestricted: !canReceiveEventMessages(registration),
       requestedConnectionId: args.connectionId ?? null,
-      outboundDeclineCount: await outboundDeclineCount(ctx, outboundRows, registration._id),
+      outboundDeclineCount: await outboundDeclineCount(ctx, noticeRows, registration._id, eligibleEvent?._id ?? null),
       interestSubmissionEventId: eligibleEvent?._id ?? null,
       interestSubmissions: submissions.map(row => ({ interestId: row._id, status: ["closed", "declined", "withdrawn"].includes(row.status) ? "closed" : "submitted" })),
       applicant: {

@@ -765,7 +765,7 @@ export default function ApplicantDashboardPage() {
         if (!response.ok) throw new Error("Availability refresh failed");
         const eligibility = await response.json();
         if (stopped) return;
-        setData(current => current ? { ...current, ...eligibility } : current);
+        setData(current => current ? { ...current, ...eligibility, outboundDeclineCount: current.interestSubmissionEventId === eligibility.interestSubmissionEventId ? current.outboundDeclineCount : 0 } : current);
         setEligibilityError(null);
       } catch {
         if (!stopped) setEligibilityError("Unable to refresh interest availability. Submitting is paused while we reconnect.");
