@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import schema from "./schema";
+import { outboundDeclineCount } from "./outboundDeclineNotice";
 import { modules } from "./test.setup";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -35,7 +36,7 @@ const snapshot = (f: Awaited<ReturnType<typeof fixture>>) => f.t.run(async ctx =
 
 for (const mode of ["ordinary", "female", "mutual"] as const) for (const stage of ["initial", "final"] as const) for (const actor of ["brother", "sister"] as const) {
  if(stage === "initial" && actor !== (mode === "ordinary" ? "sister" : "brother")) continue;
- test(mode+" "+stage+" declined by "+actor+": only actual outbound sender receives anonymous boolean", async()=>{
+ test(mode+" "+stage+" declined by "+actor+": only actual outbound sender receives anonymous count", async()=>{
   const f=await fixture();await f.toggle();
   const id=mode === "ordinary" ? (await f.submit()).interestId : (await reverse(f)).interestId;
   if(mode === "mutual") await f.submit();
@@ -55,8 +56,8 @@ for (const mode of ["ordinary", "female", "mutual"] as const) for (const stage o
   for(const [who,key] of [["brother","selection-session"],["sister","recipient-session"]] as const){
    const d=await f.t.query(api.applicantInterests.getDashboard,{sessionHash:key});
    const expected=who!==actor&&(mode === "mutual" || who === (mode === "ordinary" ? "brother" : "sister"));
-   expect(d.hasOutboundDecline).toBe(expected);
-   expect(typeof d.hasOutboundDecline).toBe("boolean");
+   expect(d.outboundDeclineCount).toBe(expected ? 1 : 0);
+   expect(typeof d.outboundDeclineCount).toBe("number");
    expect(d.history.length>0).toBe(who===actor);
    if(expected){expect(d.inbound).toEqual([]);expect(d.outbound).toEqual([]);expect(d.privateDocumented).toEqual([]);expect(d.history).toEqual([]);}
   }
@@ -66,7 +67,7 @@ for (const mode of ["ordinary", "female", "mutual"] as const) for (const stage o
 for(const who of ["brother","sister"] as const)test("withdrawal stays concealed: "+who,async()=>{
  const f=await fixture();await f.toggle();const id=who==="brother"?(await f.submit()).interestId:(await reverse(f)).interestId;
  await f.t.mutation(api.applicantInterests.withdrawOutbound,{sessionHash:who==="brother"?"selection-session":"recipient-session",interestId:id});
- for(const sessionHash of ["selection-session","recipient-session"])expect((await f.t.query(api.applicantInterests.getDashboard,{sessionHash})).hasOutboundDecline).toBe(false);
+ for(const sessionHash of ["selection-session","recipient-session"])expect((await f.t.query(api.applicantInterests.getDashboard,{sessionHash})).outboundDeclineCount).toBe(0);
 });
 for(const reason of ["missing-audit","admin","expiry","reset","reopened","wrong-flow","wrong-actor","tied-admin","cancelled-event"] as const)test("negative provenance: "+reason,async()=>{
  const f=await fixture();await f.toggle();const id=(await f.submit()).interestId;
@@ -81,7 +82,7 @@ for(const reason of ["missing-audit","admin","expiry","reset","reopened","wrong-
   else if(reason==="wrong-actor") { for(const e of events) if(e.eventType==="inbound_declined") await ctx.db.patch(e._id,{actorRegistrationId:f.sender}); }
   else await ctx.db.insert("interestFlowEvents",{interestId:id,interestFlowId:flow._id,actor:"admin",eventType:reason==="expiry"?"review_expired":reason==="reopened"?"admin_submission_reopened":"admin_connection_closed",createdAt:reason==="tied-admin"?last:last+1});
  });
- expect((await f.dashboard()).hasOutboundDecline).toBe(false);
+ expect((await f.dashboard()).outboundDeclineCount).toBe(0);
 });
 
 for(const reason of ["duplicate-alias","alias-reset","canonical-reset","wrong-event","withdrawn-alias","missing-share","missing-canonical-time"] as const)test("mutual negative: "+reason,async()=>{
@@ -89,7 +90,7 @@ for(const reason of ["duplicate-alias","alias-reset","canonical-reset","wrong-ev
  await f.t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret:"selection-secret",interestId:female.interestId,reviewTokenHash:"a".repeat(64)});
  await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"selection-session",interestId:female.interestId,decision:"accept"});
  await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"recipient-session",interestId:female.interestId,confirmed:false});
- expect((await f.dashboard()).hasOutboundDecline).toBe(true);
+ expect((await f.dashboard()).outboundDeclineCount).toBe(1);
  await f.t.run(async ctx=>{
   const alias=(await ctx.db.get(male.interestId))!,canonical=(await ctx.db.get(female.interestId))!;
   if(reason==="duplicate-alias"){const {_id,_creationTime,...data}=alias;void _id;void _creationTime;await ctx.db.insert("interests",data);}
@@ -99,5 +100,34 @@ for(const reason of ["duplicate-alias","alias-reset","canonical-reset","wrong-ev
   else if(reason==="missing-canonical-time")await ctx.db.patch(alias._id,{canonicalizedAt:undefined});
   else await ctx.db.patch(canonical._id,{femaleWorkflow:{...canonical.femaleWorkflow!,reviewTokenHash:undefined}});
  });
- expect((await f.dashboard()).hasOutboundDecline).toBe(false);
+ expect((await f.dashboard()).outboundDeclineCount).toBe(0);
+});
+
+for(const sender of ["brother","sister"] as const)test("aggregate two genuine declines, zero hidden, no identity payload: "+sender,async()=>{
+ const f=await fixture();await f.toggle();
+ const third=await f.t.run(async ctx=>{
+  const original=(await ctx.db.get(sender==="brother"?f.recipient:f.sender))!;
+  const {_id,_creationTime,...fields}=original;void _id;void _creationTime;
+  const id=await ctx.db.insert("registrations",{...fields,name:"Counterpart secret three",email:"third@synthetic.invalid",publicApplicantNumber:3});
+  await ctx.db.insert("applicantSessions",{registrationId:id,sessionHash:"third-session",expiresAt:Date.now()+86400000,createdAt:Date.now()});
+  const roster=(await ctx.db.get(f.row))!;const {_id:r,_creationTime:c,...rr}=roster;void r;void c;
+  await ctx.db.insert("eventRegistrations",{...rr,registrationId:id,gender:original.gender});return id;
+ });void third;
+ const sessionHash=sender==="brother"?"selection-session":"recipient-session";
+ expect((await f.t.query(api.applicantInterests.getDashboard,{sessionHash})).outboundDeclineCount).toBe(0);
+ for(const number of [sender==="brother"?2:1,3]){
+  const submitted=await f.t.mutation(api.applicantInterests.submitInterestNumber,{expectedEventId:f.event,sessionHash,applicantNumber:number});
+  const recipientSession=number===3?"third-session":sender==="brother"?"recipient-session":"selection-session";
+  if(sender==="brother")await f.t.mutation(api.applicantInterests.respondToInbound,{sessionHash:recipientSession,interestId:submitted.interestId,decision:"decline"});
+  else {await f.t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret:"selection-secret",interestId:submitted.interestId,reviewTokenHash:"a".repeat(64)});await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:recipientSession,interestId:submitted.interestId,decision:"decline"});}
+ }
+ const d=await f.t.query(api.applicantInterests.getDashboard,{sessionHash});expect(d.outboundDeclineCount).toBe(2);expect(Number.isSafeInteger(d.outboundDeclineCount)).toBe(true);expect(d.history).toEqual([]);expect(d.outbound).toEqual([]);expect(d.privateDocumented).toEqual([]);expect(JSON.stringify(d)).not.toContain("Counterpart secret three");expect(JSON.stringify(d)).not.toContain("third@synthetic.invalid");
+});
+
+test("canonical aliases and repeated outgoing projection count once",async()=>{
+ const f=await fixture();await f.toggle();const female=await reverse(f);const male=await f.submit();
+ await f.t.mutation(api.femaleInterestWorkflow.createReview,{adminSecret:"selection-secret",interestId:female.interestId,reviewTokenHash:"a".repeat(64)});
+ await f.t.mutation(api.femaleInterestWorkflow.respond,{sessionHash:"selection-session",interestId:female.interestId,decision:"accept"});
+ await f.t.mutation(api.femaleInterestWorkflow.confirm,{sessionHash:"recipient-session",interestId:female.interestId,confirmed:false});
+ await f.t.run(async ctx=>{const alias=(await ctx.db.get(male.interestId))!,canonical=(await ctx.db.get(female.interestId))!;expect(await outboundDeclineCount(ctx,[alias,canonical,alias],f.sender)).toBe(1);});
 });

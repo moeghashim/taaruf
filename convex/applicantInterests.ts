@@ -2,7 +2,7 @@ import { pendingReciprocal, assertCanonicalAction, sharedMutual } from "./recipr
 import { acceptedInboundFirstName } from "./femaleInterestWorkflow";
 import { isSecurityRetired } from "./registrationSecurity";
 import { ownClosedDecision } from "./ownClosedConnection";
-import { hasOutboundDecline } from "./outboundDeclineNotice";
+import { outboundDeclineCount } from "./outboundDeclineNotice";
 import { enqueueFinalRequests, finalRequestEnabled } from "./finalRequest";
 import { existingInboundReview } from "./existingInboundReview";
 import { interestBioVisible } from "./bioVisibility";
@@ -352,7 +352,7 @@ export const getDashboard = query({
     return {
       eventLogisticsRestricted: !canReceiveEventMessages(registration),
       requestedConnectionId: args.connectionId ?? null,
-      hasOutboundDecline: await hasOutboundDecline(ctx, outboundRows, registration._id),
+      outboundDeclineCount: await outboundDeclineCount(ctx, outboundRows, registration._id),
       interestSubmissionEventId: eligibleEvent?._id ?? null,
       interestSubmissions: submissions.map(row => ({ interestId: row._id, status: ["closed", "declined", "withdrawn"].includes(row.status) ? "closed" : "submitted" })),
       applicant: {

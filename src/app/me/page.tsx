@@ -86,7 +86,7 @@ type DashboardData = {
   inbound: DashboardInterest[];
   outbound: DashboardInterest[];
   privateDocumented: DashboardInterest[];
-  hasOutboundDecline?: boolean;
+  outboundDeclineCount?: number;
   history?: { interestId: string; status: string; ownDecision: string | null; ownInitialDecision?: string | null; ownFinalApproval?: string }[];
   canSubmitInterest: boolean;
   interestSubmissionLimit: number;
@@ -1539,7 +1539,7 @@ export default function ApplicantDashboardPage() {
 
             </div>
             <div hidden={view !== "interests"} className="applicant-sections">
-              {(!!closedHistory.length || data.hasOutboundDecline === true) && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{data.hasOutboundDecline === true && <p>Your outbound interest has been declined.</p>}{closedHistory.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
+              {(!!closedHistory.length || (Number.isSafeInteger(data.outboundDeclineCount) && (data.outboundDeclineCount ?? 0) > 0)) && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{Number.isSafeInteger(data.outboundDeclineCount) && (data.outboundDeclineCount ?? 0) > 0 && <p>{data.outboundDeclineCount === 1 ? "Your outbound interest has been declined." : `${data.outboundDeclineCount} of your outbound interests have been declined.`}</p>}{closedHistory.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
               <Section
                 title="Inbound Interests"
                 viewerGender={data.applicant.gender}

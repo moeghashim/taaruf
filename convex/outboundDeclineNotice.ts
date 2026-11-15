@@ -2,9 +2,10 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { ownClosedDecision } from "./ownClosedConnection";
 
-// Policy5800 permits ONLY this anonymous boolean. No IDs, counts, timestamps,
+// Policy5804 permits ONLY an anonymous aggregate count. No IDs or timestamps,
 // actor/profile fields or audit records cross the applicant boundary.
-export async function hasOutboundDecline(ctx: QueryCtx, outgoing: Doc<"interests">[], viewer: Id<"registrations">): Promise<boolean> {
+export async function outboundDeclineCount(ctx: QueryCtx, outgoing: Doc<"interests">[], viewer: Id<"registrations">): Promise<number> {
+  const declined = new Set<Id<"interests">>();
   for (const submission of outgoing) {
     if (submission.fromRegistrationId !== viewer || submission.toRegistrationId === viewer || submission.testReset || submission.slotReturnedAt !== undefined || submission.status === "withdrawn") continue;
     const row = submission.canonicalInterestId ? await ctx.db.get(submission.canonicalInterestId) : submission;
@@ -22,7 +23,7 @@ export async function hasOutboundDecline(ctx: QueryCtx, outgoing: Doc<"interests
     const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
     // Existing receipt validates latest lifecycle, exact actor, final timestamp,
     // row/flow consistency and ambiguous legacy histories. Own history is unchanged.
-    if (await ownClosedDecision(ctx, row, flow, counterpart) === "declined") return true;
+    if (await ownClosedDecision(ctx, row, flow, counterpart) === "declined") declined.add(row._id);
   }
-  return false;
+  return declined.size;
 }
