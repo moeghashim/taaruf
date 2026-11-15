@@ -854,3 +854,12 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - UI4831 follow-up: coordinated workflow detail suppression across all interest sections, restored stale-link authoritative recovery and explicit focus, collapsed receipt-only workspace; added22 mounted browser cases (execution deferred to runtime rerun),47focused tests/types/lint pass. No backend or deployment. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - P1 review fix: scoped platform consent aggregation to same expression, canonical link or existing common match; added11 public-handler regressions.1709 tests, app/Convex types and lint pass. Final isolated HTTP recheck pending; prior26 screenshots inspected. Preview only. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-14
+- Added force337338 exception and isolated tests for Layla5509; local only, no production writes.
+
+## 2026-11-14
+- Scoped Nov14 admin postclosure/poststart add and status management5591; public guards unchanged, new additions unconfirmed, no unrelated queue processing; tests updated for authorized admin semantics.
+
+## 2026-11-14
+- Prepared exact329 authenticated name-only correction with separate audit table and mandatory merge inventory coverage; production release gated.
