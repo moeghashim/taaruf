@@ -4,7 +4,7 @@ import { api } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import schema from "./schema";
 import { modules } from "./test.setup";
-import { interestLifecycle } from "../src/lib/interest-lifecycle";
+import { canReleaseContacts, interestLifecycle } from "../src/lib/interest-lifecycle";
 import { adminMutualInterests } from "../src/lib/admin-mutual-interest";
 import type { ConvexHttpClient } from "convex/browser";
 process.env.ATTENDANCE_ADMIN_SECRET = "synthetic-approval-test";
@@ -75,4 +75,35 @@ test("reset, paused and released precede final review; missing projection never 
 test("admin queries reject unauthorized access", async () => {
   const f = await fixture(); await expect(f.t.query(api.interests.getAll, {})).rejects.toThrow("Unauthorized");
   await expect(f.t.query(api.interests.workbenchPage, { paginationOpts: { numItems: 100, cursor: null } })).rejects.toThrow("Unauthorized");
+});
+
+
+test.each(["requester", "recipient"] as const)("queued consent stays pair-specific with another released match on %s", async occupied => {
+  const f = await fixture();
+  const otherMatchId = await f.t.run(async ctx => {
+    const person = (await ctx.db.get(occupied === "requester" ? f.brother : f.sister))!;
+    const { _id, _creationTime, ...profile } = person;
+    void _id; void _creationTime;
+    const other = await ctx.db.insert("registrations", { ...profile, name: "Synthetic other partner", email: "other@example.invalid", publicApplicantNumber: 9001 });
+    const matchId = await ctx.db.insert("matches", { maleRegistrationId: occupied === "requester" ? other : f.brother, femaleRegistrationId: occupied === "requester" ? f.sister : other, interestType: "mutual_interest", status: "contact_shared", contactGate: "contacts_released", createdAt: 1, updatedAt: 1 });
+    await ctx.db.patch(occupied === "requester" ? f.sister : f.brother, { activeMatchId: matchId });
+    await ctx.db.patch(f.interestId, { status: "queued" });
+    if (occupied === "recipient") await ctx.db.patch(f.flowId, { requesterFinalApproval: "pending", requesterExplicitFinalAt: undefined, requesterFinalApprovalAt: undefined });
+    return matchId;
+  });
+  const snapshot = () => f.t.run(async ctx => ({ interests: await ctx.db.query("interests").collect(), flows: await ctx.db.query("interestFlows").collect(), registrations: await ctx.db.query("registrations").collect(), matches: await ctx.db.query("matches").collect(), audit: await ctx.db.query("interestFlowEvents").collect(), deliveries: await ctx.db.query("femaleWorkflowDeliveries").collect() }));
+  const before = await snapshot();
+  const all = await f.t.query(api.interests.getAll, { adminSecret });
+  const page = await f.t.query(api.interests.workbenchPage, { adminSecret, paginationOpts: { numItems: 100, cursor: null } });
+  const bridge = await adminMutualInterests({ consistentQuery: f.t.query.bind(f.t) } as unknown as Pick<ConvexHttpClient, "consistentQuery">, adminSecret);
+  for (const rows of [all, page.page, bridge]) {
+    const row = rows.find(r => r._id === f.interestId)!;
+    expect(row.status).toBe("queued");
+    expect(row.match).toBeNull();
+    expect(row).toMatchObject({ finalApprovals: { requester: occupied === "requester" ? "approved" : "pending", recipient: "pending" } });
+    expect((occupied === "requester" ? row.fromRegistration : row.toRegistration)?.activeMatchId).toBe(otherMatchId);
+    expect(canReleaseContacts(row.match)).toBe(false);
+    expect(interestLifecycle(row)).toBe(occupied === "requester" ? scenarios[0][2] : scenarios[2][2]);
+  }
+  expect(await snapshot()).toEqual(before);
 });
