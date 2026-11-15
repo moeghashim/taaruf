@@ -138,6 +138,7 @@ const eventWaitlistStatus = v.union(
 );
 
 export default defineSchema({
+  adminNameChangeAudits: defineTable({ registrationId: v.id("registrations"), oldName: v.string(), newName: v.string(), actor: v.literal("authenticated_shared_admin"), reason: v.string(), createdAt: v.number() }).index("by_registrationId", ["registrationId"]),
   profileContentCopyAudits: defineTable({
     operationKey: v.string(), request: v.string(), sourceId: v.id("registrations"), targetId: v.id("registrations"),
     beforeTarget: v.string(), sourceFingerprint: v.string(), afterFingerprint: v.optional(v.string()),
@@ -274,6 +275,13 @@ export default defineSchema({
     attempt: v.number(), success: v.boolean(), receivedAt: v.number(),
     error: v.optional(v.string()), rateLimited: v.optional(v.boolean()), retryAfterMs: v.optional(v.number()),
   }).index("by_deliveryId", ["deliveryId"]),
+  contactReleaseEmails: defineTable({
+    matchId:v.id("matches"), recipientId:v.id("registrations"), key:v.string(), email:v.string(),
+    releaseAt:v.number(), activationAt:v.number(), createdAt:v.number(),
+    status:v.union(v.literal("pending"),v.literal("sending"),v.literal("sent"),v.literal("failed"),v.literal("cancelled")),
+    attempts:v.number(),nextAttemptAt:v.number(),leaseUntil:v.optional(v.number()),firstAttemptAt:v.optional(v.number()),sentAt:v.optional(v.number()),providerId:v.optional(v.string()),cooldownUntil:v.optional(v.number()),error:v.optional(v.string()),
+    payload:v.optional(v.object({from:v.string(),to:v.array(v.string()),cc:v.optional(v.array(v.string())),subject:v.string(),text:v.string(),html:v.optional(v.string())})),
+  }).index("by_key",["key"]).index("by_matchId",["matchId"]).index("by_status_due",["status","nextAttemptAt"]).index("by_cooldown",["cooldownUntil"]),
   femaleWorkflowDeliveries: defineTable({
     resetAuditId: v.optional(v.id("pairTestResetAudits")),
     resetAt: v.optional(v.number()),

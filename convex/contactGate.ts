@@ -1,3 +1,4 @@
+import { enqueueReleasedContacts } from "./contactReleaseEmail";
 import { assertCanonicalAction } from "./reciprocalConnection";
 import { isSecurityRetired } from "./registrationSecurity";
 import { assertNotArchived } from "./archiveRules";
@@ -23,7 +24,7 @@ export async function enqueueContactDelivery(ctx: MutationCtx, interestId: Id<"i
   const interest = kind === "sister_confirmation" ? await ctx.db.get(interestId) : null;
   const authorized = await deliveryAuthorized(ctx, { kind, createdAt, reviewActivationAt: reviewActivationAt ?? undefined, sisterActivationAt: sisterActivationAt ?? undefined });
   const recipient = ["brother_review", "sister_confirmation"].includes(kind) ? await ctx.db.get(recipientId) : null;
-  const ready = !["brother_review", "sister_confirmation"].includes(kind) || (authorized && !!recipient && !!deliveryConfig(recipient.email));
+  const ready = kind === "contacts_ready" && process.env.CONTACT_RELEASE_EMAIL_ENABLED === "true" ? false : !["brother_review", "sister_confirmation"].includes(kind) || (authorized && !!recipient && !!deliveryConfig(recipient.email));
   // Record ineligible shares too: reissue must not turn a preactivation share into a future send.
   await ctx.db.insert("femaleWorkflowDeliveries", { interestId, recipientId, kind, key, status: ready ? "pending" : "failed", attempts: 0, nextAttemptAt: createdAt, createdAt, ...(kind === "sister_confirmation" ? { sisterAcceptedAt: interest?.femaleWorkflow?.brotherAcceptedAt, sisterRecipientEmail: recipient?.email } : {}), ...(ready && sisterActivationAt !== null ? { sisterActivationAt } : {}), ...(ready && reviewActivationAt !== null ? { reviewActivationAt } : {}), ...(ready ? {} : { error: "Review notification not activated/configured at share time; no backfill" }) });
 }
@@ -263,6 +264,7 @@ export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches"
     if ([male, female].some(p => !p.email || !p.phone)) throw new Error("Both applicants must have contact details");
     const now = Date.now();
     await ctx.db.patch(match._id, {status: "contact_shared", contactGate: "contacts_released", adminReleasedAt: match.adminReleasedAt ?? now, updatedAt: now});
+    if (match.adminReleasedAt === undefined && match.contactGate !== "contacts_released" && match.status !== "contact_shared" && match.contactSharedNotificationSentAt === undefined) await enqueueReleasedContacts(ctx, match._id);
     for (const p of [male, female]) await ctx.db.patch(p._id, {activeMatchId: match._id});
     return;
   }
@@ -273,7 +275,7 @@ export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches"
   if (flows.some(f => f.requesterFinalApproval !== "approved" || f.recipientFinalApproval !== "approved")) throw new Error("Both applicants must give final approval before contacts can be shared");
   const { male, female } = await assertParticipantsAvailable(ctx, match.maleRegistrationId, match.femaleRegistrationId, match._id);
   if ([male, female].some(p => !p.email || !p.phone)) throw new Error("Both applicants must have contact details");
-  const alreadyReleased = match.contactGate === "contacts_released" || (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
+  const alreadyReleased = match.adminReleasedAt !== undefined || match.status === "contact_shared" || match.contactSharedNotificationSentAt !== undefined || match.contactGate === "contacts_released" || (!match.contactGate && flows.some(f => f.contactSharedAt !== undefined));
   const now = Date.now();
   if (!alreadyReleased) {
     await ctx.db.patch(match._id, { contactGate: "contacts_released", adminReleasedAt: now });
@@ -284,6 +286,7 @@ export async function releasePairContacts(ctx: MutationCtx, match: Doc<"matches"
       await ctx.db.insert("interestFlowEvents", { interestFlowId: flow._id, interestId: flow.interestId, actor: "system", eventType: "contacts_disclosed_in_portal", createdAt: now });
     }
     for (const person of [male, female]) await enqueueContactDelivery(ctx, interest._id, person._id, "contacts_ready");
+    await enqueueReleasedContacts(ctx, match._id);
   }
   await ctx.db.patch(match._id, { status: "contact_shared", updatedAt: now });
   for (const person of [male, female]) await ctx.db.patch(person._id, { activeMatchId: match._id });

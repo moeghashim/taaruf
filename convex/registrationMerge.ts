@@ -97,7 +97,7 @@ export async function plan(ctx: QueryCtx,pair:Pair,policy:Policy="unresolved") {
   if(unsentReceipts || unsafeEventMail || s.state.profileRejectionNotices.length) blockers.push("Unsettled outbound delivery requires reconciliation before merge");
   if(source.mergedIntoRegistrationId || target.mergedIntoRegistrationId) blockers.push("Already merged identity");
   if(conflicts.length && policy==="unresolved") blockers.push("Eligibility decision unresolved: explicit authorization required");
-  if(s.state.matches.length || s.state.profileShares.length || s.state.femaleWorkflowDeliveries.length || s.state.matchmakerNotifications.length) blockers.push("Capability/delivery topology changed; review required");
+  if(s.state.matches.length || s.state.profileShares.length || s.state.femaleWorkflowDeliveries.length || s.state.matchmakerNotifications.length || s.state.contactReleaseEmails.length) blockers.push("Capability/delivery topology changed; review required");
   if((s.state.interestFlows as Doc<"interestFlows">[]).some(f=>f.flowStatus!=="private_documented" || f.photoDecision!=="pending" || f.bioVisibleAt!==undefined || f.photosVisibleAt!==undefined || f.contactSharedAt!==undefined)) blockers.push("Consent-bearing workflow cannot be transferred");
   const writes:{table:TableNames;id:Id<TableNames>;before:Row;patch:Record<string,unknown>}[]=[];
   const add=(table:TableNames,row:Row,patch:Record<string,unknown>)=>writes.push({table,id:row._id,before:row,patch});

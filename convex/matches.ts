@@ -645,6 +645,7 @@ export const assertNotificationEligible = mutation({
     requireAdmin(args.adminSecret);
     const match = await ctx.db.get(args.id);
     if (!match || match.testResetAt !== undefined || isManualMatchDraft(match) || ["closed", "declined", "paused"].includes(match.status)) throw new Error("Match is not active");
+    if (process.env.CONTACT_RELEASE_EMAIL_ENABLED === "true" || await ctx.db.query("settings").withIndex("by_key", q => q.eq("key", "contactReleaseEmailActivatedAt")).unique()) throw new Error("Contact-sharing notifications are automatic; manual Notify is disabled to prevent duplicates");
     await assertMatchingParticipants(ctx, match.maleRegistrationId, match.femaleRegistrationId);
     return true;
   },

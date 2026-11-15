@@ -1,0 +1,42 @@
+# Contact-sharing email — approval preview
+
+**Not live.** This change and its independent activation require preview approval. No existing queues will be replayed.
+
+## Exact recipient-facing copy
+
+**Subject:** Alhamdulillah — you have a match! 🎉
+
+Assalamu alaikum!
+
+Alhamdulillah, a match has been created for you, and your contact details have now been shared with each other!
+
+Sign in to your portal to view your match’s contact details and take the next step:
+https://www.1plus1match.com/me
+
+May Allah place barakah in this connection and guide you both toward what is best. We’re excited for you!
+
+The 1 Plus 1 Team
+
+Plain text and matching HTML paragraphs/link are included in the actual provider payload. Existing frozen retry payloads are never rewritten.
+
+Sent separately to each participant’s registered email. No partner name, phone, email, photo, or private interest appears in the notice. Sign-in remains required.
+
+## Trigger and scope
+
+Only the first actual admin contact release—not match creation, mutual interest, initial acceptance, or pending-admin review—queues both recipients. Ordinary, female/mutual interest-linked and standalone presented matchmaker releases use the same match-keyed delivery. Existing brother-review and bilateral own-final-request settings and activation epochs are untouched.
+
+## Future-only activation (after approved deployment)
+
+1. Keep existing `FEMALE_WORKFLOW_EMAIL_MODE=brother-final-request-production` and all current cutoffs unchanged.
+2. Enable the separate `CONTACT_RELEASE_EMAIL_ENABLED=true` only under exclusive configuration ownership, then quiesce legacy/manual requests before creating the independent cutoff with `contactReleaseEmail:activate`. Sender/portal credential slots are reused; never print them.
+3. Releases before activation or while disabled persist negative delivery rows and cannot be backfilled. Do not retry historical shared-outbox contacts rows.
+4. The one-minute contact worker sends only matching epoch, post-cutoff actual releases and rechecks current release, participant, recipient address, archive/reset/revocation/closed status. Each recipient has a stable provider idempotency key and immutable payload.
+5. Once this gate is enabled/activated, manual **Notify** is blocked (also during later rollback) to avoid duplicate/early match notices; use actual contact release. Existing automatic inbound/final emails remain unchanged.
+
+## Rollback
+
+Set only `CONTACT_RELEASE_EMAIL_ENABLED=false`; preserve its cutoff and existing brother/final settings. Re-enabling pending post-cutoff rows requires reconciliation; do not reset timestamps. An already-started provider request cannot be recalled.
+
+## Preview testing boundary
+
+Automated tests use a local Convex simulator, synthetic participants and a mocked provider, and execute the real contact-release transaction and delivery worker. Never use real participants or production writes to review this PR. A hosted frontend preview is **UI-review-only** unless a compatible isolated backend is separately verified; it is not authorization to submit live data. No provider delivery is claimed from synthetic tests. Historical matchmaker release evidence (gate/status/notification marker) is fenced even when older records lack a release timestamp. Same-match reopen/reset never reissues contact notices; a distinct new connection requires a new match identity.
