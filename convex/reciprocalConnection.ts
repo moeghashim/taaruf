@@ -31,7 +31,7 @@ export async function aliases(ctx: ReadCtx, canonical: Interest) {
   return await ctx.db.query("interests").withIndex("by_canonicalInterestId", q => q.eq("canonicalInterestId", canonical._id)).take(3);
 }
 export async function assertCanonicalAction(ctx: ReadCtx, row: Interest) {
-  if (row.canonicalInterestId) throw new Error("Connection unavailable");
+  if (row.adminRemovedAt !== undefined || row.canonicalInterestId) throw new Error("Connection unavailable");
   const linked = await aliases(ctx, row);
   if (linked.length > 1 || linked.some(a => a.testReset || ["withdrawn", "closed", "declined"].includes(a.status))) throw new Error("Connection unavailable");
 }
