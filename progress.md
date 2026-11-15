@@ -869,3 +869,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 - Updated only recipient singular/plural closure wording and reassurance in src/app/me/page.tsx and rendered-copy tests for Danielle5972; preserves decline semantics and both genders; preview-only. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Added guarded internal exact-ID deletion and dry-run for approved synthetic matches5910, fixture regressions and isolated runtime proof; no live deployment or applicant changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-15
+- Prepared authenticated exact271 name-only correction authorized by Layla6010/6015; reuses audit table, preserves all other fields and live98-module baseline, deployment gated.
