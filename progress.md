@@ -866,3 +866,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-15
 - Appended Layla5885 approved reassurance only to recipient anonymous outbound-decline singular/plural notices in src/app/me/page.tsx; added rendered gender/count/own-decision regressions. Preview-only; no backend, email or live changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Added guarded internal exact-ID deletion and dry-run for approved synthetic matches5910, fixture regressions and isolated runtime proof; no live deployment or applicant changes. <!-- project: github.com/moeghashim/clawscrewskill -->
