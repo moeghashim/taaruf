@@ -303,6 +303,7 @@ export default defineSchema({
   // Legacy hourly counters retained for compatibility; no longer read or written.
   interestLookups: defineTable({ registrationId: v.id("registrations"), windowStart: v.number(), count: v.number() }).index("by_registrationId", ["registrationId"]),
   interests: defineTable({
+    adminRemovedAt: v.optional(v.number()),
     canonicalInterestId: v.optional(v.id("interests")),
     canonicalizedAt: v.optional(v.number()),
     slotReturnedAt: v.optional(v.number()),
@@ -458,6 +459,11 @@ export default defineSchema({
     registrationId: v.id("registrations"), oldEmail: v.string(), newEmail: v.string(),
     reason: v.string(), actor: v.literal("authenticated_shared_admin"), createdAt: v.number(),
   }).index("by_registrationId", ["registrationId"]),
+
+  // Real administrative removals are distinct from synthetic test resets.
+  adminPairRemovalAudits: defineTable({
+    operationKey: v.string(), request: v.string(), snapshot: v.string(), createdAt: v.number(),
+  }).index("by_operationKey", ["operationKey"]),
 
   // Restricted operational audit: intentionally no public query or mutation.
   pairTestResetAudits: defineTable({
