@@ -1,4 +1,5 @@
 "use client";
+import { SupportRibbon } from "@/components/applicant/support-ribbon";
 import { ContactGuidance } from "@/components/applicant/contact-guidance";
 import { interestCategories, visibleWorkflowReviews, selectedWorkflowReview } from "@/lib/interest-categories";
 import type { ReviewNoticeInput } from "@/lib/received-interest-updates";
@@ -85,6 +86,7 @@ type DashboardData = {
   inbound: DashboardInterest[];
   outbound: DashboardInterest[];
   privateDocumented: DashboardInterest[];
+  outboundDeclineCount?: number;
   history?: { interestId: string; status: string; ownDecision: string | null; ownInitialDecision?: string | null; ownFinalApproval?: string }[];
   canSubmitInterest: boolean;
   interestSubmissionLimit: number;
@@ -763,7 +765,7 @@ export default function ApplicantDashboardPage() {
         if (!response.ok) throw new Error("Availability refresh failed");
         const eligibility = await response.json();
         if (stopped) return;
-        setData(current => current ? { ...current, ...eligibility } : current);
+        setData(current => current ? { ...current, ...eligibility, outboundDeclineCount: current.interestSubmissionEventId === eligibility.interestSubmissionEventId ? current.outboundDeclineCount : 0 } : current);
         setEligibilityError(null);
       } catch {
         if (!stopped) setEligibilityError("Unable to refresh interest availability. Submitting is paused while we reconnect.");
@@ -1537,7 +1539,7 @@ export default function ApplicantDashboardPage() {
 
             </div>
             <div hidden={view !== "interests"} className="applicant-sections">
-              {!!closedHistory.length && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{closedHistory.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
+              {(!!closedHistory.length || (Number.isSafeInteger(data.outboundDeclineCount) && (data.outboundDeclineCount ?? 0) > 0)) && <section className="panel applicant-section" aria-label="Closed connections"><div className="panel-head"><h3>Closed connections</h3></div><div style={{ padding: 20 }}>{Number.isSafeInteger(data.outboundDeclineCount) && (data.outboundDeclineCount ?? 0) > 0 && <p>{data.outboundDeclineCount === 1 ? "Your outbound interest has been declined. May Allah bring whatever is best for you." : `${data.outboundDeclineCount} of your outbound interests have been declined. May Allah bring whatever is best for you.`}</p>}{closedHistory.map((item, index) => <div key={item.interestId}><h4>Connection {index + 1}</h4><p>This connection is closed. No further response is needed.</p>{item.ownInitialDecision && item.ownInitialDecision !== "pending" && <p>Your initial response: {titleize(item.ownInitialDecision)}.</p>}{item.ownFinalApproval && item.ownFinalApproval !== "pending" && <p>Your final approval: {titleize(item.ownFinalApproval)}.</p>}{item.ownDecision && item.ownDecision !== "pending" && <p>Your decision: {titleize(item.ownDecision)}.</p>}</div>)}</div></section>}
               <Section
                 title="Inbound Interests"
                 viewerGender={data.applicant.gender}
@@ -1587,6 +1589,7 @@ export default function ApplicantDashboardPage() {
               )}
               </>}
             </div>
+            <SupportRibbon />
           </div>
         </div>
       </div>

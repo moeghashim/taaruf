@@ -95,7 +95,6 @@ export async function POST(request: NextRequest) {
       },
     }, { status: success ? 200 : 502 });
   } catch (error) {
-    if (/Contact-sharing notifications are automatic/.test(String(error))) return NextResponse.json({ error: "Contact-sharing emails are automatic after contact release. Manual Notify is disabled to prevent duplicate emails." }, { status: 409 });
     if (/archived|not active/i.test(String(error))) return NextResponse.json({ success: false, skipped: "ineligible", error: "Matching notification stopped because the connection is no longer eligible." }, { status: 409 });
     return NextResponse.json(
       { error: "Unable to complete admin request" },
