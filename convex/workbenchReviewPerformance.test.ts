@@ -61,7 +61,8 @@ for (const count of [100, 101]) test(count + " shared-participant rows stay insi
     expect(labels.every(r => r.label === "Waiting on sister #2 — Final approval (brother approved)")).toBe(true);
     expect(measured.stats.gets).toBe(2);
     expect(measured.stats.events).toBe(0);
-    expect(measured.stats.queries).toBe(2 * count + 8);
+    // No competing-interest scans: four fewer indexed reads per request.
+    expect(measured.stats.queries).toBe(2 * count + 4);
     expect(measured.stats.documents).toBe(2 * count + 402);
     // A fresh context re-reads: no process-wide stale result cache.
     await workbenchReview(createWorkbenchReviewContext(measured.ctx), rows[0]!);
