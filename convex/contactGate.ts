@@ -231,6 +231,29 @@ async function pairDecisions(ctx: ReadCtx, rows: Awaited<ReturnType<typeof pairF
   return decisions;
 }
 
+export type ApplicantApprovalNote = "both_approved" | "awaiting_sister" | "awaiting_brother" | null;
+
+/** Read-only, fail-closed projection of canonical final consent, never queue state. */
+export async function applicantApprovalNote(ctx: ReadCtx, interest: Doc<"interests">, viewerId: Id<"registrations">): Promise<ApplicantApprovalNote> {
+  if (interest.canonicalInterestId || ["queued", "deferred"].includes(interest.status) || ![interest.fromRegistrationId, interest.toRegistrationId].includes(viewerId)) return null;
+  try {
+    await assertCanonicalAction(ctx, interest);
+    const rows = await pairFlows(ctx, interest);
+    const source = rows.find(row => row.interest._id === interest._id);
+    if (!source || await contactsVisible(ctx, interest, source.flow)) return null;
+    const from = await ctx.db.get(interest.fromRegistrationId);
+    const to = await ctx.db.get(interest.toRegistrationId);
+    if (!from || !to || [from, to].some(person => person.lastRestoredArchivedAt !== undefined && interest.createdAt <= person.lastRestoredArchivedAt)) return null;
+    const maleId = from.gender === "male" ? from._id : to._id;
+    const femaleId = from.gender === "female" ? from._id : to._id;
+    await assertParticipantsAvailable(ctx, maleId, femaleId, interest.matchId);
+    const decisions = await pairDecisions(ctx, rows);
+    if (!decisions.has(viewerId)) return null;
+    const otherId = viewerId === from._id ? to._id : from._id;
+    return decisions.has(otherId) ? "both_approved" : otherId === femaleId ? "awaiting_sister" : "awaiting_brother";
+  } catch { return null; }
+}
+
 export async function joinApprovedPair(ctx: MutationCtx, interest: Doc<"interests">) {
   await assertCanonicalAction(ctx, interest);
   const rows = await pairFlows(ctx, interest);

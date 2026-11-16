@@ -7,7 +7,7 @@ import { currentSisterConfirmation } from "./sisterConfirmationActivation";
 import { currentAge } from "./birthdays";
 import { deliveryAuthorized } from "./brotherReviewActivation";
 import { sessionAllowed } from "./capabilitySecurity";
-import { contactsVisible, enqueueContactDelivery, deliveryParticipants, linkedFlows, recordPairApproval, releasePairContacts } from "./contactGate";
+import { applicantApprovalNote, type ApplicantApprovalNote, contactsVisible, enqueueContactDelivery, deliveryParticipants, linkedFlows, recordPairApproval, releasePairContacts } from "./contactGate";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
@@ -106,7 +106,7 @@ function applicantReview(row: Doc<"interests">, role: "brother" | "sister", flow
   const final = !row.matchId && workflow.state === "awaiting_sister_confirmation" && flow?.recipientDecision === "accepted" && !!workflow.brotherAcceptedAt && ownDecision === "pending";
   const ownReview = initial || final;
   const expired = role === "brother" && ownReview && (!workflow.reviewExpiresAt || workflow.reviewExpiresAt <= Date.now());
-  return { interestId: row._id, role, paused: released && paused, ownDecision,
+  return { approvalNote: null as ApplicantApprovalNote, interestId: row._id, role, paused: released && paused, ownDecision,
     state: closed ? "closed" as const : workflow.state === "contacts_released" ? "contacts_released" as const : "in_review" as const,
     ownAction: !closed && !paused && ownReview && !expired ? "review" as const : null,
     ownActionStage: !closed && !paused && ownReview && !expired ? initial ? "initial" as const : "final" as const : null,
@@ -121,7 +121,7 @@ async function visibleReviews(ctx: ReadCtx, person: Doc<"registrations">, rows: 
   for (const row of rows) {
     if (!row.femaleWorkflow || (person.gender === "male" && (row.femaleWorkflow.state === "private_documented" || !row.femaleWorkflow.reviewTokenHash))) continue;
     const role = person.gender === "male" ? "brother" as const : "sister" as const;
-    try { const { flow, match } = await active(ctx, row._id, true); result.push({ ...applicantReview(row, role, flow, match?.status === "paused", false, await contactsVisible(ctx, row, flow)), ...(await sharedMutual(ctx, row) ? { mutualInterest: true } : {}) }); }
+    try { const { flow, match } = await active(ctx, row._id, true); result.push({ ...applicantReview(row, role, flow, match?.status === "paused", false, await contactsVisible(ctx, row, flow)), approvalNote: await applicantApprovalNote(ctx, row, person._id), ...(await sharedMutual(ctx, row) ? { mutualInterest: true } : {}) }); }
     catch {
       // Retain only neutral history, never restore profile/contact access on closure.
       if (row.testReset) continue;
@@ -165,6 +165,7 @@ export const getReviewAccess = query({ args: reviewArgs, handler: async (ctx, ar
   const released = await contactsVisible(ctx, data.interest, data.flow);
   const firstName = await acceptedInboundFirstName(ctx, data.interest, person._id);
   return { ...applicantReview(data.interest, person._id === data.brother._id ? "brother" : "sister", data.flow, data.match?.status === "paused", false, released),
+    approvalNote: await applicantApprovalNote(ctx, data.interest, person._id),
     ...(await sharedMutual(ctx, data.interest) ? { mutualInterest: true } : {}),
     profile: { requirementsVisible: person._id === data.brother._id || Boolean(data.workflow.brotherAcceptedAt), ...(person._id === data.brother._id ? (firstName ? { name: firstName } : {}) : { name: profile.name }), label: person._id === data.brother._id ? firstName ?? `Applicant #${profile.publicApplicantNumber ?? "—"}` : profile.name, applicantNumber: profile.publicApplicantNumber ?? null, age: await currentAge(ctx, profile), maritalStatus: profile.maritalStatus, education: profile.education, job: profile.job, ethnicity: profile.ethnicity ?? null, shareableBio: await interestBioVisible(ctx, data.interest) ? profile.shareableBio ?? null : null, prayerCommitment: profile.prayerCommitment ?? null, hijabResponse: profile.hijabResponse ?? null, spouseRequirement1: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement1 ?? null : null, spouseRequirement2: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement2 ?? null : null, spouseRequirement3: person._id === data.brother._id || data.workflow.brotherAcceptedAt ? profile.spouseRequirement3 ?? null : null, imageUrls, email: released ? profile.email : null, phone: released ? profile.phone : null } };
 }});

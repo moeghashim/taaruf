@@ -869,3 +869,20 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 - Updated only recipient singular/plural closure wording and reassurance in src/app/me/page.tsx and rendered-copy tests for Danielle5972; preserves decline semantics and both genders; preview-only. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Added guarded internal exact-ID deletion and dry-run for approved synthetic matches5910, fixture regressions and isolated runtime proof; no live deployment or applicant changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-15
+- Prepared authenticated exact271 name-only correction authorized by Layla6010/6015; reuses audit table, preserves all other fields and live98-module baseline, deployment gated.
+
+## 2026-11-15
+- Add read-only canonical Workbench review/approval actor labels, sentence case, queue blockers and honest missing-state checks; preserve consent/release actions and all serving modules. Synthetic tests and isolated local browser verification; preview only, no live release. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Integrated only certified PR201 applicant approval note and PR202 workbench labels for approved release6100; retained serving rename271 and both original certificates. Hosted preview expressly waived; combined local verification required. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-16
+- Simplify existing workbench interest dropdown and selected heading with directional names/numbers, canonical stage and next actor; remove competing-interest display blocker only, preserving active-match and all mutation/contact gates. Add formatter and cross-pair/read-budget regressions. Preview only; new contribution certification pending. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-16 — repair127-6274
+- Added internal admin-credential guarded exact-identity transactional obsolete-pointer repair and fail-closed tests; no history, consent, queue, notification, or other-profile writes. Production release remains subject to verified existing release checks.
+
+## 2026-11-16 — task6336 implementation only
+- Added exact-scope internal administrative closed-interest removal/refund with fingerprint, one-slot quota marker, durable audit and idempotence; explicit retained-history labels and synthetic local regression tests. No deployment, push or live mutation.

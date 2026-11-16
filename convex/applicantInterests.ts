@@ -8,7 +8,7 @@ import { existingInboundReview } from "./existingInboundReview";
 import { interestBioVisible } from "./bioVisibility";
 import { currentAge } from "./birthdays";
 import { canReceiveEventMessages } from "./eventMessagingEligibility";
-import { recordPairApproval, contactsVisible, linkedFlows, assertMatchInterest } from "./contactGate";
+import { recordPairApproval, applicantApprovalNote, contactsVisible, linkedFlows, assertMatchInterest } from "./contactGate";
 import { sessionAllowed } from "./capabilitySecurity";
 import { requireAdmin } from "./adminAuthorization";
 import { assertNotArchived, assertMatchingParticipants } from "./interestRules";
@@ -270,6 +270,7 @@ async function serializeInterest(
   return {
     interestId: interest._id,
     receiptOnly,
+    approvalNote: receiptOnly ? null : await applicantApprovalNote(ctx, interest, viewer._id),
     ...(interest.femaleWorkflow ? { femaleWorkflow: true } : {}),
     canPause: !receiptOnly && !closed && released && Boolean(interest.matchId),
     paused: receiptOnly ? false : paused,
