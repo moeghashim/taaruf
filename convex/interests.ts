@@ -1,3 +1,4 @@
+import { createWorkbenchReviewContext, workbenchReview } from "./workbenchReview";
 import { assertCanonicalAction } from "./reciprocalConnection";
 import { withCurrentAge } from "./birthdays";
 import { paginationOptsValidator } from "convex/server";
@@ -37,6 +38,7 @@ export const getAll = query({
   args: { adminSecret: v.optional(v.string()),},
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
+    ctx = createWorkbenchReviewContext(ctx);
     const interests = await ctx.db.query("interests").collect();
 
     return withoutCapabilities(await Promise.all(
@@ -49,6 +51,7 @@ export const getAll = query({
 
         return {
           ...interest,
+          workbenchReview: await workbenchReview(ctx, interest),
           fromRegistration: withoutCapabilities(await withCurrentAge(ctx, fromRegistration)),
           toRegistration: withoutCapabilities(await withCurrentAge(ctx, toRegistration)),
           match,
@@ -341,6 +344,7 @@ export const workbenchPage = query({
   args: { adminSecret: v.optional(v.string()), paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
+    ctx = createWorkbenchReviewContext(ctx);
     const result = await ctx.db.query("interests").paginate({ ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems) });
     const interests = result.page;
     // Hydrate each distinct entity once per bounded page, not once per interest.
@@ -352,8 +356,9 @@ export const workbenchPage = query({
     const primaries = new Map(await Promise.all(primaryIds.map(async id => [id, await ctx.db.get(id)] as const)));
     const eventIds = [...new Set(interests.map(i => i.eventId))];
     const events = new Map(await Promise.all(eventIds.map(async id => [id, await ctx.db.get(id)] as const)));
-    return { ...result, page: withoutCapabilities(interests.map(interest => ({
+    return { ...result, page: withoutCapabilities(await Promise.all(interests.map(async interest => ({
       ...interest,
+      workbenchReview: await workbenchReview(ctx, interest),
       fromRegistration: registrations.get(interest.fromRegistrationId) ?? null,
       toRegistration: registrations.get(interest.toRegistrationId) ?? null,
       match: (() => {
@@ -362,7 +367,7 @@ export const workbenchPage = query({
         return match && primary && !primary.testReset && primary.matchId === match._id && primary.eventId === interest.eventId ? match : null;
       })(),
       event: events.get(interest.eventId) ?? null,
-    }))) };
+    })))) };
   },
 });
 

@@ -65,8 +65,8 @@ test("cancel release makes no request", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 test("derived state ignores administrative priority and preserves awaiting-release visibility", () => {
-  for (const status of ["new", "active", "queued"] as const) expect(interestLifecycle({ status })).toBe("Awaiting applicant approvals");
+  for (const status of ["new", "active", "queued"] as const) expect(interestLifecycle({ status })).toBe("Admin check — Canonical review/approval details unavailable; compatible backend required");
   expect(isArchivedInterest({ status: "converted_to_match", match })).toBe(false);
-  expect(interestLifecycle({ status: "converted_to_match", match })).toBe("Both approved — awaiting contact release");
+  expect(interestLifecycle({ status: "converted_to_match", match })).toBe("Admin check — Canonical review/approval details unavailable; compatible backend required");
   expect(isArchivedInterest({ status: "converted_to_match", match: { ...match, contactGate: "contacts_released" } })).toBe(true);
 });
