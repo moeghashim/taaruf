@@ -1,4 +1,5 @@
 "use client";
+import type { ApplicantApprovalNote } from "../../../convex/contactGate";
 import { ACTIVE_MATCH_CONFLICT_MESSAGE } from "@/lib/applicant-match-conflict";
 import { ContactGuidance } from "@/components/applicant/contact-guidance";
 import { ownClosedHistory } from "@/lib/own-closed-history";
@@ -11,9 +12,9 @@ import { ReviewNextSteps } from "./review-next-steps";
 import { formatEducation } from "@/lib/education";
 import { FactList } from "@/components/admin/primitives/fact-list";
 
-type Review = { mutualInterest?: boolean; paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
+type Review = { approvalNote?: ApplicantApprovalNote; mutualInterest?: boolean; paused?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; reviewExpired?: boolean; canView?: boolean; canPause?: boolean };
 type Profile = { requirementsVisible?: boolean; name?: string; label?: string; applicantNumber?: number; publicApplicantNumber?: number; age?: number; shareableBio?: string; education?: string; job?: string; ethnicity?: string; imageUrls?: string[]; email?: string; phone?: string; spouseRequirement1?: string; spouseRequirement2?: string; spouseRequirement3?: string };
-type Access = { paused?: boolean; canPause?: boolean; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; ownDecision?: string; state: string; role: string; profile?: Profile; counterparty?: Profile };
+type Access = { approvalNote?: ApplicantApprovalNote; paused?: boolean; canPause?: boolean; ownAction?: "review" | null; ownActionStage?: "initial" | "final" | null; ownDecision?: string; state: string; role: string; profile?: Profile; counterparty?: Profile };
 // List status is not authorization: only the existing detail GET supplies contacts.
 const contactsReady = (value: Access | null) => {
   const profile = value?.profile || value?.counterparty;
@@ -243,7 +244,7 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
       <div className="interest-invitation-copy">
         {item.state !== "contacts_released" && <><h2>{reviewExpired(item) ? "Review invitation expired" : item.paused ? "Connection paused" : stateLabels[item.state] || "Profile review update"}</h2>
         <p>{reviewExpired(item) ? "Please contact the matchmaking team to request a new review invitation." : stateCopy[item.state]}</p></>}
-        <ReviewDecision decision={item.ownDecision} awaitingAdmin={item.state === "in_review" && !item.paused && !item.reviewExpired} />
+        <ReviewDecision decision={item.ownDecision} approvalNote={item.approvalNote} />
       </div>
       {!reviewExpired(item) && !["closed", "revoked", "expired"].includes(item.state) && item.canView && <a className="btn btn-primary" aria-label={history.length > 1 ? "View review for connection " + (index + 1) : undefined} href={reviewHref(item.interestId)}>View review</a>}
     </section>)}
@@ -280,13 +281,13 @@ export function FemaleReviews({ inline = false, active = true, interestId, focus
             <div className="photo-grid">{profile.imageUrls.map((url, index) => <div key={url} className="photo-card"><Image src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 900px) 100vw, 1000px" unoptimized /></div>)}</div>
           </div>}
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
-          {row && <ReviewDecision decision={row.ownDecision} awaitingAdmin={row.state === "in_review" && !row.paused && !row.reviewExpired} />}
+          {access && <ReviewDecision decision={access.ownDecision} approvalNote={access.approvalNote} />}
           {contactsReady(access) && <section id={interestId ? "contact-details-" + interestId : "contact-details"} tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4><ContactGuidance viewerGender={access?.role === "brother" ? "male" : access?.role === "sister" ? "female" : undefined} />{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}
         </div>}
         {profile && !inline && <div style={{ visibility: reviewLoading ? "hidden" : undefined }} aria-hidden={reviewLoading || undefined}><h3>{profile.label || profile.name || "Applicant #" + (profile.publicApplicantNumber ?? profile.applicantNumber ?? "—")}</h3>
           <FactList facts={[{ label: "Age", value: profile.age ?? "—" }, { label: "Education", value: formatEducation(profile.education) || "—" }, { label: "Job", value: profile.job || "—" }, { label: "Ethnicity", value: profile.ethnicity || "—" }]} />
           {profile.shareableBio && <div className="bio-box"><h4>Bio</h4><p>{profile.shareableBio}</p></div>}
-          {row && <ReviewDecision decision={row.ownDecision} awaitingAdmin={row.state === "in_review" && !row.paused && !row.reviewExpired} />}
+          {access && <ReviewDecision decision={access.ownDecision} approvalNote={access.approvalNote} />}
           {profile.requirementsVisible && <ProfileRequirements profile={profile} />}
           {!!profile.imageUrls?.length && <div className="profile-review-photos">{profile.imageUrls.map((url, index) => <Image key={url} src={url} alt={"Profile photo " + (index + 1)} width={960} height={720} sizes="(max-width: 700px) 100vw, 680px" unoptimized />)}</div>}
           {contactsReady(access) && <section id={interestId ? "contact-details-" + interestId : "contact-details"} tabIndex={-1} aria-label="Contact details" className="contact-box"><h4>Contact details</h4><ContactGuidance viewerGender={access?.role === "brother" ? "male" : access?.role === "sister" ? "female" : undefined} />{profile.email && <p>{profile.email}</p>}{profile.phone && <p>{profile.phone}</p>}</section>}

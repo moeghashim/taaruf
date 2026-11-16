@@ -6,7 +6,6 @@ export type InterestNoticeInput = {
 export type ReviewNoticeInput = { mutualInterest?: boolean; interestId: string; state: string; role: string; ownDecision?: string; ownAction?: string | null; ownActionStage?: "initial" | "final" | null; paused?: boolean; reviewExpired?: boolean; canView?: boolean };
 export type ConnectionNotice = { id: string; heading: string; copy: string; href?: string; action?: string; priority: number };
 const closedStates = ["closed", "declined", "withdrawn", "revoked", "expired", "rejected"];
-export const approvedCopy = "Contact details will be shared after the admin reviews and approves the match.";
 export const matchCreatedHeading = "A match has been created!";
 export const matchCreatedCopy = "Review the profile to see the shared contact details.";
 // Both endpoints project the SAME interests._id. Never correlate by participants:

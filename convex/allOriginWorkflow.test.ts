@@ -335,7 +335,7 @@ test("private draft never reserves applicants or prevents ordinary consent and c
   expect(await w.t.run(ctx => ctx.db.get(draft))).toEqual(before);
 });
 
-for (const female of [false, true]) test("real counterpart join does not change prior approver payload or pause probes: " + female, async () => {
+for (const female of [false, true]) test("real counterpart join changes only approved note, not private payload or pause probes: " + female, async () => {
   const w = await publicWorld();
   const interestId = await w.submit("platform_submission", female ? 1 : 0, female ? 0 : 1);
   await w.open(interestId, female);
@@ -360,7 +360,10 @@ for (const female of [false, true]) test("real counterpart join does not change 
   else await w.t.mutation(api.applicantInterests.giveFinalApproval, { sessionHash: "session-1", interestId, approved: true });
   const matchId = (await w.t.run(ctx => ctx.db.get(interestId)))!.matchId!;
   expect(matchId).toBeTruthy();
-  expect(await payload()).toEqual(before);
+  const after = await payload();
+  // The narrow consent note is the sole authorized new disclosure. All other
+  // fields, contact permissions, mutation receipts and pause probes stay equal.
+  expect(JSON.stringify(after)).toBe(JSON.stringify(before).replaceAll("awaiting_sister", "both_approved"));
   expect(await retry()).toEqual(receipt);
   await probe();
   await w.t.mutation(api.matches.updateStatus, { adminSecret: workflowAdmin, id: matchId, status: "contact_shared" });

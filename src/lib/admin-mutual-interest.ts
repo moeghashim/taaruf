@@ -8,6 +8,7 @@ type Interest = Doc<"interests"> & {
   toRegistration: Doc<"registrations"> | null;
   event: Doc<"events"> | null;
   match: Doc<"matches"> | null;
+  workbenchReview?: { label: string } | null;
 };
 /** Called only after bridge admin authorization. Paginate on the server and publish
  * nothing until complete; a failed page cannot turn a reciprocal pair into a negative.

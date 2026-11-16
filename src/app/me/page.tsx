@@ -28,6 +28,7 @@ import { Pill, type Tone } from "@/components/admin/primitives/status-pill";
 import { prepareImageFileForUpload } from "@/lib/image-upload";
 
 type DashboardInterest = {
+  approvalNote?: import("../../../convex/contactGate").ApplicantApprovalNote;
   receiptOnly?: boolean;
   femaleWorkflow?: boolean;
   interestId: string;
@@ -431,7 +432,7 @@ function ProfileSideCard({
       )}
 
       {interest.ownInitialDecision && interest.ownInitialDecision !== "pending" && <p className="notice">Your initial response: {titleize(interest.ownInitialDecision)}.</p>}
-      <ReviewDecision decision={viewerFinalApproval} awaitingAdmin={!interest.contactSharedAt && !["contact_shared", "closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.flowStatus) && !["closed", "declined", "withdrawn", "revoked", "expired"].includes(interest.status)} />
+      <ReviewDecision decision={viewerFinalApproval} approvalNote={interest.approvalNote} />
 
       {interest.contactSharedAt && counterparty?.email && counterparty.phone && (
         <div className="contact-box">
