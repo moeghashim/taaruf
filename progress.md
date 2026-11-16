@@ -877,3 +877,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 - Add read-only canonical Workbench review/approval actor labels, sentence case, queue blockers and honest missing-state checks; preserve consent/release actions and all serving modules. Synthetic tests and isolated local browser verification; preview only, no live release. <!-- project: github.com/moeghashim/clawscrewskill -->
 
 - Integrated only certified PR201 applicant approval note and PR202 workbench labels for approved release6100; retained serving rename271 and both original certificates. Hosted preview expressly waived; combined local verification required. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+## 2026-11-16
+- Simplify existing workbench interest dropdown and selected heading with directional names/numbers, canonical stage and next actor; remove competing-interest display blocker only, preserving active-match and all mutation/contact gates. Add formatter and cross-pair/read-budget regressions. Preview only; new contribution certification pending. <!-- project: github.com/moeghashim/clawscrewskill -->

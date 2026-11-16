@@ -98,3 +98,11 @@ test("projection does not mutate workflow, events, outbox or matches", async () 
 test("stale declined pointer is an availability check, not an active match claim",async()=>{const w=await world();const id=await w.match("declined");await w.patchInterest({matchId:undefined,status:"queued"});await w.t.run(ctx=>ctx.db.patch(w.brother,{activeMatchId:id}));const label=await w.label();expect(label).toContain("stale or unverified active-match pointer");expect(label).not.toContain("has another active match");});
 test("release instruction requires actual UI gate",async()=>{const w=await world();await w.approve(true,true);const id=await w.match();await w.t.run(ctx=>ctx.db.patch(id,{contactGate:undefined}));expect(await w.label()).toContain("contact-release gate is not ready");});
 test("initial conflict is not guessed into final step",async()=>{const w=await world();await w.approve(true,false);await w.patchFlow({recipientDecision:"pending"});expect(await w.label()).toContain("initial bio decision is not accepted");});
+
+for (const female of [false,true]) test(`other active interests do not block; active matches do gender=${female}`, async () => {
+ const w=await world(female); await w.approve(true,true); await w.match();
+ await w.t.run(async ctx=>{const row=(await ctx.db.get(w.interest))!; const third=await ctx.db.insert("registrations",{name:"Third synthetic",email:"third@example.invalid",phone:"5550100",publicApplicantNumber:999,gender:female?"male":"female",age:30,maritalStatus:"single",education:"College",job:"Test",status:"approved",createdAt:1}); for(const [from,to] of [[row.fromRegistrationId,third],[third,row.toRegistrationId]]) await ctx.db.insert("interests",{fromRegistrationId:from,toRegistrationId:to,eventId:w.event,source:"platform_submission",status:"active",visibility:"admin_actionable",createdAt:20,updatedAt:20});});
+ expect(await w.label()).toBe("Admin action — Review and release contacts (both final approvals saved)");
+ await w.t.run(ctx=>ctx.db.insert("matches",{maleRegistrationId:w.brother,femaleRegistrationId:w.sister,interestType:"mutual_interest",initiatedBy:"interest_signal",status:"reviewing",createdAt:20,updatedAt:20}));
+ expect(await w.label()).toContain("has another active match"); expect(await w.label()).toMatch(/^Blocked/);
+});

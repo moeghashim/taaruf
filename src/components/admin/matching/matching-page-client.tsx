@@ -1,4 +1,6 @@
 "use client";
+
+import { workbenchInterestLabel } from "@/lib/workbench-interest-label";
 import { comparisonProfileDetails } from "./comparison-profile-details";
 import { useMutualInterests } from "@/components/admin/hooks/use-mutual-interests";
 import type { MutualEvidence } from "../../../../convex/mutualInterest";
@@ -1106,8 +1108,8 @@ export function WorkbenchPageClient() {
                 >
                   <option value="" disabled>Select an interest</option>
                   {[...interests].sort((a,b) => Number(!isOpenInterest(a.status)) - Number(!isOpenInterest(b.status))).map((interest) => (
-                    <option key={interest._id} value={interest._id} style={{ color: isOpenInterest(interest.status) ? undefined : "gray" }}>
-                      {interestLifecycle(interest)} · #{interest.fromRegistration ? data.registrationNumbers.get(interest.fromRegistration._id) : "-"} {interest.fromRegistration?.name ?? "Unknown"} to #{interest.toRegistration ? data.registrationNumbers.get(interest.toRegistration._id) : "-"} {interest.toRegistration?.name ?? "Unknown"}
+                    <option key={interest._id} value={interest._id} title={workbenchInterestLabel(interest)} style={{ color: isOpenInterest(interest.status) ? undefined : "gray" }}>
+                      {workbenchInterestLabel(interest)}
                     </option>
                   ))}
                 </select>
@@ -1152,7 +1154,7 @@ export function WorkbenchPageClient() {
 
           <div className="panel">
             <div className="panel-head">
-              <h3 style={{ overflowWrap: "anywhere", textTransform: "none" }}>{mode === "interest" ? "Evaluating interest" : "Evaluating match"} · {selectedInterest ? interestLifecycle(selectedInterest) : selectedMatch?.status ?? "No selection"}</h3>
+              <h3 style={{ overflowWrap: "anywhere", textTransform: "none" }}>{mode === "interest" ? "Evaluating interest" : "Evaluating match"} · {selectedInterest ? workbenchInterestLabel(selectedInterest) : selectedMatch?.status ?? "No selection"}</h3>
             </div>
             <div style={{ padding: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               {selectedInterest && !selectedInterest.femaleWorkflow && selectedInterest.visibility === "internal_only" && selectedInterest.fromRegistration?.gender === "female" && !selectedInterest.matchId && isOpenInterest(selectedInterest.status) && <FemaleWorkflowActions interestId={selectedInterest._id} state="private_documented" />}

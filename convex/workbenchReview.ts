@@ -122,10 +122,7 @@ export async function workbenchReview(ctx: QueryCtx, source: Doc<"interests">): 
       const other = matches.find(m => m._id !== match?._id && m.testResetAt === undefined && !["closed", "declined", "paused"].includes(m.status) && !isManualMatchDraft(m));
       if (other) blockers.push(personLabel(person) + " has another active match");
       if (!other && person.activeMatchId && person.activeMatchId !== match?._id) blockers.push("Admin check — " + personLabel(person) + " has a stale or unverified active-match pointer blocking availability");
-      const active = await ctx.db.query("interests").withIndex("by_fromRegistrationId_and_status", q => q.eq("fromRegistrationId", person._id).eq("status", "active")).take(1001);
-      const inbound = await ctx.db.query("interests").withIndex("by_toRegistrationId_and_status", q => q.eq("toRegistrationId", person._id).eq("status", "active")).take(1001);
-      if (active.length > 1000 || inbound.length > 1000) return check("Active interest history requires manual review");
-      if ([...active, ...inbound].some(r => !terminal(r) && !rows.some(scope => scope.interest._id === r._id) && !r.canonicalInterestId)) blockers.push(personLabel(person) + " has another active interest");
+      // Other active interests are not a contact-gate availability restriction.
     }
     const unexplained = rows.some(({flow}) => (flow.requesterFinalApproval === "approved" && !approved.has(flow.fromRegistrationId)) || (flow.recipientFinalApproval === "approved" && !approved.has(flow.toRegistrationId)));
     if (unexplained) pending = "Admin check — Legacy final approval lacks explicit provenance; " + pending;
