@@ -60,6 +60,7 @@ const personLabel = (person: Doc<"registrations">) => (person.gender === "male" 
 
 /** Admin-only read projection. Never repairs rows, issues capabilities, or grants consent. */
 export async function workbenchReview(ctx: QueryCtx, source: Doc<"interests">): Promise<{ label: string }> {
+  if (source.adminRemovedAt !== undefined && source.slotReturnedAt !== undefined) return { label: "Closed — Admin removed; submission slot returned" };
   if (terminal(source)) return { label: "Closed — " + (source.testReset ? "Test reset" : source.status === "withdrawn" ? "Interest withdrawn" : source.status === "declined" || source.adminStatus === "declined" || source.femaleWorkflow?.state === "declined" ? "Interest declined" : "Interest closed") };
   let interest = source;
   if (source.canonicalInterestId) {

@@ -1,9 +1,10 @@
 import type { Doc } from "../../convex/_generated/dataModel";
-type Interest = Pick<Doc<"interests">, "status" | "testReset" | "femaleWorkflow"> & { match?: Doc<"matches"> | null; workbenchReview?: { label: string } | null };
+type Interest = Pick<Doc<"interests">, "status" | "testReset" | "femaleWorkflow" | "adminRemovedAt" | "slotReturnedAt"> & { match?: Doc<"matches"> | null; workbenchReview?: { label: string } | null };
 export function canReleaseContacts(match?: Doc<"matches"> | null) {
   return Boolean(match?.interestId && !match.testResetAt && match.contactGate === "pending_admin_approval" && ["new", "reviewing"].includes(match.status));
 }
 export function interestLifecycle(interest: Interest): string {
+  if (interest.adminRemovedAt !== undefined && interest.slotReturnedAt !== undefined) return "Closed — Admin removed; submission slot returned";
   // Never guess approval actors from legacy workflow stage names.
   if (interest.workbenchReview) return interest.workbenchReview.label;
   if (interest.testReset) return "Test reset — audit retained";

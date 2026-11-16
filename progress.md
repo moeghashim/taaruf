@@ -883,3 +883,6 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-16 — repair127-6274
 - Added internal admin-credential guarded exact-identity transactional obsolete-pointer repair and fail-closed tests; no history, consent, queue, notification, or other-profile writes. Production release remains subject to verified existing release checks.
+
+## 2026-11-16 — task6336 implementation only
+- Added exact-scope internal administrative closed-interest removal/refund with fingerprint, one-slot quota marker, durable audit and idempotence; explicit retained-history labels and synthetic local regression tests. No deployment, push or live mutation.

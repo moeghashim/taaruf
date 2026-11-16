@@ -27,3 +27,10 @@ test('paused released history retains Inbox classification independently of copy
  expect(isArchivedInterest({status:'converted_to_match',match,workbenchReview:{label:'Paused — Linked match paused'}})).toBe(false);
  expect(isArchivedInterest({status:'converted_to_match',match:{...match,status:'contact_shared'}})).toBe(true);
 });
+
+test("administrative refund is retained closed history with explicit label, not participant withdrawal",()=>{
+ const row={status:"closed" as const,adminRemovedAt:10,slotReturnedAt:10};
+ expect(interestLifecycle(row)).toBe("Closed — Admin removed; submission slot returned");
+ expect(isArchivedInterest(row)).toBe(true);
+ expect(interestLifecycle({...row,slotReturnedAt:undefined})).toBe("Closed");
+});
