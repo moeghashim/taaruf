@@ -1,3 +1,4 @@
+import { workbenchFinalApprovals } from "./workbenchApproval";
 import { assertCanonicalAction } from "./reciprocalConnection";
 import { withCurrentAge } from "./birthdays";
 import { paginationOptsValidator } from "convex/server";
@@ -49,6 +50,7 @@ export const getAll = query({
 
         return {
           ...interest,
+          finalApprovals: await workbenchFinalApprovals(ctx, interest),
           fromRegistration: withoutCapabilities(await withCurrentAge(ctx, fromRegistration)),
           toRegistration: withoutCapabilities(await withCurrentAge(ctx, toRegistration)),
           match,
@@ -352,8 +354,9 @@ export const workbenchPage = query({
     const primaries = new Map(await Promise.all(primaryIds.map(async id => [id, await ctx.db.get(id)] as const)));
     const eventIds = [...new Set(interests.map(i => i.eventId))];
     const events = new Map(await Promise.all(eventIds.map(async id => [id, await ctx.db.get(id)] as const)));
-    return { ...result, page: withoutCapabilities(interests.map(interest => ({
+    return { ...result, page: withoutCapabilities(await Promise.all(interests.map(async interest => ({
       ...interest,
+      finalApprovals: await workbenchFinalApprovals(ctx, interest),
       fromRegistration: registrations.get(interest.fromRegistrationId) ?? null,
       toRegistration: registrations.get(interest.toRegistrationId) ?? null,
       match: (() => {
@@ -362,7 +365,7 @@ export const workbenchPage = query({
         return match && primary && !primary.testReset && primary.matchId === match._id && primary.eventId === interest.eventId ? match : null;
       })(),
       event: events.get(interest.eventId) ?? null,
-    }))) };
+    })))) };
   },
 });
 

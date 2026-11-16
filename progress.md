@@ -869,3 +869,9 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 - Updated only recipient singular/plural closure wording and reassurance in src/app/me/page.tsx and rendered-copy tests for Danielle5972; preserves decline semantics and both genders; preview-only. <!-- project: github.com/moeghashim/clawscrewskill -->
 - Added guarded internal exact-ID deletion and dry-run for approved synthetic matches5910, fixture regressions and isolated runtime proof; no live deployment or applicant changes. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Corrected workbench final-approval projection from saved decisions, with initial-acceptance safeguards and truthful pending-actor labels; read-only backend query enrichment and regression tests, no live deployment. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Added synthetic queued/competing-released-match approval projection regressions for both occupied sides; verified no pooled consent, release eligibility, or read-side mutations. UI queue visibility remains a review blocker. <!-- project: github.com/moeghashim/clawscrewskill -->
+
+- Preserved explicit queued status with final-approval actors and validated referenced-match availability warnings (including declined stale pointers); added UI/archive regressions and real isolated synthetic three-case browser proof. No production writes, decisions, progression or emails. <!-- project: github.com/moeghashim/clawscrewskill -->

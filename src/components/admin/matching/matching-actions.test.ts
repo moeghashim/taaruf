@@ -7,7 +7,7 @@ vi.mock("react", async importOriginal => ({ ...await importOriginal<typeof impor
 vi.mock("@/components/admin/hooks/use-admin-transport", () => ({ refreshAdminData: vi.fn(), useAdminMutation: () => vi.fn(), useAdminQuery: () => [] }));
 import { ContactRelease } from "./matching-page-client";
 import { FemaleWorkflowActions } from "./female-workflow-actions";
-import { interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
+import { activeConnectionLabel, interestLifecycle, isArchivedInterest } from "@/lib/interest-lifecycle";
 const match = { _id: "match", interestId: "interest", status: "reviewing", contactGate: "pending_admin_approval" } as Doc<"matches">;
 const fetchMock = vi.fn();
 beforeEach(() => { vi.stubGlobal("fetch", fetchMock.mockReset().mockResolvedValue({ ok: true, json: async () => ({}) })); vi.stubGlobal("window", { confirm: vi.fn(() => true) }); });
@@ -65,8 +65,27 @@ test("cancel release makes no request", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 test("derived state ignores administrative priority and preserves awaiting-release visibility", () => {
-  for (const status of ["new", "active", "queued"] as const) expect(interestLifecycle({ status })).toBe("Awaiting applicant approvals");
+  for (const status of ["new", "active", "queued"] as const) expect(interestLifecycle({ status })).toBe(status === "queued" ? "Queued — Awaiting applicant approvals" : "Awaiting applicant approvals");
   expect(isArchivedInterest({ status: "converted_to_match", match })).toBe(false);
   expect(interestLifecycle({ status: "converted_to_match", match })).toBe("Both approved — awaiting contact release");
   expect(isArchivedInterest({ status: "converted_to_match", match: { ...match, contactGate: "contacts_released" } })).toBe(true);
+});
+
+test("availability inspects the referenced match, not an old declined pointer", () => {
+  const person = { _id: "brother", activeMatchId: "old" } as Doc<"registrations">;
+  const old = { _id: "old", maleRegistrationId: "brother", femaleRegistrationId: "sister", status: "declined", contactGate: "contacts_released" } as Doc<"matches">;
+  expect(activeConnectionLabel(person, [old])).toBe("No released active connection");
+  for (const status of ["closed", "paused"] as const) expect(activeConnectionLabel(person, [{ ...old, status }])).toBe("No released active connection");
+  expect(activeConnectionLabel(person, [{ ...old, status: "contact_shared" }])).toContain("Contacts already released");
+  expect(activeConnectionLabel(person, [{ ...old, status: "reviewing", contactGate: "contacts_released" }])).toContain("Contacts already released");
+  expect(activeConnectionLabel(person, [{ ...old, status: "reviewing", contactGate: "pending_admin_approval" }])).toContain("contacts not released");
+  expect(activeConnectionLabel(person, [{ ...old, status: "contact_shared", testResetAt: 1 }])).toBe("No released active connection");
+  expect(activeConnectionLabel(person, [])).toContain("status unavailable");
+  expect(activeConnectionLabel(person, [{ ...old, maleRegistrationId: "different" } as Doc<"matches">])).toContain("status unavailable");
+});
+
+test("queued release evidence remains archived independently of queue label", () => {
+  expect(isArchivedInterest({ status: "queued", femaleWorkflow: { state: "contacts_released" } })).toBe(true);
+  expect(isArchivedInterest({ status: "queued", match: { ...match, contactGate: "contacts_released" } })).toBe(true);
+  expect(isArchivedInterest({ status: "queued" })).toBe(false);
 });
