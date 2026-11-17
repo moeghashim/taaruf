@@ -14,9 +14,9 @@ Source baseline: c094dda006f174d6d9861fdf4ad68c37ecbbb4f7, the verified serving 
 Authenticated same-origin POST stream subscribes server-side to every existing workbench and disclosure page, including terminal pages; sends only invalidations. Complete consistent snapshots are serialized and coalesced. No browser secrets, new public data projection, periodic full-roster polling, operational writes, schema change or backend deployment. Streams rotate at55s for hosting limits and reauthorize; bounded retry1–30s. Existing note editors remain mounted. Other existing admin queries retain incumbent behavior.
 
 ## Verification
-- 2121 tests /166 files pass in isolated worktree (includes25 new filter tests and13 transport tests).
+- 2128 tests /166 files pass in isolated worktree (includes25 new filter tests and20 transport tests).
 - TypeScript passes; scoped lint only incumbent img warning after removal of unused icon.
 - Browser synthetic actual /admin/interests desktop1440 and mobile390/320:3 tests pass. Composite filters, global invariant, search, zero-result, clear, statistic click, keyboard Enter, simulated live record refresh, no horizontal body overflow and zero mutations.
 - Six synthetic screenshots in evidence/interests6370. Screenshot visual model inspection is currently blocked by local-media policy; DOM/accessibility and layout checks passed, not claimed visually inspected.
-- Independent review found canonical precedence issue; fixed and three regression combinations added. Final transport review pending.
-- No live deployment, participant mutations or emails. Hosted preview streaming remains unverified until actual isolated deployment access; never use production participants for acceptance.
+- Independent review found canonical precedence issue; fixed and three regression combinations added. Final transport review found warning-clearing and silent-stall issues; both fixed with separate error channels and a25s watchdog plus7 regression tests.
+- No live deployment, participant mutations or emails. Hosted preview is build-Ready at https://taaruf-git-feat-interests-admin6370-bannaa.vercel.app/admin/interests (PR207). Browser verifies admin login and UI-review-only backend-disabled banner. Isolated hosted backend is not configured for this branch; no config changes were authorized. Functional hosted streaming remains unverified; never use production participants for acceptance. DCO requires human certification; automated Codex review failed rather than passing.

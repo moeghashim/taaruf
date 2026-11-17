@@ -11,7 +11,9 @@ export function useMutualInterests() {
     // Never clear the last complete snapshot during refresh/reconnect: keyed editors
     // remain mounted and their unsaved drafts survive background updates.
     const watcher = watchInterestUpdates<Rows[number]>(
-      rows => setState({ rows }),
+      // Snapshot success cannot clear a stream outage; the watcher combines
+      // independent snapshot/transport errors and signals actual recovery.
+      rows => setState(previous => ({ ...previous, rows })),
       error => setState(previous => ({ ...previous, error })),
     );
     window.addEventListener("focus", watcher.refresh);

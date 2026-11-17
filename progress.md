@@ -889,3 +889,5 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-17
 - Added preview-only admin Interests composable filters, global canonical counts, public-number/name search and authenticated reactive invalidations; preserved audited267 refund baseline and existing actions. Isolated2121 tests and3 synthetic desktop/mobile browser checks passed. See docs/admin-interests6370.md.
+
+- Hardened stream failure reporting and25s inactivity reconnect after independent review; final2128 tests/166 files, types, scoped lint (one incumbent image warning), and3 synthetic browser checks pass. Hosted PR207 preview is UI-review-only with backend disabled; no live release.

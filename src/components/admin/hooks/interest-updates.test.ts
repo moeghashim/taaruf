@@ -25,7 +25,7 @@ test("initial snapshot plus coalesced invalidations; no periodic snapshot pollin
  expect(rows).toHaveBeenCalledWith([{ id: "one" }]); expect(snapshots()).toHaveLength(1);
  emit(); emit(); emit(); await vi.advanceTimersByTimeAsync(100);
  expect(snapshots()).toHaveLength(2); expect(streams()).toHaveLength(1);
- emit("heartbeat"); await vi.advanceTimersByTimeAsync(60000);
+ for (let i = 0; i < 4; i++) { emit("heartbeat"); await vi.advanceTimersByTimeAsync(15000); }
  expect(snapshots()).toHaveLength(2); expect(streams()).toHaveLength(1);
  expect(request.mock.calls[0][1]).toMatchObject({ method: "POST", credentials: "same-origin", cache: "no-store" });
  expect(JSON.stringify(request.mock.calls)).not.toContain("adminSecret");
@@ -66,4 +66,69 @@ test("snapshot failure keeps last rows and retries with backoff", async () => {
  watcher.refresh(); await vi.advanceTimersByTimeAsync(100);
  expect(rows).toHaveBeenCalledTimes(1); expect(errors).toHaveBeenCalledWith("Interest data unavailable. Retry to refresh.");
  await vi.advanceTimersByTimeAsync(1100); expect(rows).toHaveBeenCalledTimes(2); expect(streams()).toHaveLength(1);
+});
+
+test.each(["heartbeat", "invalidate"])("snapshot success preserves outage until a %s proves stream recovery", async type => {
+ const watcher = start(); await vi.advanceTimersByTimeAsync(100);
+ emit("error"); await vi.advanceTimersByTimeAsync(0);
+ const warning = "Interest data unavailable. Retry to refresh.";
+ watcher.refresh(); await vi.advanceTimersByTimeAsync(100);
+ expect(rows).toHaveBeenCalledTimes(2);
+ expect(errors).toHaveBeenLastCalledWith(warning);
+ await vi.advanceTimersByTimeAsync(900); // response headers alone are not recovery
+ expect(streams()).toHaveLength(2); expect(errors).toHaveBeenLastCalledWith(warning);
+ emit(type); await vi.advanceTimersByTimeAsync(0);
+ expect(errors).toHaveBeenLastCalledWith(undefined);
+});
+test("stream recovery does not erase a snapshot error; snapshot recovery does", async () => {
+ const watcher = start(); await vi.advanceTimersByTimeAsync(100);
+ request.mockResolvedValueOnce(new Response("private", { status: 503 }));
+ watcher.refresh(); await vi.advanceTimersByTimeAsync(100);
+ emit("error"); await vi.advanceTimersByTimeAsync(1000);
+ emit("heartbeat"); await vi.advanceTimersByTimeAsync(0);
+ expect(errors).toHaveBeenLastCalledWith("Interest data unavailable. Retry to refresh.");
+ await vi.advanceTimersByTimeAsync(100);
+ expect(errors).toHaveBeenLastCalledWith(undefined);
+});
+test.each(["fetch", "read"])("watchdog aborts stalled %s and reconnects even when transport ignores abort", async stage => {
+ const normal = request.getMockImplementation()!;
+ const cancel = vi.fn(() => new Promise<void>(() => {}));
+ request.mockImplementation((url, options) => {
+  if (url.endsWith("bridge")) return normal(url, options);
+  signals.push(options.signal);
+  return stage === "fetch" ? new Promise<Response>(() => {}) : Promise.resolve(new Response(new ReadableStream({ cancel })));
+ });
+ const watcher = start(); await vi.advanceTimersByTimeAsync(24999);
+ expect(streams()).toHaveLength(1); expect(signals[0].aborted).toBe(false);
+ await vi.advanceTimersByTimeAsync(1);
+ expect(signals[0].aborted).toBe(true);
+ expect(errors).toHaveBeenLastCalledWith("Interest data unavailable. Retry to refresh.");
+ await vi.advanceTimersByTimeAsync(1000);
+ expect(streams()).toHaveLength(2);
+ expect(streams()[1][1].signal).not.toBe(streams()[0][1].signal);
+ expect(snapshots()).toHaveLength(1);
+ if (stage === "read") expect(cancel).toHaveBeenCalledOnce();
+ watcher.stop(); const count = errors.mock.calls.length;
+ await vi.advanceTimersByTimeAsync(120000);
+ expect(streams()).toHaveLength(2); expect(vi.getTimerCount()).toBe(0);
+ expect(errors).toHaveBeenCalledTimes(count);
+ expect(signals.every(signal => signal.aborted)).toBe(true);
+});
+test("valid heartbeats reset silence deadline, partial bytes do not", async () => {
+ start(); await vi.advanceTimersByTimeAsync(20000);
+ emit("heartbeat"); await vi.advanceTimersByTimeAsync(20000);
+ expect(signals[0].aborted).toBe(false);
+ stream.enqueue(new TextEncoder().encode('{"type":'));
+ await vi.advanceTimersByTimeAsync(5000);
+ expect(signals[0].aborted).toBe(true);
+ expect(errors).toHaveBeenLastCalledWith("Interest data unavailable. Retry to refresh.");
+});
+test("terminal snapshot authentication error overrides outage and cannot be cleared by late results", async () => {
+ const watcher = start(); await vi.advanceTimersByTimeAsync(100);
+ emit("error"); await vi.advanceTimersByTimeAsync(0);
+ request.mockResolvedValueOnce(new Response("private", { status: 403 }));
+ watcher.refresh(); await vi.advanceTimersByTimeAsync(100);
+ expect(errors).toHaveBeenLastCalledWith("Your admin session has expired. Sign in again.");
+ await vi.advanceTimersByTimeAsync(120000);
+ expect(streams()).toHaveLength(1); expect(vi.getTimerCount()).toBe(0);
 });
