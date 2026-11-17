@@ -23,7 +23,9 @@ test("issue66 derives lifecycle and removes historical priority without losing s
   const html = renderToStaticMarkup(createElement(InterestsPageClient));
   expect(html).not.toContain("Historical tracker: ");
   expect(html).not.toContain("Match creation is automatic after both applicant approvals");
-  expect(html).not.toContain("Queued");
+  // Global filter controls can say Queued; the row must not invent a canonical stage.
+  const rows = html.split("<tbody>")[1].split("</tbody>")[0];
+  expect(rows).not.toContain("Queued");
   expect(html).toContain("Admin check — Canonical review/approval details unavailable; compatible backend required");
   expect(html).toContain("Decline interest");
   expect(html).toContain("Close interest");
