@@ -1,5 +1,7 @@
 "use client";
 
+import { InterestFilterBar } from "./interest-filter-bar";
+import { emptyInterestFilters, interestCounts, matchesInterestFilters } from "@/lib/admin-interest-filters";
 import { workbenchInterestLabel } from "@/lib/workbench-interest-label";
 import { comparisonProfileDetails } from "./comparison-profile-details";
 import { useMutualInterests } from "@/components/admin/hooks/use-mutual-interests";
@@ -24,7 +26,6 @@ import { PageHead } from "@/components/admin/layout/page-head";
 import { DetailPane } from "@/components/admin/layout/detail-pane";
 import { Pill, StatusPill } from "@/components/admin/primitives/status-pill";
 import { WhoCell } from "@/components/admin/primitives/who-cell";
-import { Ico } from "@/components/admin/primitives/icons";
 import { useRegistrations } from "@/components/admin/hooks/use-registrations";
 
 type Registration = Doc<"registrations">;
@@ -697,10 +698,7 @@ function MutualBadge({ interest }: { interest?: InterestRecord | null }) {
 export function InterestsPageClient() {
   const data = useMatchingData();
   const [resetSelection, setResetSelection] = useState<{ id: string; pair: string; event: string } | null>(null);
-  const [visibility, setVisibility] = useState<"all" | "internal_only" | "admin_actionable">("all");
-  const [mutualOnly, setMutualOnly] = useState(false);
-  const [eventFilter, setEventFilter] = useState<string>("all");
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState(emptyInterestFilters);
   const [message, setMessage] = useState<string | null>(null);
 
   const eventOptions = useMemo(() => {
@@ -711,28 +709,8 @@ export function InterestsPageClient() {
     return [...byId.values()].sort((a, b) => b.startsAt - a.startsAt);
   }, [data.interests]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return data.interests
-      .filter((interest) => !mutualOnly || !!interest.mutual)
-      .filter((interest) => visibility === "all" || interest.visibility === visibility)
-      .filter((interest) => eventFilter === "all" || interest.eventId === eventFilter)
-      .filter((interest) => {
-        if (!q) return true;
-        return [
-          interest.fromRegistration?.name,
-          interest.toRegistration?.name,
-          interest.notes,
-          interest.source,
-          interest.event?.title,
-          interest.event?.eventCode,
-          interest.event?.eventMonth,
-        ]
-          .filter(Boolean)
-          .some((value) => value!.toLowerCase().includes(q));
-      })
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [data.interests, eventFilter, search, visibility, mutualOnly]);
+  const counts = useMemo(() => interestCounts(data.interests), [data.interests]);
+  const filtered = useMemo(() => data.interests.filter(interest => matchesInterestFilters(interest, filters)).sort((a, b) => b.updatedAt - a.updatedAt), [data.interests, filters]);
 
   return (
     <>
@@ -747,51 +725,11 @@ export function InterestsPageClient() {
         <LoadingPanel />
       ) : (
         <div className="panel">
-          <div className="filters">
-            <div className="search-inline">
-              <span className="glass">{Ico.search}</span>
-              <input placeholder="Search names, source, notes..." value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-            {(["all", "admin_actionable", "internal_only"] as const).map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={`filt ${visibility === item ? "active" : ""}`}
-                onClick={() => setVisibility(item)}
-              >
-                {item === "all" ? "All visibility" : titleize(item)}
-              </button>
-            ))}
-            <label className="filt"><input type="checkbox" checked={mutualOnly} onChange={e => setMutualOnly(e.target.checked)} /> Mutual only</label>
-            <select
-              value={eventFilter}
-              onChange={(event) => setEventFilter(event.target.value)}
-              style={{
-                height: 34,
-                border: "1px solid var(--line)",
-                borderRadius: 6,
-                background: "var(--panel)",
-                padding: "0 9px",
-                fontSize: 12,
-                maxWidth: 260,
-              }}
-              aria-label="Filter by event"
-            >
-              <option value="all">All events</option>
-              {eventOptions.map((event) => (
-                <option key={event._id} value={event._id}>
-                  {eventLabel(event)}
-                </option>
-              ))}
-            </select>
-            <span className="mono" style={{ marginLeft: "auto", color: "var(--mute)" }}>
-              {filtered.length} shown
-            </span>
-          </div>
+          <InterestFilterBar filters={filters} onChange={setFilters} counts={counts} events={eventOptions.map(event => ({ id: event._id, label: eventLabel(event) }))} shown={filtered.length} />
           {filtered.length === 0 ? (
             <EmptyState body="No interest signals match the current filters." />
           ) : (
-            <table>
+            <div className="interest-table-scroll" role="region" aria-label="Interest results" tabIndex={0}><table>
               <thead>
                 <tr>
                   <th>Applicants</th>
@@ -813,7 +751,7 @@ export function InterestsPageClient() {
                   />
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
       )}

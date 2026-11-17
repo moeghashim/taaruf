@@ -1,0 +1,31 @@
+.interest-controls { padding: 20px; border-bottom: 1px solid var(--line); color: var(--ink); }
+.interest-statistics { display: flex; flex-wrap: wrap; gap: 8px; }
+.interest-stat { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.interest-stat strong { font-variant-numeric: tabular-nums; font-size: 17px; }
+.interest-stat:hover, .interest-stat.active { background: var(--bg); border-color: currentColor; }
+.interest-help, .interest-definitions { font-size: 12px; line-height: 1.6; }
+.interest-help { margin: 10px 0 20px; }
+.interest-primary-filters, .interest-secondary-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.interest-primary-filters > label, .interest-secondary-filters > label:not(.interest-checkbox) { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; min-width: 120px; }
+.interest-controls select, .interest-controls input[type=search] { min-height: 44px; width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 9px 12px; background: var(--panel); color: inherit; font: inherit; font-weight: 400; font-size: 14px; }
+.interest-controls input::placeholder { color: var(--ink); opacity: .75; }
+.interest-controls input { accent-color: var(--ink); caret-color: var(--ink); }
+.interest-controls :focus-visible, .interest-table-scroll:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.interest-primary-filters .interest-search { flex: 1 1 280px; }
+.interest-primary-filters .btn { min-height: 44px; }
+.interest-secondary-filters { margin-top: 16px; }
+.interest-secondary-filters select { max-width: 300px; }
+.interest-checkbox { min-height: 44px; display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.interest-shown { margin-left: auto; align-self: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+.interest-definitions { margin-top: 16px; }
+.interest-definitions summary { cursor: pointer; width: fit-content; }
+.interest-definitions p { max-width: 75ch; margin: 8px 0 0; }
+.interest-table-scroll { overflow-x: auto; }
+@media (max-width: 600px) {
+  .interest-controls { padding: 16px; }
+  .interest-statistics { gap: 6px; }
+  .interest-stat { flex: 1 1 110px; justify-content: space-between; }
+  .interest-primary-filters > label, .interest-secondary-filters > label:not(.interest-checkbox) { flex: 1 1 130px; min-width: 0; }
+  .interest-secondary-filters select { max-width: 100%; }
+  .interest-shown { margin-left: 0; }
+}
