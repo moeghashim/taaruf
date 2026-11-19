@@ -889,3 +889,4 @@ Append-only learning log for commits and deploys. Add new entries only at the en
 
 ## 2026-11-19 — closed-match-fix6469
 - Added exact three-profile authenticated transactional obsolete-pointer repair and fail-closed regression coverage; preserves history/consent and leaves repair127 untouched. Live deployment/mutation remain gated. <!-- project: github.com/moeghashim/clawscrewskill -->
+- Hardened candidate/interest/match availability against stale terminal pointers and actual occupancy; compare-clears only owning terminal match pointers, prevents terminal-interest revival, preserves queued consent and paused policy. Full isolated2181 tests/types/scoped lint passed; preview only. <!-- project: github.com/moeghashim/clawscrewskill -->

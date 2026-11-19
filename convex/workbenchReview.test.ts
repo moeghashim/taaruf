@@ -95,7 +95,7 @@ test("projection does not mutate workflow, events, outbox or matches", async () 
   const before = await snapshot(); await w.label(); await w.label(); expect(await snapshot()).toEqual(before);
 });
 
-test("stale declined pointer is an availability check, not an active match claim",async()=>{const w=await world();const id=await w.match("declined");await w.patchInterest({matchId:undefined,status:"queued"});await w.t.run(ctx=>ctx.db.patch(w.brother,{activeMatchId:id}));const label=await w.label();expect(label).toContain("stale or unverified active-match pointer");expect(label).not.toContain("has another active match");});
+test("verified declined pointer does not block availability",async()=>{const w=await world();const id=await w.match("declined");await w.patchInterest({matchId:undefined,status:"queued"});await w.t.run(ctx=>ctx.db.patch(w.brother,{activeMatchId:id}));const label=await w.label();expect(label).not.toContain("stale or unverified active-match pointer");expect(label).not.toContain("has another active match");});
 test("release instruction requires actual UI gate",async()=>{const w=await world();await w.approve(true,true);const id=await w.match();await w.t.run(ctx=>ctx.db.patch(id,{contactGate:undefined}));expect(await w.label()).toContain("contact-release gate is not ready");});
 test("initial conflict is not guessed into final step",async()=>{const w=await world();await w.approve(true,false);await w.patchFlow({recipientDecision:"pending"});expect(await w.label()).toContain("initial bio decision is not accepted");});
 

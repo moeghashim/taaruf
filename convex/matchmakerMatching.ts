@@ -1,3 +1,4 @@
+import { clearMatchParticipantPointers } from "./matchAvailability";
 import { isSecurityRetired } from "./registrationSecurity";
 import { currentAge } from "./birthdays";
 import { v } from "convex/values";
@@ -126,8 +127,12 @@ export const approve = mutation({args: applicantMatchArgs, handler: async (ctx, 
 export const withdraw = mutation({args: applicantMatchArgs, handler: async (ctx, args) => {
   const {owner, match} = await ownMatch(ctx, args.sessionHash, args.matchId);
   if (released(match)) throw new Error("Contacts have already been shared; this record is retained");
-  if (match.matchmakerWithdrawnAt !== undefined) return null;
+  if (match.matchmakerWithdrawnAt !== undefined) {
+    await clearMatchParticipantPointers(ctx, match);
+    return null;
+  }
   await ctx.db.patch(match._id, {status: "closed", matchmakerWithdrawnAt: Date.now(), matchmakerWithdrawnBy: owner._id, updatedAt: Date.now()});
+  await clearMatchParticipantPointers(ctx, match);
   return null;
 }});
 export const followup = mutation({args: {...applicantMatchArgs, status: v.union(v.literal("contact_made"), v.literal("getting_to_know"), v.literal("not_proceeding"), v.literal("engaged"))}, handler: async (ctx, args) => {

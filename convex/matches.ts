@@ -1,3 +1,4 @@
+import { hasBlockingMatch, hasBlockingMatchPointer, clearMatchParticipantPointers } from "./matchAvailability";
 import { withCurrentAge } from "./birthdays";
 import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { paginationOptsValidator } from "convex/server";
@@ -22,7 +23,6 @@ const matchStatus = v.union(
   v.literal("closed")
 );
 
-const releasingStatuses = new Set(["closed", "declined", "paused"]);
 const interestFlowStatuses = [
   "private_documented",
   "awaiting_inbound_response",
@@ -51,7 +51,7 @@ export const create = mutation({
     for (const person of [male, female]) {
       assertNotArchived(person);
       if (person.status !== "approved" || person.profileCompletionStatus !== "completed" || (person.searchStatus ?? "active") !== "active") throw new ConvexError("Both applicants must be approved, have complete profiles, and be actively searching.");
-      if (person.activeMatchId) throw new ConvexError("An applicant already has an active match. Review it before creating another.");
+      if (await hasBlockingMatchPointer(ctx, person)) throw new ConvexError("An applicant already has an active match. Review it before creating another.");
     }
     if ((args.adminNotes?.length ?? 0) > 2000) throw new ConvexError("Admin notes must be 2,000 characters or fewer.");
     for await (const match of ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", male._id))) {
@@ -206,12 +206,7 @@ export const resetPair = mutation({
       await ctx.db.delete(match._id);
     }
 
-    await ctx.db.patch(args.registrationAId, {
-      activeMatchId: undefined,
-    });
-    await ctx.db.patch(args.registrationBId, {
-      activeMatchId: undefined,
-    });
+    for (const match of matchesToDelete) await clearMatchParticipantPointers(ctx, match);
     await promoteOldestQueuedForRegistration(ctx, args.registrationAId);
     await promoteOldestQueuedForRegistration(ctx, args.registrationBId);
 
@@ -410,7 +405,7 @@ export const updateStatus = mutation({
       await assertMatchingParticipants(ctx, match.maleRegistrationId, match.femaleRegistrationId);
     }
 
-    if (args.status === match.status && args.adminNotes !== undefined) {
+    if (args.status === match.status && args.adminNotes !== undefined && !["closed", "declined"].includes(args.status)) {
       await ctx.db.patch(match._id, { adminNotes: args.adminNotes, updatedAt: Date.now() });
       return match._id;
     }
@@ -433,24 +428,7 @@ export const updateStatus = mutation({
       updatedAt: now,
     });
 
-    if (previousStatus === "contact_shared" && releasingStatuses.has(args.status)) {
-      const maleRegistration = await ctx.db.get(match.maleRegistrationId);
-      const femaleRegistration = await ctx.db.get(match.femaleRegistrationId);
-
-      if (maleRegistration?.activeMatchId === args.id) {
-        await ctx.db.patch(match.maleRegistrationId, {
-          activeMatchId: undefined,
-        });
-      }
-      if (femaleRegistration?.activeMatchId === args.id) {
-        await ctx.db.patch(match.femaleRegistrationId, {
-          activeMatchId: undefined,
-        });
-      }
-
-      await promoteOldestQueuedForRegistration(ctx, match.maleRegistrationId);
-      await promoteOldestQueuedForRegistration(ctx, match.femaleRegistrationId);
-    }
+    if (["closed", "declined"].includes(args.status)) await clearMatchParticipantPointers(ctx, match);
 
     if (["closed", "declined"].includes(args.status) && match.interestId) {
       const rows = await ctx.db.query("interests").withIndex("by_matchId", q => q.eq("matchId", match._id)).collect();
@@ -460,6 +438,11 @@ export const updateStatus = mutation({
         const flow = await ctx.db.query("interestFlows").withIndex("by_interestId", q => q.eq("interestId", row._id)).unique();
         if (flow) await ctx.db.patch(flow._id, { flowStatus: args.status as "closed" | "declined", closedReason: args.closedReason ?? `match_${args.status}`, updatedAt: now });
       }
+    }
+
+    if (["closed", "declined"].includes(args.status)) {
+      await promoteOldestQueuedForRegistration(ctx, match.maleRegistrationId);
+      await promoteOldestQueuedForRegistration(ctx, match.femaleRegistrationId);
     }
 
     return args.id;
@@ -633,8 +616,11 @@ export const getCandidates = query({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const rows = await ctx.db.query("registrations").withIndex("by_status", q => q.eq("status", "approved")).take(1000);
-    return rows.filter(person => person.archivedAt === undefined && person.profileCompletionStatus === "completed" && (person.searchStatus ?? "active") === "active" && !person.activeMatchId)
-      .map(({ _id, name, gender, publicApplicantNumber, backgroundMatchmakingOptIn }) => ({ _id, name, gender, publicApplicantNumber, backgroundMatchmakingOptIn }));
+    const eligible = [];
+    for (const person of rows) {
+      if (person.archivedAt === undefined && person.profileCompletionStatus === "completed" && (person.searchStatus ?? "active") === "active" && !await hasBlockingMatch(ctx, person)) eligible.push(person);
+    }
+    return eligible.map(({ _id, name, gender, publicApplicantNumber, backgroundMatchmakingOptIn }) => ({ _id, name, gender, publicApplicantNumber, backgroundMatchmakingOptIn }));
   },
 });
 
