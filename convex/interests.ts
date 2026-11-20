@@ -217,6 +217,13 @@ export const updateStatus = mutation({
       throw new Error("Interest not found");
     }
 
+    if (!["closed", "declined", "withdrawn"].includes(args.status)) {
+      if (["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
+      if (interest.matchId) {
+        const match = await ctx.db.get(interest.matchId);
+        if (!match || ![match.maleRegistrationId, match.femaleRegistrationId].includes(interest.fromRegistrationId) || ![match.maleRegistrationId, match.femaleRegistrationId].includes(interest.toRegistrationId) || ["closed", "declined"].includes(match.status)) throw new Error("Match is not active");
+      }
+    }
     if (interest.femaleWorkflow) {
       if (interest.matchId || !["closed", "declined"].includes(args.status)) throw new Error("Use female website workflow");
       await ctx.db.patch(interest._id, { femaleWorkflow: { ...interest.femaleWorkflow, state: args.status === "declined" ? "declined" : "revoked" } });

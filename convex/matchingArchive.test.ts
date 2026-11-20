@@ -65,9 +65,12 @@ test.each(["male", "female"] as const)("archive %s fails closed across creation,
 });
 
 test("queue promotion skips archived counterpart but advances next eligible interest", async () => {
-  const { t, male, female, interest, event } = await fixture();
+  const { t, male, female, interest, event, match } = await fixture();
   const next = await t.run(async ctx => {
     await ctx.db.patch(female, { archivedAt: 1 });
+    // Archival normally terminalizes this row; a surviving reviewing row must
+    // block promotion even without a pointer (covered by occupancy regressions).
+    await ctx.db.patch(match, { status: "closed" });
     await ctx.db.patch(interest, { status: "queued", createdAt: 1 });
     const person = (await ctx.db.get(female))!;
     const { _id, _creationTime, archivedAt, ...fields } = person;

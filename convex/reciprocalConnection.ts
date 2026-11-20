@@ -1,3 +1,4 @@
+import { hasBlockingMatch } from "./matchAvailability";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { isSecurityRetired } from "./registrationSecurity";
@@ -9,7 +10,8 @@ type Interest = Doc<"interests">;
 export async function pendingReciprocal(ctx: ReadCtx, from: Doc<"registrations">, to: Doc<"registrations">, eventId: Id<"events">) {
   const ranges = await Promise.all([[from._id, to._id], [to._id, from._id]].map(([a,b]) => ctx.db.query("interests").withIndex("by_pair_event_and_testReset", q => q.eq("fromRegistrationId", a).eq("toRegistrationId", b).eq("eventId", eventId).eq("testReset", undefined)).take(3)));
   const event = await ctx.db.get(eventId);
-  if (!event || event.status === "cancelled" || ranges.some(rows => rows.length > 1) || [from,to].some(p => p.status !== "approved" || p.archivedAt !== undefined || isSecurityRetired(p) || p.activeMatchId)) return null;
+  if (!event || event.status === "cancelled" || ranges.some(rows => rows.length > 1) || [from,to].some(p => p.status !== "approved" || p.archivedAt !== undefined || isSecurityRetired(p))) return null;
+  if (await hasBlockingMatch(ctx, from) || await hasBlockingMatch(ctx, to)) return null;
   for (const row of ranges.flat()) {
     if (row.source !== "platform_submission" || row.canonicalInterestId || row.testReset || row.matchId || row.slotReturnedAt !== undefined || !["new", "queued"].includes(row.status) || (row.adminStatus ?? "pending") !== "pending" || [from,to].some(p => p.lastRestoredArchivedAt !== undefined && row.createdAt <= p.lastRestoredArchivedAt)) return null;
     const w = row.femaleWorkflow;

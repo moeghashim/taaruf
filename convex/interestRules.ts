@@ -1,3 +1,4 @@
+import { hasBlockingMatch } from "./matchAvailability";
 import { assertCanonicalAction } from "./reciprocalConnection";
 import { isSecurityRetired } from "./registrationSecurity";
 import { matchesInterestFirstName } from "./interestIdentity";
@@ -164,7 +165,7 @@ export async function assertCanCreateInterest(
     fromRegistration,
     toRegistration,
     visibility,
-    initialStatus: fromRegistration.activeMatchId || toRegistration.activeMatchId ? "queued" as const : "new" as const,
+    initialStatus: (await hasBlockingMatch(ctx, fromRegistration)) || (await hasBlockingMatch(ctx, toRegistration)) ? "queued" as const : "new" as const,
   };
 }
 
@@ -271,6 +272,13 @@ export async function activateInterestAndQueueCompetitors(
     throw new Error("Interest not found");
   }
 
+  if (["closed", "declined", "withdrawn"].includes(interest.status)) throw new Error("Interest is no longer active");
+  if (interest.matchId) {
+    const match = await ctx.db.get(interest.matchId);
+    if (!match || ![match.maleRegistrationId, match.femaleRegistrationId].includes(interest.fromRegistrationId) || ![match.maleRegistrationId, match.femaleRegistrationId].includes(interest.toRegistrationId) || ["closed", "declined"].includes(match.status)) throw new Error("Match is not active");
+  }
+  // Recording preference/consent while queued remains allowed. Formation and
+  // disclosure, not the first response, enforce participant availability.
   await assertCanonicalAction(ctx, interest);
   await assertMatchingParticipants(ctx, interest.fromRegistrationId, interest.toRegistrationId);
   const now = Date.now();
@@ -338,6 +346,7 @@ export async function promoteOldestQueuedForRegistration(
     if (queued.canonicalInterestId) continue;
     const pair = await Promise.all([ctx.db.get(queued.fromRegistrationId), ctx.db.get(queued.toRegistrationId)]);
     if (pair.some(person => !person || (person.archivedAt !== undefined || isSecurityRetired(person)))) continue;
+    if ((await Promise.all(pair.map(person => hasBlockingMatch(ctx, person!)))).some(Boolean)) continue;
     await activateInterestAndQueueCompetitors(ctx, queued._id);
     return queued._id;
   }

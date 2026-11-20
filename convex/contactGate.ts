@@ -1,9 +1,10 @@
+import { isManualMatchDraft } from "../src/lib/manual-match-draft";
+import { hasBlockingMatch } from "./matchAvailability";
 import { enqueueReleasedContacts } from "./contactReleaseEmail";
 import { assertCanonicalAction } from "./reciprocalConnection";
 import { isSecurityRetired } from "./registrationSecurity";
 import { assertNotArchived } from "./archiveRules";
 import { sisterActivation } from "./sisterConfirmationActivation";
-import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import { deliveryAuthorized, reviewActivation } from "./brotherReviewActivation";
 import { deliveryConfig } from "./femaleWorkflowDelivery";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -115,13 +116,8 @@ export async function assertParticipantsAvailable(ctx: ReadCtx, maleId: Id<"regi
   for (const person of [male, female]) {
     assertNotArchived(person);
     if (person.status !== "approved") throw new Error("Both applicants must be approved");
-    if (person.activeMatchId && person.activeMatchId !== except) throw new Error("Applicant already has an active match");
+    if (await hasBlockingMatch(ctx, person, except)) throw new Error("Applicant already has an active match");
   }
-  const maleMatches = await ctx.db.query("matches").withIndex("by_maleRegistrationId", q => q.eq("maleRegistrationId", maleId)).take(1001);
-  const femaleMatches = await ctx.db.query("matches").withIndex("by_femaleRegistrationId", q => q.eq("femaleRegistrationId", femaleId)).take(1001);
-  if (maleMatches.length > 1000 || femaleMatches.length > 1000) throw new Error("Match history requires manual review");
-  const matches = [...maleMatches, ...femaleMatches];
-  if (matches.some(m => !isManualMatchDraft(m) && m._id !== except && m.testResetAt === undefined && !["closed", "declined", "paused"].includes(m.status))) throw new Error("Applicant already has an active match");
   return { male, female };
 }
 
@@ -177,6 +173,10 @@ export async function recordPairApproval(ctx: MutationCtx, interest: Doc<"intere
   await assertCanonicalAction(ctx, interest);
   if (![interest.fromRegistrationId, interest.toRegistrationId].includes(actorId)) throw new Error("Unauthorized");
   const rows = await pairFlows(ctx, interest);
+  // Linked legacy pending-final rows are official connections too. Validate their
+  // provenance above, then require the official close route rather than leaving
+  // a live match attached to a declined interest.
+  if (!approved && rows.some(r => r.interest.matchId)) throw new Error("Close or pause the official connection instead");
   if (interest.matchId && rows.some(r => r.interest.femaleWorkflow)) {
     if (approved) return interest.matchId;
     throw new Error("Close or pause the official connection instead");

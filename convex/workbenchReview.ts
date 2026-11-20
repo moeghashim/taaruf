@@ -1,3 +1,4 @@
+import { hasBlockingMatchPointer } from "./matchAvailability";
 import { isManualMatchDraft } from "../src/lib/manual-match-draft";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -122,7 +123,7 @@ export async function workbenchReview(ctx: QueryCtx, source: Doc<"interests">): 
       if (matches.length > 1000) return check("Match history requires manual review");
       const other = matches.find(m => m._id !== match?._id && m.testResetAt === undefined && !["closed", "declined", "paused"].includes(m.status) && !isManualMatchDraft(m));
       if (other) blockers.push(personLabel(person) + " has another active match");
-      if (!other && person.activeMatchId && person.activeMatchId !== match?._id) blockers.push("Admin check — " + personLabel(person) + " has a stale or unverified active-match pointer blocking availability");
+      if (!other && await hasBlockingMatchPointer(ctx, person, match?._id)) blockers.push("Admin check — " + personLabel(person) + " has a stale or unverified active-match pointer blocking availability");
       // Other active interests are not a contact-gate availability restriction.
     }
     const unexplained = rows.some(({flow}) => (flow.requesterFinalApproval === "approved" && !approved.has(flow.fromRegistrationId)) || (flow.recipientFinalApproval === "approved" && !approved.has(flow.toRegistrationId)));
