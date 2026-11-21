@@ -34,7 +34,7 @@ const ACTIVATION = "approvalWelcomeNoticeActivatedAt";
 function configured() {
   return process.env.APPROVAL_WELCOME_NOTICE_APPROVED === "true"
     && process.env.APPROVAL_WELCOME_NOTICE_DELIVERY === "live"
-    && process.env.CONVEX_CLOUD_URL === "https://clever-meerkat-940.convex.cloud"
+    && process.env.CONVEX_CLOUD_URL === "https://clever-meerkat-940.eu-west-1.convex.cloud"
     && !!transport().apiKey;
 }
 // Explicit release operation AFTER preview approval; never invoked by deployment/cron.
@@ -125,3 +125,24 @@ export const status = query({
     return row ? { state: row.state, notBefore: row.notBefore ?? null, attempted: row.firstAttemptAt !== undefined || row.attempts > 0 } : null;
   },
 });
+
+// Authorized6669: preserve audited manual acceptance without resending or changing preferences.
+export const reconcileManualCatchup6669 = internalMutation({ args: {}, handler: async ctx => {
+  const numbers = [343,345,347,348,349,350,351,352,353,354,355,357,359];
+  const profiles = await ctx.db.query("registrations").collect();
+  const targets = numbers.map(number => {
+    const found = profiles.filter(p => p.publicApplicantNumber === number);
+    if (found.length !== 1 || found[0].status !== "approved" || found[0].archivedAt !== undefined || found[0].securityRetiredAt !== undefined) throw new Error("Manual welcome reconciliation identity/status changed");
+    return found[0];
+  });
+  let inserted = 0;
+  for (const person of targets) {
+    const existing = await ctx.db.query("approvalWelcomeNotices").withIndex("by_registrationId", q => q.eq("registrationId", person._id)).unique();
+    const detail = "Manual welcome accepted; authority6669; receipt " + ([343,345,347].includes(person.publicApplicantNumber!) ? "approval-welcome-catchup6632.json" : "approval-welcome-catchup6642.json") + "; lifetime automatic welcome suppressed";
+    if (existing) { if (existing.state !== "cancelled" || existing.detail !== detail) throw new Error("Existing notice requires reconciliation"); continue; }
+    const now = Date.now();
+    await ctx.db.insert("approvalWelcomeNotices", {registrationId:person._id,email:person.email,state:"cancelled",attempts:0,notBefore:now,nextAttemptAt:now,createdAt:now,updatedAt:now,detail});
+    inserted++;
+  }
+  return {inserted, total:targets.length};
+}});

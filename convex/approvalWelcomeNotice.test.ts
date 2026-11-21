@@ -10,7 +10,7 @@ beforeEach(() => {
  vi.stubEnv("ATTENDANCE_ADMIN_SECRET", secret);
  vi.stubEnv("APPROVAL_WELCOME_NOTICE_APPROVED", "true");
  vi.stubEnv("APPROVAL_WELCOME_NOTICE_DELIVERY", "live");
- vi.stubEnv("CONVEX_CLOUD_URL", "https://clever-meerkat-940.convex.cloud");
+ vi.stubEnv("CONVEX_CLOUD_URL", "https://clever-meerkat-940.eu-west-1.convex.cloud");
  vi.stubEnv("APPROVAL_WELCOME_NOTICE_RESEND_API_KEY", "synthetic");
  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({id:"provider"}),{status:200})));
 });
@@ -66,3 +66,16 @@ test.each([400,429,500])("provider %s never falsely records acceptance",async co
 test("abandoned attempt uses same key inside window and stops before provider key expiry",async()=>{const {t,update,rows,drain}=await setup();await update("approved");const first=await t.mutation(internal.approvalWelcomeNotice.claim,{});expect(first).not.toBeNull();vi.setSystemTime(Date.now()+23*3600000);await drain();expect(fetch).not.toHaveBeenCalled();expect((await rows())[0].state).toBe("needs_reconciliation");});
 test("activation is immutable and stale rows cannot send",async()=>{const {t,id,rows,drain}=await setup();await expect(t.mutation(api.settings.set,{adminSecret:secret,key:"approvalWelcomeNoticeActivatedAt",value:"1"})).rejects.toThrow("immutable");await t.run(ctx=>ctx.db.insert("approvalWelcomeNotices",{registrationId:id,email:"synthetic@example.invalid",state:"pending",attempts:0,createdAt:1,updatedAt:1,notBefore:1,nextAttemptAt:1}));await drain();expect(fetch).not.toHaveBeenCalled();expect((await rows())[0].state).toBe("cancelled");});
 test("archive and restore fence queued welcome permanently",async()=>{const {t,id,update,rows,drain}=await setup();await update("approved");const a=await t.mutation(api.archive.archiveAdmin,{adminSecret:secret,registrationId:id,expectedArchivedAt:null,confirm:true});await t.mutation(api.archive.restoreAdmin,{adminSecret:secret,registrationId:id,expectedArchivedAt:a.archivedAt,confirm:true});await drain();expect(fetch).not.toHaveBeenCalled();expect((await rows())[0].state).toBe("cancelled");});
+
+test("authorized manual catch-up is idempotent and preserves profiles and prevents reapproval send",async()=>{
+ const t=convexTest(schema,modules); const numbers=[343,345,347,348,349,350,351,352,353,354,355,357,359];
+ for(const n of numbers) await t.run(ctx=>ctx.db.insert("registrations",{name:"Synthetic",email:n+"@example.invalid",age:30,gender:"male",maritalStatus:"single",education:"Test",job:"Test",phone:"000",status:"approved",publicApplicantNumber:n,createdAt:1}));
+ const before=await t.run(ctx=>ctx.db.query("registrations").collect());
+ expect(await t.mutation(internal.approvalWelcomeNotice.reconcileManualCatchup6669,{})).toEqual({inserted:13,total:13});
+ expect(await t.mutation(internal.approvalWelcomeNotice.reconcileManualCatchup6669,{})).toEqual({inserted:0,total:13});
+ expect(await t.run(ctx=>ctx.db.query("registrations").collect())).toEqual(before);
+ await t.mutation(internal.approvalWelcomeNotice.activate,{});
+ await t.mutation(api.registrations.updateStatus,{id:before[0]._id,status:"pending",adminSecret:secret});
+ await t.mutation(api.registrations.updateStatus,{id:before[0]._id,status:"approved",adminSecret:secret});
+ await t.action(internal.approvalWelcomeNotice.drain,{});expect(fetch).not.toHaveBeenCalled();
+});
