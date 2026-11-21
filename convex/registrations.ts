@@ -1,3 +1,4 @@
+import { transition as approvalWelcomeTransition } from "./approvalWelcomeNotice";
 import { enrollmentForEvent } from "./eventEnrollmentIdentity";
 import { assertNotSecurityRetired, assertContactsNotRetired } from "./registrationSecurity";
 import { transition as rejectionNoticeTransition } from "./profileRejectionNotice";
@@ -572,6 +573,7 @@ export const updateStatus = mutation({
     if (!previous) throw new Error("Profile not found");
     if (previous.archivedAt != null) throw new Error("Profile is archived");
     await rejectionNoticeTransition(ctx, previous, args.status);
+    await approvalWelcomeTransition(ctx, previous, args.status);
     await ctx.db.patch(args.id, { status: args.status });
     return args.id;
   },

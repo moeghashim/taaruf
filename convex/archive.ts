@@ -25,6 +25,10 @@ async function archiveParticipant(ctx: MutationCtx, registration: Doc<"registrat
   if (rejectionNotice && ["pending", "sending"].includes(rejectionNotice.state)) {
     await ctx.db.patch(rejectionNotice._id, { state: rejectionNotice.firstAttemptAt === undefined ? "cancelled" : "needs_reconciliation", updatedAt: now, detail: "Participant archived; reconcile any prior delivery attempt" });
   }
+  const welcomeNotice = await ctx.db.query("approvalWelcomeNotices").withIndex("by_registrationId", q => q.eq("registrationId", registration._id)).unique();
+  if (welcomeNotice && ["pending", "sending"].includes(welcomeNotice.state)) {
+    await ctx.db.patch(welcomeNotice._id, { state: welcomeNotice.firstAttemptAt === undefined ? "cancelled" : "needs_reconciliation", updatedAt: now, detail: "Participant archived; reconcile any prior delivery attempt" });
+  }
 
   for (const index of ["by_maleRegistrationId", "by_femaleRegistrationId"] as const) {
     const field = index === "by_maleRegistrationId" ? "maleRegistrationId" : "femaleRegistrationId";

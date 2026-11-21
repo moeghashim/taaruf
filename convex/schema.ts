@@ -168,6 +168,13 @@ export default defineSchema({
     firstAttemptAt: v.optional(v.number()), providerId: v.optional(v.string()), detail: v.optional(v.string()),
     payload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string() })),
   }).index("by_registrationId", ["registrationId"]).index("by_state_and_nextAttemptAt", ["state", "nextAttemptAt"]),
+  approvalWelcomeNotices: defineTable({
+    registrationId: v.id("registrations"), email: v.string(),
+    state: v.union(v.literal("pending"), v.literal("sending"), v.literal("accepted"), v.literal("cancelled"), v.literal("needs_reconciliation")),
+    notBefore: v.optional(v.number()), attempts: v.number(), nextAttemptAt: v.number(), createdAt: v.number(), updatedAt: v.number(),
+    firstAttemptAt: v.optional(v.number()), providerId: v.optional(v.string()), detail: v.optional(v.string()),
+    payload: v.optional(v.object({ from: v.string(), to: v.array(v.string()), subject: v.string(), text: v.string(), reply_to: v.string() })),
+  }).index("by_registrationId", ["registrationId"]).index("by_state_and_nextAttemptAt", ["state", "nextAttemptAt"]),
   photoUploads: defineTable({
     storageId: v.id("_storage"),
     registrationId: v.optional(v.id("registrations")),
@@ -190,6 +197,7 @@ export default defineSchema({
     // Permanent retirement: rollback must preserve securityRetiredAt.
     mergedIntoRegistrationId: v.optional(v.id("registrations")),
     securityRetiredAt: v.optional(v.number()),
+    approvalWelcomeSuppressedAt: v.optional(v.number()),
     backgroundMatchmakingOptIn: v.optional(v.boolean()),
     backgroundMatchmakingConsentUpdatedAt: v.optional(v.number()),
     archivedAt: v.optional(v.number()),

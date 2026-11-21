@@ -2,7 +2,7 @@ import { internalQuery, internalMutation, type QueryCtx, type MutationCtx } from
 import { v } from "convex/values";
 import { hash } from "../src/lib/vendor/merge163144-sha256/sha256";
 // Exact schema table inventory for this one-pair operation; parity tested against schema.
-export const MERGE_TABLES = ["adminEmailChangeAudits","adminNameChangeAudits","adminPairRemovalAudits","applicantLoginTokens","applicantSessions","checkoutLinks","contactReleaseEmails","deliveryCancellationAudits","eventAttendees","eventRegistrationEmails","eventRegistrations","eventWaitlistEntries","events","femaleWorkflowDeliveries","interestFlowEvents","interestFlows","interestLookups","interestReopenAudits","interests","matches","matchmakerNotifications","pairTestResetAudits","photoUploads","profileContentCopyAudits","profileRejectionNotices","profileShares","receiptDeliveries","registrationBirthdays","registrationMergeAudits","registrations","retiredDeliveryResults","settings"];
+export const MERGE_TABLES = ["adminEmailChangeAudits","adminNameChangeAudits","adminPairRemovalAudits","applicantLoginTokens","applicantSessions","approvalWelcomeNotices","checkoutLinks","contactReleaseEmails","deliveryCancellationAudits","eventAttendees","eventRegistrationEmails","eventRegistrations","eventWaitlistEntries","events","femaleWorkflowDeliveries","interestFlowEvents","interestFlows","interestLookups","interestReopenAudits","interests","matches","matchmakerNotifications","pairTestResetAudits","photoUploads","profileContentCopyAudits","profileRejectionNotices","profileShares","receiptDeliveries","registrationBirthdays","registrationMergeAudits","registrations","retiredDeliveryResults","settings"];
 import type { Doc, Id, TableNames } from "./_generated/dataModel";
 
 export const MERGE_PAIR = { target: "j57adc5d1mazsrjzcjk12g0ymn84nyeb", source: "j57dt2bqv12y0f04pznvy2c3mh873jty" };
@@ -98,7 +98,7 @@ export async function plan(ctx: QueryCtx,pair:Pair,policy:Policy="unresolved") {
   if((s.state.interestFlows as Doc<"interestFlows">[]).some(f=>f.recipientDecision!=="pending" || f.requesterFinalApproval!=="pending" || f.recipientFinalApproval!=="pending" || Object.keys(f).some(k=>!["createdAt","updatedAt"].includes(k) && k.endsWith("At")))) blockers.push("Consent-bearing workflow cannot be transferred");
   const unsentReceipts=(s.state.receiptDeliveries as Doc<"receiptDeliveries">[]).some(r=>r.sentAt===undefined);
   const unsafeEventMail=(s.state.eventRegistrationEmails as Doc<"eventRegistrationEmails">[]).some(r=>r.sentAt===undefined);
-  if(unsentReceipts || unsafeEventMail || s.state.profileRejectionNotices.length) blockers.push("Unsettled outbound delivery requires reconciliation before merge");
+  if(unsentReceipts || unsafeEventMail || s.state.profileRejectionNotices.length || s.state.approvalWelcomeNotices.length) blockers.push("Unsettled outbound delivery requires reconciliation before merge");
   if(source.mergedIntoRegistrationId || target.mergedIntoRegistrationId) blockers.push("Already merged identity");
   if(conflicts.length && policy==="unresolved") blockers.push("Eligibility decision unresolved: explicit authorization required");
   if(s.state.matches.length || s.state.profileShares.length || s.state.femaleWorkflowDeliveries.length || s.state.matchmakerNotifications.length || s.state.contactReleaseEmails.length) blockers.push("Capability/delivery topology changed; review required");
