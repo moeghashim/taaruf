@@ -1,4 +1,5 @@
 "use client";
+import { terminalConnectionAction, withoutSelectedConnection, unavailableConnection } from "@/lib/connection-refresh";
 import { SupportRibbon } from "@/components/applicant/support-ribbon";
 import { ContactGuidance } from "@/components/applicant/contact-guidance";
 import { interestCategories, visibleWorkflowReviews, selectedWorkflowReview } from "@/lib/interest-categories";
@@ -722,24 +723,54 @@ export default function ApplicantDashboardPage() {
     else router.replace(href);
   }, [router]);
 
-  const load = useCallback(async () => {
+  const clearConnection = useCallback((expected: string) => {
+    const next = withoutSelectedConnection(window.location.href, expected);
+    if (next === null) return false;
+    window.history.replaceState(window.history.state, "", next);
+    setSelectedConnectionId(null);
+    return true;
+  }, []);
+
+  const load = useCallback(async (afterSavedAction = false) => {
     const request = ++dashboardRequest.current;
+    let requested = new URLSearchParams(window.location.search).get("connection");
+    const stillCurrent = () => request === dashboardRequest.current
+      && new URLSearchParams(window.location.search).get("connection") === requested;
     setIsLoading(true);
     try {
-      const requested = new URLSearchParams(window.location.search).get("connection");
-      const response = await applicantFetch("/api/applicant/me" + (requested !== null ? "?connection=" + encodeURIComponent(requested) : ""), { cache: "no-store" });
-      if (request !== dashboardRequest.current) return;
+      let selected = requested;
+      let response = await applicantFetch("/api/applicant/me" + (selected !== null ? "?connection=" + encodeURIComponent(selected) : ""), { cache: "no-store" });
+      if (!stillCurrent()) return;
       if (response.status === 401) { setData(null); return; }
-      const payload = await response.json();
-      if (request !== dashboardRequest.current) return;
-      if (!response.ok) { setData(null); throw new Error(payload.error || "Failed to load dashboard"); }
-      setData({ ...payload, requestedConnectionId: requested });
+      let payload = await response.json();
+      if (!stillCurrent()) return;
+      if (selected !== null && unavailableConnection(response.status, payload.error)) {
+        // Never render cached detail after access has been withdrawn. Reauthorize
+        // a plain dashboard, not the closed record, and only clear this selection.
+        if (!clearConnection(selected)) return;
+        setData(null);
+        selected = null;
+        requested = null;
+        response = await applicantFetch("/api/applicant/me", { cache: "no-store" });
+        if (!stillCurrent()) return;
+        if (response.status === 401) return;
+        payload = await response.json();
+        if (!stillCurrent()) return;
+        if (response.ok) setError("That connection is no longer available. Your other interests are shown below.");
+      }
+      if (!response.ok) throw new Error(payload.error || "Failed to load dashboard");
+      setData({ ...payload, requestedConnectionId: selected });
     } catch (err) {
-      if (request === dashboardRequest.current) { setData(null); setError(err instanceof Error ? err.message : String(err)); }
+      if (stillCurrent()) {
+        setData(null);
+        setError(afterSavedAction
+          ? "Your decision was saved, but the dashboard could not refresh. Reload the page to see the latest status; do not submit the decision again."
+          : err instanceof Error ? err.message : String(err));
+      }
     } finally {
       if (request === dashboardRequest.current) setIsLoading(false);
     }
-  }, [applicantFetch]);
+  }, [applicantFetch, clearConnection]);
 
   useEffect(() => {
     void load();
@@ -823,7 +854,7 @@ export default function ApplicantDashboardPage() {
     void loadProfile();
   }, [loadProfile]);
 
-  const loadEvents = useCallback(async () => {
+  const loadEvents = useCallback(async (afterSavedAction = false) => {
     const request = ++eventsRequest.current;
     setEventsFresh(false);
     try {
@@ -836,7 +867,7 @@ export default function ApplicantDashboardPage() {
       if (request !== eventsRequest.current) return;
       setEventsData(payload); setEventsFresh(true);
     } catch (err) {
-      if (request === eventsRequest.current) { setEventsData(null); setError(err instanceof Error ? err.message : String(err)); }
+      if (request === eventsRequest.current) { setEventsData(null); setError(afterSavedAction ? "Your decision was saved, but event information could not refresh. Reload the page; do not submit the decision again." : err instanceof Error ? err.message : String(err)); }
     }
   }, [applicantFetch]);
 
@@ -884,7 +915,13 @@ export default function ApplicantDashboardPage() {
       setMessage(body.action === "submit_number" && data?.applicant.gender === "female"
         ? "Your interest has been submitted for admin review. An admin will review it before sharing it with the brother."
         : typeof payload.message === "string" ? payload.message : "Updated.");
-      await Promise.all([load(), loadEvents()]);
+      const terminalId = terminalConnectionAction(body);
+      if (terminalId) {
+        clearConnection(terminalId);
+        // Discard stale private detail immediately, even if the refresh fails.
+        setData(null);
+      }
+      await Promise.all([load(true), loadEvents(true)]);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1130,7 +1167,9 @@ export default function ApplicantDashboardPage() {
     return (
       <main data-admin className="min-h-screen">
         <div className="content">
+          <div role="status" aria-live="polite">{message && <p className="notice success">{message}</p>}</div>
           <p className="notice error">{error ?? "Unable to load dashboard."}</p>
+          <button type="button" className="btn" onClick={() => { setError(null); void load(); }}>Reload dashboard</button>
         </div>
       </main>
     );
