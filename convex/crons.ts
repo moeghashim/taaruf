@@ -18,4 +18,6 @@ crons.interval("deliver profile rejection notices", { minutes: 1 }, internal.pro
 
 crons.interval("deliver contact release emails", { minutes: 1 }, internal.contactReleaseEmail.drain, {});
 
+crons.interval("deliver approval welcome notices", { minutes: 1 }, internal.approvalWelcomeNotice.drain, {});
+
 export default crons;
