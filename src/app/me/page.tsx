@@ -1,4 +1,6 @@
 "use client";
+
+import { overviewEvents } from "@/lib/overview-events";
 import { terminalConnectionAction, withoutSelectedConnection, unavailableConnection } from "@/lib/connection-refresh";
 import { SupportRibbon } from "@/components/applicant/support-ribbon";
 import { ContactGuidance } from "@/components/applicant/contact-guidance";
@@ -664,6 +666,7 @@ export default function ApplicantDashboardPage() {
   // Unknown/stale explicit links still mount exactly one authoritative recovery panel.
   const inboundReviewId = outboundReviewId ? null : selectedWorkflowId;
   const [eventsData, setEventsData] = useState<ApplicantEventData | null>(null);
+  const visibleOverviewEvents = overviewEvents(eventsData?.upcoming ?? [], Date.now());
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [originalDateOfBirth, setOriginalDateOfBirth] = useState<string | undefined>(undefined);
   const archivedAt = profile?.archivedAt;
@@ -1304,8 +1307,8 @@ export default function ApplicantDashboardPage() {
               <div className="interest-list">
                 {data.eventLogisticsRestricted || eventsData?.logisticsRestricted || eligibilityError ? (
                   <p role="status">Event details are unavailable.</p>
-                ) : (eventsData?.upcoming || []).length ? (
-                  eventsData?.upcoming.map((event) => (
+                ) : visibleOverviewEvents.length ? (
+                  visibleOverviewEvents.map((event) => (
                     <div key={event._id} className="interest-row" style={{ alignItems: "center" }}>
                       <div className="interest-row-main">
                         <h4>{event.title}</h4>
